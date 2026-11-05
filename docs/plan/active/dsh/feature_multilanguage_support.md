@@ -2,7 +2,7 @@
 
 > 状态：已对齐（待实施）<br>
 > 创建时间：2026-11-05<br>
-> 更新时间：2026-11-05（DSH 语言清单 + 插件覆盖扫描）<br>
+> 更新时间：2026-11-05（第三轮复核：DSH 语言清单 + 跟随机制确认）<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
 > 关联资料：[`ui-design.md`](../../../ui-design.md) v3.8 §8、[PR #2](https://github.com/spartawhy117/dsh-token-dash/pull/2)（不合并，仅取 RU 词典）、[`feature_p3_settings_title.md`](feature_p3_settings_title.md)
 
@@ -16,7 +16,8 @@
 | REQ-04 | 待实施 | 其余 5 语言补齐 | `ja / es / fr / de / pt` 各 139 条，占位符与 EN 完全一致 |
 | REQ-05 | 待实施 | 覆盖率可回归 | 单测检查每语言键数、缺失键、占位符、残留中文 |
 | REQ-06 | 待实施 | 文档同步 | UI §8 / README 支持语言 / CHANGELOG 2.1.0 |
-| BND-01 | 保持 | 不引入 P3 语言切换器 | 继续跟随 DSH 当前语言 |
+| REQ-07 | 已确认 | 语言显示跟随 DSH 设置 | 不主动设置语言；只 `register` 词典 + `bind`，由宿主切换 |
+| BND-01 | 保持 | 不引入 P3 语言切换器 | 无插件语言偏好、无 `setLocale` |
 | BND-02 | 保持 | 不改 P1/P2/P3 布局、VM、provider | 纯文案层 |
 | BND-03 | 保持 | 不合并 PR #2 | PR 的拆分注册有基线错误；只复用 RU 词条 |
 | RSK-01 | 待验证 | DSH `locale.register` 要求 `zh` + `en` | 一次注册全量 `MESSAGES`，外部包占用时 catch 后绑定 |
@@ -66,6 +67,26 @@ DSH 文档明确：
 
 所以不能按 locale 拆成多次部分注册；必须一次提交完整词典。
 
+### 3.1 语言选择边界（已确认）
+
+插件**不主动设置语言**，显示完全跟随 DSH 当前设置：
+
+| 检查 | 结果 |
+|---|---|
+| `client.js` 是否调用 `setLocale` | 无 |
+| 是否读写 `locale.preference` | 无 |
+| 是否注册自己的语言定义 | 无；`zh/en/ja/es/fr/de/ru/pt` 都由宿主 `addLanguage` |
+| 是否有 P3 语言开关 | 无 |
+| 翻译入口 | 仅 `ctx.locale.register('token-dash', MESSAGES)` + `ctx.locale.bind('token-dash')` |
+
+宿主 `bind(ns)` 返回的函数每次翻译都会读取当前 `snapshot.active`；因此 DSH 切换语言后，P1/P2/P3 文案跟随更新，插件不需要重启或保存语言偏好。
+
+测试也遵循这个边界：
+
+- 不在 e2e 里调用插件语言设置；
+- 切换 DSH 语言必须走宿主设置，再断言文案；
+- 单测只校验词典完整性和占位符，不修改宿主 locale。
+
 ## 四、改动总览
 
 | 范围 | 改动 |
@@ -98,7 +119,7 @@ MESSAGES = { zh, en, ja, es, fr, de, ru, pt }
 
 ### 不改动
 
-- 不新增 P3 语言开关，不接管 DSH 语言选择器；
+- 不新增 P3 语言开关，不接管 DSH 语言选择器，不写 `locale.preference`；
 - 不改 P1/P2/P3 布局、VM、provider、日志；
 - 不合并 PR #2，不引入它的拆分注册逻辑；
 - 不为缺失词条做运行时中文兜底，统一回退 `en`。
@@ -110,7 +131,8 @@ MESSAGES = { zh, en, ja, es, fr, de, ru, pt }
 - RU 无中文残留；其余语言术语人工抽检；
 - 单测 / e2e 全绿；
 - README 语言列表与 DSH 实际语言一致；
-- 2.1.0 候选包可安装，切换 DSH 语言后 P1/P2/P3 文案跟随。
+- 2.1.0 候选包可安装，**从 DSH 设置切换语言后** P1/P2/P3 文案跟随；
+- 插件自身没有语言开关，也没有语言偏好文件。
 
 ## 五、实施顺序
 
@@ -131,4 +153,5 @@ MESSAGES = { zh, en, ja, es, fr, de, ru, pt }
 - 2026-11-05：确认 DSH 支持 `zh/en/ja/es/fr/de/ru/pt` 8 种语言；
 - 插件只有 `zh/en` 139 条；其余 6 种 0 覆盖；
 - PR #2 RU 词典完整但注册方式不满足基线要求，决定不合并；
+- 第三轮复核：代码无 `setLocale` / `locale.preference` / 语言开关，只有 `register` + `bind`；语言显示跟随 DSH 设置；
 - 待实施，目标版本 **2.1.0**。
