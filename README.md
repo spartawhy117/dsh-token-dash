@@ -35,7 +35,7 @@
 | 供应商 | 计费形态 | 凭据 | 能看到什么 |
 |---|---|---|---|
 | DeepSeek | 按量 | DS 账号钱包 / `DEEPSEEK_API_KEY` | 账户余额、本月已花、预算 |
-| 智谱 GLM Coding | 订阅 / 按量 | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + 周窗口 |
+| Zhipu GLM Coding | 订阅 / 按量 | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + 周窗口 |
 | Kimi Coding | 订阅 / 按量 | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | 5h + 周/月窗口；订阅查询失败可回落余额 |
 | OpenRouter | 按量 | `OPENROUTER_API_KEY` | Credits（USD） |
 | Qwen | 按量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
