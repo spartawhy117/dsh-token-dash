@@ -11,7 +11,8 @@
 | ID | 处置 | 需求 | 结论 |
 |---|---|---|---|
 | REQ-01 | 完成调查 | 扫描硬编码 UI 文案 | `client.js` 无词典外中文可见文案；技术词保留 |
-| REQ-02 | 待实施 | 清理漏走 `tr` 的文案 | 仅保留 `Tokens`、provider 名、`5h` 等 `doNotTranslate` |
+| REQ-02 | 待实施 | 清理漏走 `tr` 的文案 | 仅保留 `Tokens`、`provider.id`、`model.id` 等技术标识；品牌/型号统一英文 |
+| REQ-07 | 待实施 | provider / 模型命名一致 | 不做逐语言翻译；ID 永不翻译，显示名统一英文品牌 |
 | REQ-03 | 待实施 | 明确语言回退提示 | P3 设置区增加「当前仅中文 / English，其他语言回退英文」 |
 | REQ-04 | 待实施 | 文档同步 | UI §5.7 / README 兼容说明 |
 | REQ-05 | 不做 | 新增 6 语言词典 | 暂不实现 `ja/es/fr/de/ru/pt` |
@@ -54,7 +55,7 @@ DSH 额外语言的 fallback 都是 `en`：
 |---|---|
 | 词典外中文 UI 文案 | **0**；未走 `tr` 的中文仅注释 |
 | `title` / `aria-label` 未走 `tr` | 未发现；均通过 `tr` |
-| 硬编码技术词 | `Tokens`、`API`、provider 名、模型名、`5h`、`--`、分隔符 |
+| 硬编码技术词 | `Tokens`、`API`、`provider.id`、`model.id`、`5h`、`--`、分隔符 |
 | 硬编码中文预览 | 仅在 `tools/preview/templates/*.html`，不影响运行时 |
 | 现有 EN 覆盖 | 139 / 139；RU 0 / 139 |
 
@@ -64,10 +65,50 @@ DSH 额外语言的 fallback 都是 `en`：
 |---|---|
 | `Tokens` | 与 DSH 术语一致，翻译反而增加歧义 |
 | `API` / `GitHub` | 品牌/技术缩写 |
-| provider 名（DeepSeek / GLM / Kimi / …） | 品牌名 |
-| 模型名、模型 ID | 不可翻译 |
+| `provider.id` | 协议键，必须与接口/日志一致 |
+| `model.id` | 协议键，必须与接口/日志一致 |
+| `provider.name` / 模型显示名 | 统一英文品牌名；不做逐语言翻译 |
 | `5h` | 窗口技术标识；周/月仍走 `tr` |
 | `--` / `—` / `·` | 占位与分隔符 |
+
+### 3.1 品牌与型号命名（已确认）
+
+这里的“全中文 / 全英文”需要拆开：
+
+| 方案 | 可行性 | 说明 |
+|---|---|---|
+| **统一英文品牌 + 本地化 UI 文案** | **推荐** | provider / 模型名保持英文 canonical；按钮、标签、提示按 DSH 语言显示 |
+| 全中文 UI | 部分可行 | 只有 DeepSeek / GLM / Kimi / Qwen 有常用中文品牌名；OpenRouter、OpenCode Go、Command Code 没有统一中文名 |
+| 全英文 UI | 可行 | 所有展示英文，zh 用户也看英文标签；体验较差 |
+| 逐语言翻译 provider / 模型 ID | **不可行** | ID 是协议键，翻译会破坏接口、账本匹配和日志排障 |
+
+推荐统一为：
+
+```text
+DeepSeek
+GLM
+Kimi
+OpenRouter
+Qwen
+OpenCode Go
+Command Code
+
+模型显示名 / 模型 ID 保持英文，例如 deepseek-chat
+```
+
+如果未来要加中文品牌别名，只允许作为 **displayName 映射**：
+
+```text
+provider.name = "DeepSeek"          // canonical，始终英文
+provider.displayNameZh = "深度求索" // 可选别名，不参与接口/日志
+```
+
+不允许：
+
+- 把 `deepseek-chat` 改成中文 ID；
+- 根据语言拼接 provider 名；
+- 在日志、导出、账本里使用本地化名称；
+- 让中文别名替代英文品牌导致同一 provider 两种写法。
 
 ### 不本轮处理
 
@@ -117,6 +158,7 @@ DSH 额外语言的 fallback 都是 `en`：
 
 - `client.js` 中用户可见文案仍全部走 `tr`；
 - `Tokens` 等仅作为 `doNotTranslate` 保留；
+- provider / 模型 ID 不翻译，显示名统一英文；中文别名只能作为可选 displayName。
 - P3 设置区显示两条提示，无按钮/tooltip；
 - README 明确「当前 UI 仅 zh/en，其他语言回退英文」；
 - `npm test` 80 通过；`npm run e2e` 通过；
@@ -134,4 +176,5 @@ DSH 额外语言的 fallback 都是 `en`：
 - 2026-11-05：确认 DSH 8 语言；插件仅 zh/en，额外语言回退英文；
 - 硬编码扫描：词典外中文 0，技术词 `Tokens` 等保留；
 - 决定不做 8 语言完整支持，仅清理硬编码 + 增加回退提示；
+- 品牌/型号命名：provider / model ID 永不翻译；显示名统一英文；中文别名只能是可选 displayName；
 - 待实施，版本归入下一个 patch/minor。
