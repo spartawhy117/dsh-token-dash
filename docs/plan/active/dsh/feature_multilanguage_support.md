@@ -1,0 +1,134 @@
+# 多语言支持完善
+
+> 状态：已对齐（待实施）<br>
+> 创建时间：2026-11-05<br>
+> 更新时间：2026-11-05（DSH 语言清单 + 插件覆盖扫描）<br>
+> 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
+> 关联资料：[`ui-design.md`](../../../ui-design.md) v3.8 §8、[PR #2](https://github.com/spartawhy117/dsh-token-dash/pull/2)（不合并，仅取 RU 词典）、[`feature_p3_settings_title.md`](feature_p3_settings_title.md)
+
+## 一、最终需求与范围
+
+| ID | 处置 | 需求 | 结论 |
+|---|---|---|---|
+| REQ-01 | 待实施 | 覆盖 DSH 已有语言 | 跟随宿主语言目录：`zh / en / ja / es / fr / de / ru / pt` |
+| REQ-02 | 待实施 | 不破坏宿主语言切换 | 所有词典一次注册，包含 `zh` / `en` 基线；不拆成缺基线的部分注册 |
+| REQ-03 | 待实施 | RU 词典可用 | 以 PR #2 的 139 条 RU 为参考，修复注册方式后纳入 |
+| REQ-04 | 待实施 | 其余 5 语言补齐 | `ja / es / fr / de / pt` 各 139 条，占位符与 EN 完全一致 |
+| REQ-05 | 待实施 | 覆盖率可回归 | 单测检查每语言键数、缺失键、占位符、残留中文 |
+| REQ-06 | 待实施 | 文档同步 | UI §8 / README 支持语言 / CHANGELOG 2.1.0 |
+| BND-01 | 保持 | 不引入 P3 语言切换器 | 继续跟随 DSH 当前语言 |
+| BND-02 | 保持 | 不改 P1/P2/P3 布局、VM、provider | 纯文案层 |
+| BND-03 | 保持 | 不合并 PR #2 | PR 的拆分注册有基线错误；只复用 RU 词条 |
+| RSK-01 | 待验证 | DSH `locale.register` 要求 `zh` + `en` | 一次注册全量 `MESSAGES`，外部包占用时 catch 后绑定 |
+| RSK-02 | 待验证 | 机器翻译质量 | 至少人工校对术语：预算 / 余额 / 订阅 / 缓存 / 命中 |
+| RSK-03 | 待验证 | 占位符漏译 | 单测逐键比较 `{name}` / `{value}` / `{n}` / `{reason}` |
+| RSK-04 | 待验证 | 外部语言包抢占 namespace | 注册失败不阻断翻译绑定；需要时再谈外部包优先级 |
+
+## 二、DSH 宿主语言清单
+
+从本机 DSH `0.2.2-rc.1` 的 asar 读取：
+
+| id | 宿主标签 | 基线/额外 | 插件当前 |
+|---|---|---|---|
+| `zh` | 中文 | 基线 | **139 / 139** |
+| `en` | English | 基线 | **139 / 139** |
+| `ja` | 日本語 | 额外 | **0 / 139** |
+| `es` | Español | 额外 | **0 / 139** |
+| `fr` | Français | 额外 | **0 / 139** |
+| `de` | Deutsch | 额外 | **0 / 139** |
+| `ru` | Русский | 额外 | **0 / 139**（PR #2 有 139 条，但未注册成功） |
+| `pt` | Português | 额外 | **0 / 139** |
+
+宿主已经 `addLanguage` 这些 id，并带 `fallback: en`；插件不需要再注册语言定义，只需注册词典。
+
+## 三、当前实现与问题
+
+`client.js`：
+
+```js
+const EN = { ... } // 139 keys
+const ZH = Object.fromEntries(Object.keys(EN).map((key) => [key, key]))
+const MESSAGES = { zh: ZH, en: EN }
+
+ctx.effect?.(() => ctx.locale.register('token-dash', MESSAGES), 'locale:dictionaries')
+```
+
+现状：
+
+- 只有中文 / 英文；
+- 词条总数 139；
+- DSH 额外支持的 6 种语言全部回退到英文；
+- PR #2 的 RU 词典本身完整（139/139、占位符 0 mismatch、无残留中文），但 `register({ ru: RU })` 缺少 `zh`/`en` 基线，且异常被吞，俄语不会生效。
+
+DSH 文档明确：
+
+> `ctx.locale.register(ns, { zh, en, ja })` 必须同时包含 `zh` 和 `en` 两个基线语言，其他语言可选。
+
+所以不能按 locale 拆成多次部分注册；必须一次提交完整词典。
+
+## 四、改动总览
+
+| 范围 | 改动 |
+|---|---|
+| `client.js` · 词典 | 新增 `JA / ES / FR / DE / PT`，纳入现有 `RU`，每个 139 条 |
+| `client.js` · 注册 | `MESSAGES = { zh, en, ja, es, fr, de, ru, pt }`；一次 `locale.register` |
+| `client.js` · 异常 | 保留 try/catch：外部语言包占用 namespace 时不阻断 `bind` |
+| `test/unit/i18n.test.mjs` | 新增词典覆盖、占位符、残留中文断言 |
+| `scripts/e2e.mjs` | 可选：切到 `ru` / `ja` 断言一条已知文案；至少保留中文回归 |
+| `docs/ui-design.md` §8 | 语言从 `zh/en` 改为 8 语言；缺失回退 `en` |
+| `README.md` / `README.en.md` | 支持语言列表与截图说明 |
+| `CHANGELOG.md` | 2.1.0：多语言支持 |
+
+### 结构
+
+```text
+EN (139 keys, canonical)
+  ├─ ZH = key map（baseline）
+  ├─ JA (139)
+  ├─ ES (139)
+  ├─ FR (139)
+  ├─ DE (139)
+  ├─ RU (139, 参考 PR #2)
+  └─ PT (139)
+
+MESSAGES = { zh, en, ja, es, fr, de, ru, pt }
+  → ctx.locale.register('token-dash', MESSAGES)
+  → ctx.locale.bind('token-dash')
+```
+
+### 不改动
+
+- 不新增 P3 语言开关，不接管 DSH 语言选择器；
+- 不改 P1/P2/P3 布局、VM、provider、日志；
+- 不合并 PR #2，不引入它的拆分注册逻辑；
+- 不为缺失词条做运行时中文兜底，统一回退 `en`。
+
+### 验收
+
+- 8 语言键数均为 139，无缺失 / 多余；
+- 每语言占位符集合与 EN 完全一致；
+- RU 无中文残留；其余语言术语人工抽检；
+- 单测 / e2e 全绿；
+- README 语言列表与 DSH 实际语言一致；
+- 2.1.0 候选包可安装，切换 DSH 语言后 P1/P2/P3 文案跟随。
+
+## 五、实施顺序
+
+1. 从 PR #2 取 RU 词典（保留作者贡献说明），修正注册方式；
+2. 补 `ja / es / fr / de / pt`，先保证键与占位符，再做术语校对；
+3. 拍照/截图只保留中文与英文，避免 README 图片语言膨胀；
+4. 单测 + e2e；通过后按 2.1.0 MINOR 发版。
+
+## 六、关联资料
+
+- DSH 语言 API 文档（asar 内置）：`addLanguage` / `register` / fallback 链
+- PR #2：<https://github.com/spartawhy117/dsh-token-dash/pull/2>（不合并）
+- UI 设计：`docs/ui-design.md` §8
+- 当前语言表：`client.js` · `EN` / `ZH` / `MESSAGES`
+
+## 九、自测反馈台
+
+- 2026-11-05：确认 DSH 支持 `zh/en/ja/es/fr/de/ru/pt` 8 种语言；
+- 插件只有 `zh/en` 139 条；其余 6 种 0 覆盖；
+- PR #2 RU 词典完整但注册方式不满足基线要求，决定不合并；
+- 待实施，目标版本 **2.1.0**。
