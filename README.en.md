@@ -112,6 +112,7 @@ Update: run `update` with the same name, or use the `⤓` button on the right of
 ## Compatibility & limitations
 
 - DSH `0.2.1+`; verified on `0.2.2-rc.1`. DSH 0.2.2 is a pre-release and itself requires Node 24.9.
+- The UI currently ships Chinese / English only. Other DSH languages (Japanese, German, Russian, etc.) fall back to English.
 - After a DSH upgrade the plugin may disappear from the profile; reinstall the same tarball — the ledger is not deleted.
 - Qwen tracks usage only; its balance endpoint is unsupported. Other balances/quotas follow what each API returns.
 - Upstream APIs are rate-limited; successful results are cached for 60s, failures for 10s, and concurrent requests are coalesced.

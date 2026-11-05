@@ -118,7 +118,7 @@ test('旧 unknown 行在 provider 唯一时归因', () => {
 test('provider 归一化与展示名', () => {
   assert.equal(normalizeProvider('deepseek-account'), 'deepseek-official')
   assert.equal(normalizeProvider('glm'), 'zhipu')
-  assert.equal(providerLabel('zhipu'), '智谱 AI')
+  assert.equal(providerLabel('zhipu'), 'Zhipu AI')
   assert.equal(displayModel('glm-5.3'), 'GLM-5.3')
 })
 

@@ -38,7 +38,7 @@
 | 智谱 GLM Coding | 订阅 / 按量 | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + 周窗口 |
 | Kimi Coding | 订阅 / 按量 | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | 5h + 周/月窗口；订阅查询失败可回落余额 |
 | OpenRouter | 按量 | `OPENROUTER_API_KEY` | Credits（USD） |
-| 通义千问 | 按量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
+| Qwen | 按量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
 | OpenCode Go | 订阅 | `OPENCODE_GO_API_KEY` | 5h / 周 / 月窗口（USD） |
 | Command Code | 订阅 | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + 周窗口、Credits（CNY） |
 
@@ -111,8 +111,9 @@ dsh plugin --profile desktop add /path/to/dsh-token-dash-x.y.z.tgz
 ## 兼容与限制
 
 - DSH `0.2.1+`；已在 `0.2.2-rc.1` 上验证。DSH 0.2.2 是预发布版，且自身要求 Node 24.9。
+- 界面语言当前仅中文 / English；选择日语、德语、俄语等其他 DSH 语言时，插件文案显示英文回退。
 - 升级 DSH 后插件可能从 profile 消失，重装同一个 tarball 即可，账本不会被删。
-- 通义千问只统计用量，余额接口不支持；其余供应商的余额/配额以接口实际返回为准。
+- Qwen 只统计用量，余额接口不支持；其余供应商的余额/配额以接口实际返回为准。
 - 上游接口有速率限制；成功结果缓存 60s、失败结果缓存 10s，并发请求会合并。
 
 ## 数据与隐私

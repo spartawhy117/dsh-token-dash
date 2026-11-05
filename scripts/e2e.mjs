@@ -494,11 +494,23 @@ try {
   )
   assert.equal(await board.getByTestId('token-dash-settings-title').count(), 1)
   assert.match(await board.getByTestId('token-dash-settings-title').innerText(), /设置与数据管理/)
-  const [settingsTitleBox, settingsRow1Box, settingsCapsuleBox] = await Promise.all([
+  const localeHint = board.getByTestId('token-dash-settings-locale-hint')
+  assert.equal(await localeHint.count(), 1)
+  assert.match(await localeHint.innerText(), /语言跟随DSH设置；当前仅中文\/English，其他语言回退英文/)
+  assert.equal(await localeHint.evaluate((node) => node.tagName), 'SPAN')
+  assert.equal(await localeHint.getAttribute('title'), null)
+  const [settingsTitleBox, localeHintBox, settingsRow1Box, settingsCapsuleBox] = await Promise.all([
     board.getByTestId('token-dash-settings-title').boundingBox(),
+    localeHint.boundingBox(),
     board.getByTestId('token-dash-settings-row-1').boundingBox(),
     board.getByTestId('token-dash-settings-capsule').boundingBox(),
   ])
+  assert.ok(
+    settingsTitleBox !== null && localeHintBox !== null
+      && localeHintBox.x > settingsTitleBox.x
+      && localeHintBox.y < settingsTitleBox.y + settingsTitleBox.height,
+    'language hint should sit to the right of the settings title',
+  )
   assert.ok(
     settingsTitleBox !== null && settingsRow1Box !== null && settingsCapsuleBox !== null
       && settingsTitleBox.y + settingsTitleBox.height <= settingsCapsuleBox.y + 1

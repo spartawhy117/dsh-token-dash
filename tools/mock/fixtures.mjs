@@ -40,7 +40,7 @@ export const summary = {
       balance: { amount: 7.66, status: 'ok', currency: 'USD', updatedAt: now },
       usage: { todayTokens: 40_000, monthTokens: 960_000, todayCost: 0.12, monthCost: 22.8, requests: 12 },
     }),
-    provider('qwen', '通义千问', 'api', 'CNY', {
+    provider('qwen', 'Qwen', 'api', 'CNY', {
       budget: budget(5, 'CNY', 0.4),
       balance: { amount: null, status: 'unsupported', currency: 'CNY', updatedAt: now },
       usage: { todayTokens: 80_000, monthTokens: 480_000, todayCost: 0.04, monthCost: 0.4, requests: 24 },
@@ -80,10 +80,10 @@ export const summary = {
   ],
   pricingLinks: [
     { id: 'deepseek-official', label: 'DeepSeek', url: 'https://api-docs.deepseek.com/quick_start/pricing' },
-    { id: 'zhipu', label: '智谱 AI', url: 'https://docs.bigmodel.cn/cn/guide/start/pricing' },
+    { id: 'zhipu', label: 'Zhipu AI', url: 'https://docs.bigmodel.cn/cn/guide/start/pricing' },
     { id: 'moonshot', label: 'Kimi', url: 'https://platform.moonshot.cn/docs/pricing/chat' },
     { id: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/models' },
-    { id: 'qwen', label: '通义千问', url: 'https://help.aliyun.com/zh/model-studio/billing-for-alibaba-cloud-model-studio' },
+    { id: 'qwen', label: 'Qwen', url: 'https://help.aliyun.com/zh/model-studio/billing-for-alibaba-cloud-model-studio' },
   ],
   catalog: { version: 1, updatedAt: '1793591115', source: 'community-gitee', url: 'https://gitee.com/oyw125/model-price-table' },
   showBalance: true,
@@ -136,7 +136,7 @@ const row = (providerId, providerName, modelId, displayName, kind, currency, cos
 const monthModels = [
   row('deepseek-official', 'DeepSeek', 'deepseek-v4.1-flash', 'DeepSeek-V4.1-Flash', 'api', 'CNY', 91.9, { input: 110_000, cacheRead: 200_000, cacheWrite: 0, output: 20_000 }, 48),
   row('openrouter', 'OpenRouter', 'deepseek-v4.1-flash', 'DeepSeek-V4.1-Flash', 'api', 'USD', 22.8, { input: 20_000, cacheRead: 10_000, cacheWrite: 0, output: 10_000 }, 12, true),
-  row('qwen', '通义千问', 'qwen3.8-max', 'Qwen3.8-Max', 'api', 'CNY', 0.4, { input: 50_000, cacheRead: 20_000, cacheWrite: 0, output: 10_000 }, 24),
+  row('qwen', 'Qwen', 'qwen3.8-max', 'Qwen3.8-Max', 'api', 'CNY', 0.4, { input: 50_000, cacheRead: 20_000, cacheWrite: 0, output: 10_000 }, 24),
   row('zhipu', 'GLM Coding', 'glm-5.3', 'GLM-5.3', 'subscription', 'CNY', 0, { input: 300_000, cacheRead: 520_000, cacheWrite: 0, output: 40_000 }, 64),
   row('opencode-go', 'OpenCode Go', 'claude-sonnet', 'Claude Sonnet', 'subscription', 'USD', 0, { input: 60_000, cacheRead: 120_000, cacheWrite: 0, output: 8_000 }, 22),
   row('command-code', 'Command Code', 'gpt-5.4', 'GPT-5.4', 'subscription', 'CNY', 0, { input: 20_000, cacheRead: 40_000, cacheWrite: 0, output: 4_000 }, 6),

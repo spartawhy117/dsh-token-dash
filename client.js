@@ -104,6 +104,7 @@ window.__ModuleLoader__.load({
       '未配置凭据': 'No credentials', '刷新中': 'Refreshing',
       '编辑预算': 'Edit budget', '退出编辑': 'Exit editing',
       '设置与数据管理': 'Settings and data',
+      '语言跟随DSH设置；当前仅中文/English，其他语言回退英文': 'Language follows DSH settings; Chinese/English only; other languages fall back to English',
       '账户真实余额，不受预算影响': 'Account balance; not affected by budget',
       '本月累计消耗，等于已用/预算 的分子': 'Month-to-date spend; numerator of used/budget',
       '提示': 'Note',
@@ -431,6 +432,8 @@ window.__ModuleLoader__.load({
       boardSection: { display: 'grid', gap: 12, minWidth: 0 },
       boardSectionHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 24 },
       sectionTitle: { fontSize: 13, fontWeight: 600 },
+      settingsHead: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, minWidth: 0 },
+      settingsHint: { color: T.muted, fontSize: 11, lineHeight: '16px', minWidth: 0, overflowWrap: 'anywhere' },
       cardBox: {
         border: `1px solid ${T.border}`, borderRadius: 8, padding: 12, background: T.section,
         display: 'grid', gap: 4, minWidth: 0,
@@ -1811,10 +1814,15 @@ window.__ModuleLoader__.load({
             })))),
         h('section', { style: styles.boardSection },
           h('div', { style: styles.boardSectionHead },
-            h('b', {
-              'data-testid': 'token-dash-settings-title',
-              style: styles.sectionTitle,
-            }, tr('设置与数据管理'))),
+            h('div', { style: styles.settingsHead },
+              h('b', {
+                'data-testid': 'token-dash-settings-title',
+                style: styles.sectionTitle,
+              }, tr('设置与数据管理')),
+              h('span', {
+                'data-testid': 'token-dash-settings-locale-hint',
+                style: styles.settingsHint,
+              }, tr('语言跟随DSH设置；当前仅中文/English，其他语言回退英文')))),
           h('div', { 'data-testid': 'token-dash-settings-capsule', style: styles.capsule },
             h(SettingsRows, { summary, prefs, onSave: savePrefs, onRefresh: refresh, onRefreshSubs: refreshSubs })))))
     }

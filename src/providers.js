@@ -48,7 +48,7 @@ const PROVIDERS = {
   },
   zhipu: {
     id: 'zhipu',
-    label: '智谱 AI',
+    label: 'Zhipu AI',
     currency: 'CNY',
     subscription: true,
     defaultModel: 'glm-5.3',
@@ -85,7 +85,7 @@ const PROVIDERS = {
   },
   qwen: {
     id: 'qwen',
-    label: '通义千问',
+    label: 'Qwen',
     currency: 'CNY',
     subscription: false,
     defaultModel: 'qwen3.8-max',

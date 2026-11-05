@@ -1,6 +1,6 @@
 # 多语言准备：硬编码清理与英文回退提示
 
-> 状态：已对齐（待实施）<br>
+> 状态：待验收（2.0.0 候选）<br>
 > 创建时间：2026-11-05<br>
 > 更新时间：2026-11-05（按 plan 骨架重排 + 明确施工顺序）<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
@@ -25,14 +25,14 @@
 | ID | 优先级 | 需求 / 边界 / 风险 | 成功信号 |
 |---|---|---|---|
 | REQ-01 | P0 | 扫描硬编码 UI 文案 | 词典外中文 0；`title` / `aria-label` 均走 `tr` |
-| REQ-02 | P0 | 只保留协议/技术标识 | `Tokens`、`provider.id`、`model.id` 等明确标记 `doNotTranslate` |
-| REQ-03 | P0 | P3 设置标题右侧显示语言提示 | 一条 11px 文案：`语言跟随DSH设置；当前仅中文/English，其他语言回退英文` |
-| REQ-04 | P0 | 文档说明英文回退 | README / UI 文档明确当前仅 zh/en，其他 DSH 语言显示英文 |
-| REQ-05 | P0 | provider / 模型命名一致 | ID 永不翻译；显示名统一英文品牌；中文别名只能作为可选 `displayName` |
+| REQ-02 | P0 | 只保留协议/技术标识 | `Tokens`、`provider.id`、`model.id` 等明确标记 `doNotTranslate`；审计完成，无漏项 |
+| REQ-03 | P0 | P3 设置标题右侧显示语言提示 | 已实现；一条 11px 文案，e2e 验证 |
+| REQ-04 | P0 | 文档说明英文回退 | README / UI 文档已补 |
+| REQ-05 | P0 | provider / 模型命名一致 | 已完成：`Zhipu AI` / `Qwen` 英文 label；ID 永不翻译 |
 | BND-01 | 边界 | 不新增 6 语言词典 | `ja/es/fr/de/ru/pt` 不进入本轮 |
 | BND-02 | 边界 | 不做逐语言预渲染矩阵 | 不生成 8 语言截图/验收矩阵 |
 | BND-03 | 边界 | 不引入语言选择器 | 不写 `setLocale` / `locale.preference` |
-| BND-04 | 边界 | 不改 P1/P2/P3 布局、VM、provider | 只改 P3 标题区与文案入口 |
+| BND-04 | 边界 | 不改 P1/P2/P3 布局、VM、模型映射 | 只改 P3 标题区、文案入口和 provider 显示 label |
 | BND-05 | 边界 | 不合并 PR #2 | 拆分注册缺少 `zh`/`en` 基线，已回复不合并 |
 | RSK-01 | 风险 | 提示文案过长导致 P3 标题区换行/溢出 | 允许换行；窄屏不横向滚动；标题不被挤压 |
 | RSK-02 | 风险 | 把英文 fallback 误写成“已支持 8 语言” | 文案必须含“当前仅中文/English，其他语言回退英文” |
@@ -89,7 +89,7 @@ P3 BoardPage
 其它数据约束：
 
 - 不新增 `JA/ES/FR/DE/PT` 词典；
-- 不修改 `provider` 注册表、VM、`/summary`、`/usage`；
+- 只同步 `zhipu` / `qwen` 的展示 label 到英文；ID、币种、模型映射、VM、`/summary`、`/usage` 不动；
 - 预览 HTML 里的硬编码不属于运行时文案，不搬进 `client.js`；
 - 当前运行时没有 `doNotTranslate` 白名单常量；该表是**文档约束 + 静态检查依据**，不新增运行时过滤层。
 
@@ -111,19 +111,21 @@ P3 BoardPage
 
 ```text
 1. CHG-01  client.js：加文案 + 标题容器 + 样式
-2. CHG-02  page-p3：重渲染预览，确认换行与位置
-3. CHG-03  UI / README：补英文回退说明
-4. CHG-04  e2e：断言提示存在、在标题区、不是按钮
-5. CHG-05  全量测试 + pack，不做正式发布
+2. CHG-02  provider label：zhipu / qwen 统一英文，更新单测与 mock
+3. CHG-03  page-p3：重渲染预览，确认换行与位置
+4. CHG-04  UI / README：补英文回退说明
+5. CHG-05  e2e：断言提示存在、在标题区、不是按钮
+6. CHG-06  全量测试 + pack，不做正式发布
 ```
 
-| ID | 类型 | 文件 | 开发改动说明 |
-|---|---|---|---|
-| CHG-01 | 修改 | `client.js` | EN 增加一条文案；BoardPage 设置标题加 `settingsHead` + `settingsHint` |
-| CHG-02 | 已验证 | `tools/preview/templates/page-p3.html` | 已有合并提示；按最终文案重渲染，作为视觉基线 |
-| CHG-03 | 文档 | `docs/ui-design.md`、`README.md`、`README.en.md`、`CHANGELOG.md` | 记录提示位置与 zh/en + EN 回退边界 |
-| CHG-04 | 测试 | `scripts/e2e.mjs` | P3 设置区断言提示文案、位置、非按钮 |
-| CHG-05 | 验证 | `build/` | `npm test` + `npm run e2e` + `npm run pack`；不 tag、不发布 |
+| ID | 类型 | 文件 | 开发改动说明 | 状态 |
+|---|---|---|---|---|
+| CHG-01 | 修改 | `client.js` | EN 增加一条文案；BoardPage 设置标题加 `settingsHead` + `settingsHint` | 已完成 |
+| CHG-02 | 修改 | `src/providers.js`、`test/unit/providers*.test.mjs`、`test/unit/core.test.mjs`、`tools/mock/fixtures.mjs`、`README.md` | zhipu `智谱 AI` → `Zhipu AI`；qwen `通义千问` → `Qwen`；同步断言/mock | 已完成 |
+| CHG-03 | 预览 | `tools/preview/templates/page-p3.html` | 一条合并提示；已重渲染 | 已完成 |
+| CHG-04 | 文档 | `docs/ui-design.md`、`README.md`、`README.en.md`、`CHANGELOG.md` | 记录提示位置与 zh/en + EN 回退边界 | 已完成 |
+| CHG-05 | 测试 | `scripts/e2e.mjs` | P3 设置区断言提示文案、位置、非按钮 | 已完成 |
+| CHG-06 | 验证 | `build/` | `npm test` + `npm run e2e` + `npm run pack`；不 tag、不发布 | 已完成 |
 
 ### 3.1 改动清单（待实施）
 
@@ -160,7 +162,24 @@ P3 BoardPage
 + '语言跟随DSH设置；当前仅中文/English，其他语言回退英文': 'Language follows DSH settings; Chinese/English only; other languages fall back to English',
 ```
 
-#### CHG-02 · `tools/preview/templates/page-p3.html`
+#### CHG-02 · `src/providers.js`
+
+- `providers.zhipu.label`：`智谱 AI` → `Zhipu AI`
+- `providers.qwen.label`：`通义千问` → `Qwen`
+- ID、币种、模型映射、subscription 名称（`GLM Coding` / `Kimi Coding`）不变
+- 同步 `test/unit/providers.test.mjs`、`providers-vm.test.mjs`、`core.test.mjs`、`tools/mock/fixtures.mjs`、README 的中文名称
+
+```diff
+- label: '智谱 AI',
++ label: 'Zhipu AI',
+```
+
+```diff
+- label: '通义千问',
++ label: 'Qwen',
+```
+
+#### CHG-03 · `tools/preview/templates/page-p3.html`
 
 已落地一条合并提示；不新增第二行。重渲染后检查：
 
@@ -169,7 +188,7 @@ P3 BoardPage
 - 不撑宽设置胶囊；
 - 文案与 CHG-01 完全一致。
 
-#### CHG-03 · 文档
+#### CHG-04 · 文档
 
 | 文件 | 章节 / 键 | 改动 |
 |---|---|---|
@@ -178,7 +197,7 @@ P3 BoardPage
 | `README.md` / `README.en.md` | 兼容与限制 | 增加一段回退说明，不写“支持 8 语言” |
 | `CHANGELOG.md` | 下一个 patch | 只写“P3 语言提示 + README 回退说明”，不发版 |
 
-#### CHG-04 · `scripts/e2e.mjs`
+#### CHG-05 · `scripts/e2e.mjs`
 
 在 P3 设置区断言：
 
@@ -188,7 +207,7 @@ P3 BoardPage
 - 不是 `button`，无 tooltip；
 - 设置胶囊内三行功能不变。
 
-#### CHG-05 · 验证与产物
+#### CHG-06 · 验证与产物
 
 ```text
 npm test       目标 80 通过
@@ -203,20 +222,20 @@ npm run pack   生成 2.0.0 候选包
 - `BND-01`：不新增 6 语言词典。
 - `BND-02`：不做 8 语言预渲染矩阵。
 - `BND-03`：不引入语言选择器或 `setLocale`。
-- `BND-04`：不改 P1/P2/P3 布局、VM、provider、日志。
+- `BND-04`：不改 P1/P2/P3 布局、VM、模型映射、日志；只同步 provider 显示 label。
 - `BND-05`：不合并 PR #2。
 
 ## 五、验收要点（待验证）
 
 | 项 | 来源 | 验证方式 | 结果 |
 |---|---|---|---|
-| 词典外中文 UI 为 0 | REQ-01 | 静态扫描 + 人工抽查 | 待验证 |
-| 技术词仍保留英文 | REQ-02 | 检查 `Tokens` / `provider.id` / `model.id` | 待验证 |
-| P3 提示准确 | REQ-03 / RSK-02 | e2e 文案 + 预览截图 | 待验证 |
-| 提示不溢出 | REQ-03 / RSK-01 | 320/768/1000 px 预览 + `scrollWidth` | 待验证 |
-| README / UI 文档说明回退 | REQ-04 | 人工检查 | 待验证 |
-| provider / 模型命名未本地化 | REQ-05 | 静态检查 provider registry 与表格 | 待验证 |
-| 全量测试通过 | 全局质量门槛 | `npm test` + `npm run e2e` | 待验证 |
+| 词典外中文 UI 为 0 | REQ-01 | 静态扫描 + 人工抽查 | 通过 |
+| 技术词仍保留英文 | REQ-02 | 检查 `Tokens` / `provider.id` / `model.id` | 通过 |
+| P3 提示准确 | REQ-03 / RSK-02 | e2e 文案 + 预览截图 | 通过 |
+| 提示不溢出 | REQ-03 / RSK-01 | 320/768/1000 px 预览 + `scrollWidth` | 通过 |
+| README / UI 文档说明回退 | REQ-04 | 人工检查 | 通过 |
+| provider / 模型命名统一英文 | REQ-05 | 单测断言 provider label；检查表格模型名 | 通过 |
+| 全量测试通过 | 全局质量门槛 | `npm test` + `npm run e2e` | 通过 |
 
 ## 九、自测反馈台
 
@@ -225,4 +244,7 @@ npm run pack   生成 2.0.0 候选包
 - 决定不做 8 语言完整支持，仅清理硬编码 + 增加回退提示；
 - 品牌/型号：provider / model ID 永不翻译；显示名统一英文；中文别名只能是可选 `displayName`；
 - 当前只有 P3 一条提示，不做第二行/按钮/tooltip；
-- 本轮只迭代文档，未改代码、未跑测试。
+- 2026-11-05：`client.js` 已加 `settingsHead` / `settingsHint` 与词条；`page-p3` / UI / README / CHANGELOG 已同步；
+- provider 显示名已统一英文：`Zhipu AI`、`Qwen`；ID/币种/模型映射不变；
+- `npm test` 80 通过；`npm run e2e` UI assertions passed（含提示文案、位置、非按钮）；
+- `npm run pack` 已生成 `build/dsh-token-dash-2.0.0.tgz`（约 71.2 KB）；不 tag、不发布。

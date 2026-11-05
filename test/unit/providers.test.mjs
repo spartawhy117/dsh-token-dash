@@ -15,10 +15,10 @@ import {
 
 test('registry descriptors keep the seven-provider contract', () => {
   assert.deepEqual(pricingLinks().map((item) => item.id), ['deepseek-official', 'zhipu', 'moonshot', 'openrouter', 'qwen', 'opencode-go', 'command-code'])
-  assert.deepEqual(pricingLinks().map((item) => item.label), ['DeepSeek', '智谱 AI', 'Kimi', 'OpenRouter', '通义千问', 'OpenCode Go', 'Command Code'])
+  assert.deepEqual(pricingLinks().map((item) => item.label), ['DeepSeek', 'Zhipu AI', 'Kimi', 'OpenRouter', 'Qwen', 'OpenCode Go', 'Command Code'])
   assert.equal(pricingLinks().length, 7)
   assert.equal(providerLabel('deepseek-account'), 'DeepSeek')
-  assert.equal(providerLabel('zai-coding'), '智谱 AI')
+  assert.equal(providerLabel('zai-coding'), 'Zhipu AI')
   assert.equal(providerLabel('opencode'), 'OpenCode Go')
   assert.equal(providerLabel('commandcode'), 'Command Code')
   assert.equal(providerCurrency('openrouter'), 'USD')
