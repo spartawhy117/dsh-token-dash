@@ -25,6 +25,7 @@
 | RSK-02 | 待验证 | 机器翻译质量 | 至少人工校对术语：预算 / 余额 / 订阅 / 缓存 / 命中 |
 | RSK-03 | 待验证 | 占位符漏译 | 单测逐键比较 `{name}` / `{value}` / `{n}` / `{reason}` |
 | RSK-04 | 待验证 | 外部语言包抢占 namespace | 注册失败不阻断翻译绑定；需要时再谈外部包优先级 |
+| RSK-05 | 待验证 | 德语 / 俄语 / 葡语文本膨胀 | 标题旁说明可换行；设置行 40px 标签需放开或省略 |
 
 ## 二、DSH 宿主语言清单
 
@@ -108,6 +109,36 @@ DSH 文档明确：
 - 窄屏允许换行到标题下方，不截断；
 - 纯说明文字，不参与设置、不可点击。
 
+### 3.3 翻译长度与超框风险（需要按语言验收）
+
+不同语言长度差异明显：
+
+```text
+zh  设置与数据管理  插件语言跟随DSH本体设置显示
+en  Settings and data  Plugin language follows the DSH setting
+de  Einstellungen und Daten  Die Plugin-Sprache folgt der DSH-Einstellung
+ru  Настройки и данные  Язык плагина соответствует настройкам DSH
+```
+
+风险点：
+
+| 位置 | 风险 | 处理 |
+|---|---|---|
+| P3 设置标题旁说明 | 俄语 / 德语可能超过一行 | 已有 `flex-wrap: wrap`，允许换到标题下方，不设固定高度 |
+| P3 设置行标签 `40px` | `Protokolle` / `Version` 等英文、德文可能被截 | 改为 `minmax(40px, max-content)` 或允许省略 + `title` |
+| P2 摘要标签 / 值 | 固定 380 + `nowrap`，长语言可能挤压 | 保留 `min-width:0`，标签允许换行或使用短译名 |
+| P1 Pill | 文案变长会撑宽 Pill | 不设固定宽，必要时对内部文本省略 |
+| 图标按钮 | 44×26 / 22×22 无文字 | 无风险 |
+
+验收时至少用 **德语、俄语** 各跑一遍 P3 设置区和 P2 摘要，检查：
+
+- `scrollWidth <= clientWidth + 1`；
+- 标题旁说明不被截断；
+- 设置行标签不压到右侧控件；
+- 不出现横向滚动条。
+
+不做“为中文固定 40px”的假设；所有固定文字宽度都按最长语言复核。
+
 实现落点：
 
 | 范围 | 改动 |
@@ -126,8 +157,9 @@ DSH 文档明确：
 | `client.js` · 词典 | 新增 `JA / ES / FR / DE / PT`，纳入现有 `RU`，每个 139 条 |
 | `client.js` · 注册 | `MESSAGES = { zh, en, ja, es, fr, de, ru, pt }`；一次 `locale.register` |
 | `client.js` · 异常 | 保留 try/catch：外部语言包占用 namespace 时不阻断 `bind` |
+| `client.js` · 布局 | `settingsHint` 加 `min-width:0` / `overflow-wrap:anywhere`；`settingsRow` 标签宽度按最长语言复核 |
 | `test/unit/i18n.test.mjs` | 新增词典覆盖、占位符、残留中文断言 |
-| `scripts/e2e.mjs` | 可选：切到 `ru` / `ja` 断言一条已知文案；至少保留中文回归 |
+| `scripts/e2e.mjs` | 可选：切到 `ru` / `de` 断言文案；检查 P3 设置区 / P2 摘要无横向溢出 |
 | `docs/ui-design.md` §8 / §5.7 | 语言从 `zh/en` 改为 8 语言；设置标题旁说明 |
 | `tools/preview/templates/page-p3.html` | 已加标题旁 `settings-hint`，不做浮动提示 |
 | `README.md` / `README.en.md` | 支持语言列表与截图说明 |
