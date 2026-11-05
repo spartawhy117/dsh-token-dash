@@ -4,7 +4,7 @@
 > 创建时间：2026-11-05<br>
 > 更新时间：2026-11-05（按 plan 骨架重排 + 明确施工顺序）<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
-> 关联资料：[`ui-design.md`](../../../ui-design.md) v3.8 §5.7 / §8、[PR #2](https://github.com/spartawhy117/dsh-token-dash/pull/2)（不合并）、[`feature_p3_settings_title.md`](feature_p3_settings_title.md)
+> 关联资料：[`ui-design.md`](../../../ui-design.md) v3.9 §5.7 / §8、[PR #2](https://github.com/spartawhy117/dsh-token-dash/pull/2)（不合并）、[`feature_p3_settings_title.md`](feature_p3_settings_title.md)
 
 ## 〇、前置依赖 / 代码探查事实（已确认）
 
