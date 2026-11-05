@@ -1,6 +1,6 @@
 # 多语言准备：硬编码清理与英文回退提示
 
-> 状态：待验收（2.0.0 候选）<br>
+> 状态：待验收（2.0.1 候选）<br>
 > 创建时间：2026-11-05<br>
 > 更新时间：2026-11-05（按 plan 骨架重排 + 明确施工顺序）<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
@@ -212,7 +212,7 @@ P3 BoardPage
 ```text
 npm test       目标 80 通过
 npm run e2e    目标 UI assertions passed
-npm run pack   生成 2.0.0 候选包
+npm run pack   生成 2.0.1 候选包
 ```
 
 不改 tag、不 npm publish、不触发 Release。
@@ -247,4 +247,4 @@ npm run pack   生成 2.0.0 候选包
 - 2026-11-05：`client.js` 已加 `settingsHead` / `settingsHint` 与词条；`page-p3` / UI / README / CHANGELOG 已同步；
 - provider 显示名已统一英文：`Zhipu AI`、`Qwen`；ID/币种/模型映射不变；
 - `npm test` 80 通过；`npm run e2e` UI assertions passed（含提示文案、位置、非按钮）；
-- `npm run pack` 已生成 `build/dsh-token-dash-2.0.0.tgz`（约 71.2 KB）；不 tag、不发布。
+- `npm run pack` 已生成 `build/dsh-token-dash-2.0.1.tgz`；不 tag、不发布。
