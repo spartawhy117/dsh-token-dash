@@ -18,6 +18,7 @@
 | REQ-06 | 待实施 | 文档同步 | UI §8 / README 支持语言 / CHANGELOG 2.1.0 |
 | REQ-07 | 已确认 | 语言显示跟随 DSH 设置 | 不主动设置语言；只 `register` 词典 + `bind`，由宿主切换 |
 | REQ-08 | 待实施 | P3 设置标题旁说明语言来源 | 「设置与数据管理」右侧 11px 内联小字，不做图标 / 浮动提示 |
+| REQ-09 | 待实施 | 建立术语与简写表 | 语言 ID 用 BCP 47；紧凑控件才用本地简写，不全篇直译英文缩写 |
 | BND-01 | 保持 | 不引入 P3 语言切换器 | 无插件语言偏好、无 `setLocale` |
 | BND-02 | 保持 | 不改 P1/P2/P3 布局、VM、provider | 纯文案层 |
 | BND-03 | 保持 | 不合并 PR #2 | PR 的拆分注册有基线错误；只复用 RU 词条 |
@@ -165,6 +166,52 @@ ru  Настройки и данные  Язык плагина соответс
 - P2 固定 380 需要按德语/俄语复核，不能让 `nowrap` 把右侧内容挤出去；
 - P1 Pill 允许变宽，但应设置合理上限，避免压缩输入框。
 
+### 3.5 术语、简写与语言 ID（已确认）
+
+先区分两件事：
+
+| 类型 | 规则 |
+|---|---|
+| 语言 ID / 简写 | 只用 DSH / BCP 47：`zh`、`en`、`ja`、`es`、`fr`、`de`、`ru`、`pt`；不用 `cn`、`jp`、`ge` 之类自造代码 |
+| UI 文案简写 | **按语言建立术语表**；完整标题/按钮优先全称，只有 P1、表头、窗口标签等紧凑位置才用本地简写 |
+
+不能把英文缩写直接搬到其他语言：
+
+```text
+Req / Hit / Cache / Used / Budget
+  ≠ 所有语言都接受这些缩写
+```
+
+高风险的短标签：
+
+| 中文概念 | 使用位置 | 规则 |
+|---|---|---|
+| 已用 / 预算 | P2 摘要 | 保留完整语义；德语/俄语先测宽度 |
+| 真实余额 | P2 摘要 | 全称；不要缩成 `Bal.` |
+| 请求 / 命中 | 用量表头 | 可用本语言常用短词，但不沿用英文 `Req/Hit` |
+| 输入 / 缓存 / 输出 | 明细表头 | 用本地术语；必要时用两行 |
+| 周 / 月 / 5h | 窗口标签 | 周/月用本地词；`5h` 由时间格式或本地约定决定 |
+| 刷新间隔 / 账户余额 | P3 设置行 | 全称，标签宽度可自适应 |
+| 设置与数据管理 | P3 标题 | 全称；右侧说明可换行 |
+| 插件语言跟随DSH本体设置显示 | P3 说明 | 全称；11px 内联，不缩写 |
+
+配套产出：
+
+- `docs/i18n-glossary.md`：每个高风险 key 记录 `full / compact / context / maxChars / doNotTranslate`；
+- provider 名、模型名、API Key、`Tokens` 等品牌/技术词默认 **不翻译**，按 DSH 术语表决定；
+- 数字、金额、相对时间用 `Intl.NumberFormat` / `Intl.RelativeTimeFormat`，不手写 `k/M` 或英文 `min/hour/day`；
+- 简写只在 `compact` 上下文使用；同一语言全产品保持一致。
+
+第三方参考插件没有可直接复用的 6 语言词表：现有参考记录只覆盖中文/英文；PR #2 只提供俄语。因此术语表必须以 DSH 宿主语言包 + 人工校对为准，不能从英文缩写批量直译。
+
+测试要求：
+
+- 每个语言 139 个 key 都有全称；compact key 有独立简写；
+- 禁止把 `Req` / `Hit` / `Cache` 等英文缩写硬编码到其他语言；
+- 用最长语言检查 P1 / P2 / P3 的 compact 位置是否仍可读。
+
+- 第三轮补充：语言 ID 用 BCP 47；建立 `docs/i18n-glossary.md`，短标签按语言维护，不从英文缩写直译；第三方插件没有可复用的 6 语言词表。
+
 实现落点：
 
 | 范围 | 改动 |
@@ -184,7 +231,8 @@ ru  Настройки и данные  Язык плагина соответс
 | `client.js` · 注册 | `MESSAGES = { zh, en, ja, es, fr, de, ru, pt }`；一次 `locale.register` |
 | `client.js` · 异常 | 保留 try/catch：外部语言包占用 namespace 时不阻断 `bind` |
 | `client.js` · 布局 | `settingsHint` 加 `min-width:0` / `overflow-wrap:anywhere`；`settingsRow` 标签宽度按最长语言复核 |
-| `test/unit/i18n.test.mjs` | 新增词典覆盖、占位符、残留中文断言 |
+| `docs/i18n-glossary.md` | 新增术语 / 简写 / `doNotTranslate` / `maxChars` 表 |
+| `test/unit/i18n.test.mjs` | 新增词典覆盖、占位符、残留中文、简写约束断言 |
 | `scripts/e2e.mjs` | 可选：切到 `ru` / `de` 断言文案；检查 P3 设置区 / P2 摘要无横向溢出 |
 | `docs/ui-design.md` §8 / §5.7 | 语言从 `zh/en` 改为 8 语言；设置标题旁说明 |
 | `tools/preview/templates/page-p3.html` | 已加标题旁 `settings-hint`，不做浮动提示 |
