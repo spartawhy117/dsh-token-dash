@@ -72,13 +72,26 @@ P3 BoardPage
 | EN value | `Language follows DSH settings; Chinese/English only; other languages fall back to English` |
 | 不使用 | `setLocale`、`locale.preference`、第二行提示、tooltip |
 
-### 2.3 数据与范围约束
+### 2.3 数据与不翻译范围
+
+**不翻译（doNotTranslate）范围：**
+
+| 类别 | 例子 | 规则 |
+|---|---|---|
+| 协议 ID | `provider.id`、`model.id` | 永不翻译；接口、账本、日志保持原值 |
+| 品牌名 | DeepSeek / GLM / Kimi / OpenRouter / Qwen / OpenCode Go / Command Code | 统一英文 canonical；不做逐语言翻译 |
+| 模型显示名 | `deepseek-chat`、`deepseek-reasoner` | 统一英文；不生成中文模型 ID |
+| 技术术语 | `Tokens`、`API`、`GitHub` | 保持英文，与 DSH 术语一致 |
+| 窗口标识 | `5h` | 技术标识；`周`/`月` 仍走 `tr` |
+| 数字/单位 | `k` / `M` / `B`、`--`、`—`、`·` | 格式化符号，不做语言翻译 |
+| 可选别名 | `displayNameZh = '深度求索'` | 仅 UI 展示；不得进入接口/日志/账本，不得替代英文 canonical |
+
+其它数据约束：
 
 - 不新增 `JA/ES/FR/DE/PT` 词典；
 - 不修改 `provider` 注册表、VM、`/summary`、`/usage`；
-- 不将 `provider.name` / `model.id` 本地化；
-- `Tokens` 保持原样，避免和 DSH 术语冲突；
-- 预览 HTML 里的硬编码不属于运行时文案，不搬进 `client.js`。
+- 预览 HTML 里的硬编码不属于运行时文案，不搬进 `client.js`；
+- 当前运行时没有 `doNotTranslate` 白名单常量；该表是**文档约束 + 静态检查依据**，不新增运行时过滤层。
 
 ### 2.4 关键陷阱
 
