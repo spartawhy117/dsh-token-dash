@@ -17,6 +17,7 @@
 | REQ-05 | 待实施 | 覆盖率可回归 | 单测检查每语言键数、缺失键、占位符、残留中文 |
 | REQ-06 | 待实施 | 文档同步 | UI §8 / README 支持语言 / CHANGELOG 2.1.0 |
 | REQ-07 | 已确认 | 语言显示跟随 DSH 设置 | 不主动设置语言；只 `register` 词典 + `bind`，由宿主切换 |
+| REQ-08 | 待实施 | P3 设置标题旁说明语言来源 | 「设置与数据管理」右侧 11px 内联小字，不做图标 / 浮动提示 |
 | BND-01 | 保持 | 不引入 P3 语言切换器 | 无插件语言偏好、无 `setLocale` |
 | BND-02 | 保持 | 不改 P1/P2/P3 布局、VM、provider | 纯文案层 |
 | BND-03 | 保持 | 不合并 PR #2 | PR 的拆分注册有基线错误；只复用 RU 词条 |
@@ -87,6 +88,37 @@ DSH 文档明确：
 - 切换 DSH 语言必须走宿主设置，再断言文案；
 - 单测只校验词典完整性和占位符，不修改宿主 locale。
 
+### 3.2 P3 设置标题旁的语言说明（已确认）
+
+设置区标题右侧增加一行小字，直接说明语言来源：
+
+```text
+设置与数据管理  插件语言跟随DSH本体设置显示
+┌────────────────────────────────────────────┐
+│ 刷新间隔 / 账户余额                         │
+│ 日志 / 数据                                 │
+│ 版本 / 检查更新                             │
+└────────────────────────────────────────────┘
+```
+
+- 文案：**插件语言跟随DSH本体设置显示**；
+- 位置：「设置与数据管理」标题右侧，与标题同一行；
+- 字号 11px，颜色 `muted`，无背景、无边框；
+- **不做按钮、不做 hover、不做浮动 tooltip**；
+- 窄屏允许换行到标题下方，不截断；
+- 纯说明文字，不参与设置、不可点击。
+
+实现落点：
+
+| 范围 | 改动 |
+|---|---|
+| `client.js` · `BoardPage` 设置区块头 | `sectionTitle` 后加 `span`，`data-testid='token-dash-settings-locale-hint'` |
+| `client.js` · `styles` | 新增 `settingsHint`（11px / muted / line-height 16） |
+| `client.js` · 文案 | 新增中文词条；EN 用 `Plugin language follows the DSH setting` |
+| `tools/preview/templates/page-p3.html` | 已加 `.settings-heading` + `.settings-hint` |
+| `scripts/e2e.mjs` | 断言提示存在、位于标题右侧、不是按钮 |
+| `docs/ui-design.md` §5.7 | 补标题旁说明规则 |
+
 ## 四、改动总览
 
 | 范围 | 改动 |
@@ -96,7 +128,8 @@ DSH 文档明确：
 | `client.js` · 异常 | 保留 try/catch：外部语言包占用 namespace 时不阻断 `bind` |
 | `test/unit/i18n.test.mjs` | 新增词典覆盖、占位符、残留中文断言 |
 | `scripts/e2e.mjs` | 可选：切到 `ru` / `ja` 断言一条已知文案；至少保留中文回归 |
-| `docs/ui-design.md` §8 | 语言从 `zh/en` 改为 8 语言；缺失回退 `en` |
+| `docs/ui-design.md` §8 / §5.7 | 语言从 `zh/en` 改为 8 语言；设置标题旁说明 |
+| `tools/preview/templates/page-p3.html` | 已加标题旁 `settings-hint`，不做浮动提示 |
 | `README.md` / `README.en.md` | 支持语言列表与截图说明 |
 | `CHANGELOG.md` | 2.1.0：多语言支持 |
 
@@ -132,7 +165,8 @@ MESSAGES = { zh, en, ja, es, fr, de, ru, pt }
 - 单测 / e2e 全绿；
 - README 语言列表与 DSH 实际语言一致；
 - 2.1.0 候选包可安装，**从 DSH 设置切换语言后** P1/P2/P3 文案跟随；
-- 插件自身没有语言开关，也没有语言偏好文件。
+- 插件自身没有语言开关，也没有语言偏好文件；
+- P3「设置与数据管理」右侧显示「插件语言跟随DSH本体设置显示」，不是按钮 / tooltip。
 
 ## 五、实施顺序
 
@@ -154,4 +188,5 @@ MESSAGES = { zh, en, ja, es, fr, de, ru, pt }
 - 插件只有 `zh/en` 139 条；其余 6 种 0 覆盖；
 - PR #2 RU 词典完整但注册方式不满足基线要求，决定不合并；
 - 第三轮复核：代码无 `setLocale` / `locale.preference` / 语言开关，只有 `register` + `bind`；语言显示跟随 DSH 设置；
+- 第三轮补充：P3 设置标题右侧内联提示「插件语言跟随DSH本体设置显示」，preview 已确认，不做浮层；
 - 待实施，目标版本 **2.1.0**。
