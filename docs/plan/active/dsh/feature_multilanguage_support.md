@@ -13,8 +13,8 @@
 | REQ-01 | 完成调查 | 扫描硬编码 UI 文案 | `client.js` 无词典外中文可见文案；技术词保留 |
 | REQ-02 | 待实施 | 清理漏走 `tr` 的文案 | 仅保留 `Tokens`、`provider.id`、`model.id` 等技术标识；品牌/型号统一英文 |
 | REQ-07 | 待实施 | provider / 模型命名一致 | 不做逐语言翻译；ID 永不翻译，显示名统一英文品牌 |
-| REQ-03 | 待实施 | 明确语言回退提示 | P3 设置区增加「当前仅中文 / English，其他语言回退英文」 |
-| REQ-04 | 待实施 | 文档同步 | UI §5.7 / README 兼容说明 |
+| REQ-03 | 待实施 | P3 语言跟随说明 | 设置标题右侧仅一条 11px：`插件语言跟随DSH本体设置显示` |
+| REQ-04 | 待实施 | 英文回退说明 | 放 README / UI 文档，不在 P3 增加第二行 |
 | REQ-05 | 不做 | 新增 6 语言词典 | 暂不实现 `ja/es/fr/de/ru/pt` |
 | REQ-06 | 不做 | 每语言全量预渲染 | 成本过高；不进入本次范围 |
 | BND-01 | 保持 | 不引入语言开关 | 跟随 DSH，无 `setLocale` |
@@ -122,19 +122,18 @@ provider.displayNameZh = "深度求索" // 可选别名，不参与接口/日志
 | 范围 | 改动 |
 |---|---|
 | `client.js` · P3 设置区标题 | 保留「设置与数据管理」+ 11px 内联语言提示 |
-| `client.js` · 设置区提示 | 第二行小字：`当前仅中文 / English，其他语言回退英文` |
-| `client.js` · 文案 | 新增两条中文键 + 两条 EN 翻译；其他语言走 EN 回退 |
+| `client.js` · 设置区提示 | 仅一条：`插件语言跟随DSH本体设置显示`；不加第二行 |
+| `client.js` · 文案 | 新增一条中文键 + 一条 EN 翻译；其他语言走 EN 回退 |
 | `docs/ui-design.md` §5.7 / §8 | 记录提示位置与 zh/en + EN 回退边界 |
 | `README.md` / `README.en.md` | 兼容说明：当前 UI 仅 zh/en，其他 DSH 语言显示英文 |
 | `CHANGELOG.md` | 归入下一个 patch/minor，不单独发版 |
-| `scripts/e2e.mjs` | 断言两条提示可见、不可点击、无 tooltip |
+| `scripts/e2e.mjs` | 断言一条提示可见、不可点击、无 tooltip |
 | `tools/preview/templates/page-p3.html` | 已有第一条提示；补第二条小字后再截图 |
 
 ### 结构
 
 ```text
 设置与数据管理  插件语言跟随DSH本体设置显示
-                当前仅中文 / English，其他语言回退英文
 ┌────────────────────────────────────────────┐
 │ 刷新间隔 / 账户余额                         │
 │ 日志 / 数据                                 │
@@ -142,9 +141,10 @@ provider.displayNameZh = "深度求索" // 可选别名，不参与接口/日志
 └────────────────────────────────────────────┘
 ```
 
-- 两条都是 11px 纯文本，位于标题右侧/下方；
+- P3 只放一条 11px 纯文本，位于标题右侧；
 - 不做按钮、不做 hover、不做 tooltip；
 - 允许换行；不把设置胶囊撑宽；
+- 英文回退说明只放 README / UI 文档，不放进 P3，避免长期占位；
 - 不新增语言选择器。
 
 ### 不改动
@@ -159,8 +159,8 @@ provider.displayNameZh = "深度求索" // 可选别名，不参与接口/日志
 - `client.js` 中用户可见文案仍全部走 `tr`；
 - `Tokens` 等仅作为 `doNotTranslate` 保留；
 - provider / 模型 ID 不翻译，显示名统一英文；中文别名只能作为可选 displayName。
-- P3 设置区显示两条提示，无按钮/tooltip；
-- README 明确「当前 UI 仅 zh/en，其他语言回退英文」；
+- P3 设置区只显示「插件语言跟随DSH本体设置显示」，无按钮/tooltip；
+- README 明确「当前 UI 仅 zh/en，其他 DSH 语言回退英文」；
 - `npm test` 80 通过；`npm run e2e` 通过；
 - 不新增语言包、不做 8 语言截图矩阵。
 
