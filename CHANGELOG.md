@@ -11,7 +11,7 @@ This file records the **new features** and **changes** of each release in Chines
 - P3「时间范围」由固定 300px 改为按内容自适应，英文 `Last 7 days` / `Last 30 days` 不再换行。
   - EN: The P3 time-range control now sizes to its content instead of a fixed 300px, so `Last 7 days` / `Last 30 days` no longer wrap.
 - provider 模式标签由「按量 API / Pay-as-you-go」改为「API 用量 / API usage」，P3 区块标题同步。
-  - EN: Provider mode labels changed from “按量 API / Pay-as-you-go” to “API 用量 / API usage”; the P3 section title was updated to match.
+  - EN: Provider mode labels are now “API 用量 / API usage” instead of “按量 API / Pay-as-you-go”; the P3 section title was updated to match.
 - 补齐英文界面缺失的 5 个词条；英文 README 使用英文界面截图。
   - EN: Added five missing English UI strings; README.en now uses English screenshots.
 
@@ -44,7 +44,7 @@ This file records the **new features** and **changes** of each release in Chines
 ### 修改 / Changes
 
 - P2 固定 380：摘要改为单行三组（环 / 已用·预算 / 真实余额），移除「本月已花」；真实余额右对齐到面板右缘，范围条撑满，订阅窗口固定三槽位（两窗占前两槽），模型列上限 150。
-  - EN: P2 stays at 380px: the summary is now one row with three groups (ring / used-budget / real balance), and “Spent this month” was removed. Real balance is right-aligned to the panel edge; the range control fills the row; subscription windows use three fixed slots (two windows use the first two); model names are capped at 150px.
+  - EN: P2 remains fixed at 380px: the summary is now one row with three groups (ring / used-budget / real balance), and “Spent this month” was removed. Real balance is right-aligned to the panel edge; the range control fills the row; subscription windows use three fixed slots (two windows use the first two); model names are capped at 150px.
 - P3 定稿：页头只留两枚 44×26 蓝色按钮；设置胶囊移除「立即刷新」，刷新间隔左对齐、账户余额右对齐；页面自持滚动，滚动条贴窗口右缘。
   - EN: P3 finalized: the header keeps only two 44×26 blue buttons; the settings capsule no longer has “Refresh now”; the refresh interval is left-aligned and the balance toggle is right-aligned; the page scrolls internally with the scrollbar at the window edge.
 - P3 明细模型列上限 240，7 个数值列等宽，字号 13；除模型列外全部右对齐，长模型名不再挤压数字。
@@ -54,7 +54,7 @@ This file records the **new features** and **changes** of each release in Chines
 - P1 的预算与订阅窗口改用内联环；浮层不再承载设置项，设置集中到整页底部胶囊。
   - EN: P1 budget and subscription windows now use inline rings; the floating panel no longer contains settings, which are centralized in the capsule at the bottom of the full page.
 - 供应商取数改为按源表迭代：每源成功缓存 60s / 失败 10s + 并发合并；订阅重查覆盖 GLM、Kimi、OpenCode Go、Command Code。
-  - EN: Provider fetching now iterates the source table: each source caches successes for 60s and failures for 10s, with concurrent request coalescing; subscription refreshes cover GLM, Kimi, OpenCode Go, and Command Code.
+  - EN: Provider fetching now iterates over the source table: each source caches successes for 60s and failures for 10s, with concurrent request coalescing; subscription refreshes cover GLM, Kimi, OpenCode Go, and Command Code.
 - 7 家 provider registry 与价格链接同步；非回环请求走安全门；错误分类补 `upstream` 标记。
   - EN: Synced the registry and pricing links for all seven providers; non-loopback requests go through the security gate; added an `upstream` error classification.
 - P1 在输入框底栏内右移（`composer.dock` 的 Pill 根节点 `order:10`），并移除 hero 槽位注入，官方 Agent 模式按钮恢复。
@@ -82,7 +82,7 @@ This file records the **new features** and **changes** of each release in Chines
 ### 修改 / Changes
 
 - P2 固定 380：摘要改单行四组（环 / 已用·预算 / 真实余额 / 本月已花），范围条撑满，订阅窗口固定三槽位（两窗占前两槽），模型列上限 150。
-  - EN: P2 stays at 380px: the summary uses one row with four groups (ring / used-budget / real balance / spent this month); the range control fills the row; subscription windows use three fixed slots (two windows use the first two); model names are capped at 150px.
+  - EN: P2 remains fixed at 380px: the summary uses one row with four groups (ring / used-budget / real balance / spent this month); the range control fills the row; subscription windows use three fixed slots (two windows use the first two); model names are capped at 150px.
 - P3 定稿：页头只留两枚 44×26 蓝色按钮；设置胶囊移除「立即刷新」，刷新间隔左对齐、账户余额右对齐；页面自持滚动，滚动条贴窗口右缘。
   - EN: P3 finalized: the header keeps only two 44×26 blue buttons; the settings capsule no longer has “Refresh now”; the refresh interval is left-aligned and the balance toggle is right-aligned; the page scrolls internally with the scrollbar at the window edge.
 - P3 明细模型列上限 240，7 个数值列等宽，字号 13；除模型列外全部右对齐，长模型名不再挤压数字。
@@ -92,7 +92,7 @@ This file records the **new features** and **changes** of each release in Chines
 - P1 的预算与订阅窗口改用内联环；浮层不再承载设置项，设置集中到整页底部胶囊。
   - EN: P1 budget and subscription windows now use inline rings; the floating panel no longer contains settings, which are centralized in the capsule at the bottom of the full page.
 - 供应商取数改为按源表迭代：每源成功缓存 60s / 失败 10s + 并发合并；订阅重查覆盖 GLM、Kimi、OpenCode Go、Command Code。
-  - EN: Provider fetching now iterates the source table: each source caches successes for 60s and failures for 10s, with concurrent request coalescing; subscription refreshes cover GLM, Kimi, OpenCode Go, and Command Code.
+  - EN: Provider fetching now iterates over the source table: each source caches successes for 60s and failures for 10s, with concurrent request coalescing; subscription refreshes cover GLM, Kimi, OpenCode Go, and Command Code.
 - 7 家 provider registry 与价格链接同步；非回环请求走安全门；错误分类补 `upstream` 标记。
   - EN: Synced the registry and pricing links for all seven providers; non-loopback requests go through the security gate; added an `upstream` error classification.
 
@@ -108,11 +108,11 @@ This file records the **new features** and **changes** of each release in Chines
 ### 修改 / Changes
 
 - 用量页预算行改为「名称行四列（名称 / 百分比 / 已用总额 / 余额）+ 满宽迷你条」，数值列跨 provider 左缘对齐
-  - EN: The usage page budget row now uses four name-row columns (name / percentage / used total / balance) plus a full-width mini bar; numeric columns align to the left edge across providers.
+  - EN: The usage page budget row now has four columns in its name row (name / percentage / used total / balance) plus a full-width mini bar; numeric columns align to the left edge across providers.
 - 设置页订阅行只保留供应商名与重置时间，去掉「账户套餐」与配额百分比
   - EN: The settings subscription row now keeps only the provider name and reset time; removed “Account plan” and the quota percentage.
 - 重置时间抽成统一组件，格式为 `x 分钟后 / 小时后 / 天后 · MM-DD HH:mm 重置`
-  - EN: Extracted reset time into a shared component with the format `x min / x h / x d · reset at MM-DD HH:mm`.
+  - EN: Reset time is now a shared component, formatted as `x min / x h / x d · reset at MM-DD HH:mm`.
 - 用量页订阅窗口的 5h 与周按固定宽度成列，右侧迷你条贴分区右边界
   - EN: The 5h and weekly subscription windows now use fixed-width columns; the mini bars align to the right edge of each section.
 - 两格卡精简：删除「按币种」、金额改用主题蓝，真实 Tokens 副行只保留三个数字
@@ -140,13 +140,13 @@ This file records the **new features** and **changes** of each release in Chines
 ### 修改 / Changes
 
 - 计费形态固化：配额查询失败不再让同一份历史数据在订阅 / 按量口径间跳动
-  - EN: Billing mode is now stable: a failed quota request no longer makes the same historical data jump between subscription and usage-based views.
+  - EN: Billing mode is now stable: a failed quota query no longer makes the same historical data jump between subscription and usage-based views.
 - 明细 Tokens 括号改为 输入 / 缓存（读+写）/ 输出，三数之和等于总数；近似价补 `≈`
   - EN: The Tokens bracket now shows input / cache (read+write) / output, and the three numbers add up to the total; approximate prices are marked with `≈`.
 - 首屏与范围切换不再闪现 `¥0.00`，旧响应不会覆盖新范围
   - EN: The first screen and range switching no longer briefly show `¥0.00`; stale responses cannot overwrite a newer range.
 - 供应商探测为空时立即重试；探测失败与未配置分开提示并提供重试
-  - EN: Empty provider detection now retries immediately; detection failures and missing configuration show separate messages with retry.
+  - EN: When no providers are detected, the plugin retries immediately; detection failures and missing configuration show separate messages with retry.
 - 设置页配置收敛为预算 / 计费模式 / 刷新间隔 / 余额开关，非法刷新间隔自动回落
   - EN: Settings now cover budget / billing mode / refresh interval / balance toggle; invalid refresh intervals fall back automatically.
 - 设置页收敛为五分区：日志与备份恢复合并为「数据与日志」
@@ -207,7 +207,7 @@ This file records the **new features** and **changes** of each release in Chines
 ### 新增 / Added
 
 - npm 发布切换 Trusted Publishing（OIDC 直发）：推 tag 全自动上线，免 token、含 provenance 溯源
-  - EN: Switched npm publishing to Trusted Publishing (direct OIDC): pushing a tag deploys automatically, without a token and with provenance.
+  - EN: Switched npm publishing to Trusted Publishing (direct OIDC): pushing a tag publishes automatically, without a token and with provenance.
 
 ### 修改 / Changes
 
@@ -255,7 +255,7 @@ First stable release.
 - 错误链路日志（`errorKind` / `httpStatus` 分类）与 `npm run logs` 排查工具
   - EN: Error-path logs (`errorKind` / `httpStatus` classification) and the `npm run logs` troubleshooting tool.
 - GitHub Release 产物安装（tarball 离线安装）
-  - EN: Installed artifacts from GitHub Releases (offline tarball installation).
+  - EN: GitHub Release artifact installation (offline tarball installation).
 
 ### 修改 / Changes
 
