@@ -37,8 +37,9 @@ description: 管理 dsh-token-dash 的本地构建草稿（CHANGELOG local 块�
 
 ## CHANGELOG 写法
 
-- 正式块：`## [X.Y.Z] - YYYY-MM-DD`，正文 `### 新增` / `### 修改`，无内容可省略对应段。
-- local 块：`## [X.Y.Z-local.N] - YYYY-MM-DD`，标题下加 `> 本地构建，未发布`，同样使用 `### 新增` / `### 修改`。
+- 正式块：`## [X.Y.Z] - YYYY-MM-DD`，正文 `### 新增 / Added` / `### 修改 / Changes`，无内容可省略对应段。
+- 双语：每条中文 bullet 下补 `  - EN: ...` 英文行；Release body 与 CHANGELOG 均保留双语。
+- local 块：`## [X.Y.Z-local.N] - YYYY-MM-DD`，标题下加 `> 本地构建，未发布`，同样使用 `### 新增 / Added` / `### 修改 / Changes` 与英文行。
 - local 块只写当前未发布修改；正式发布时合并进正式块并删除，不在最终历史中保留。
 - 每条写用户可感知的“对象 + 结果”；不写实现细节、测试环境、内部模块名和提交信息。
 - 正式块的 Release body 必须与该块逐段一致；按 tag 版本提取，不按“文件第一块”提取。
