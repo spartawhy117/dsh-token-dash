@@ -1,9 +1,10 @@
 /**
  * 生成 README 截图：临时 DSH_HOME + web profile + 假数据注入，不读真实账本。
  *
- * 用法：npm run shots [-- --keep]
+ * 用法：npm run shots [-- --keep] [-- --en]
  * 产物：docs/pic/panel-api.png、panel-sub-2.png、panel-sub-3.png（P2 三种形态）、
  *       settings.png（P3 整页）、pill-api.png / pill-sub.png
+ *       --en 输出 docs/pic/en/，供 README.en.md 使用
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -14,9 +15,11 @@ import { prefs, summary, summarySubThreeWindows, summarySubTwoWindows, usageFor 
 
 const root = resolve('.')
 const keep = process.argv.includes('--keep')
+const english = process.argv.includes('--en')
 const tmpRoot = join(root, '.tmp')
 const home = join(tmpRoot, `shots-home-${Date.now()}`)
-const outDir = join(root, 'docs', 'pic')
+const outDir = join(root, 'docs', 'pic', english ? 'en' : '')
+const pageLocale = english ? 'en-US' : 'zh-CN'
 const appRoot = process.env.DSH_APP_ROOT ?? join(process.env.LOCALAPPDATA ?? '', 'Programs', 'DeepSeek Harness')
 const exe = join(appRoot, 'DeepSeek Harness.exe')
 const cliJs = join(appRoot, 'resources', 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
@@ -87,7 +90,7 @@ try {
 
   const executablePath = resolveChromium()
   browser = await chromium.launch({ headless: true, ...(executablePath === undefined ? {} : { executablePath }) })
-  const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, deviceScaleFactor: 2 })
+  const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, deviceScaleFactor: 2, locale: pageLocale })
 
   let activeSummary = summary
   await page.route('**/token-dash/api/summary*', (route) => route.fulfill({
@@ -107,7 +110,7 @@ try {
   for (let round = 0; round < 4; round += 1) {
     await page.evaluate(() => {
       const buttons = [...document.querySelectorAll('[role=presentation] button')]
-      const next = buttons.find((button) => /继续|跳过|稍后|关闭/.test(button.textContent ?? ''))
+      const next = buttons.find((button) => /继续|跳过|稍后|关闭|Continue|Skip|Later|Close/i.test(button.textContent ?? ''))
       if (next !== undefined) next.click()
     })
     await page.waitForTimeout(200)
@@ -119,8 +122,17 @@ try {
   await page.evaluate(() => document.body.setAttribute('data-ds-dark-theme', '1'))
   await page.waitForTimeout(300)
 
+  const openFixtureSession = async () => {
+    for (const title of ['E2E Fixture', '未命名', 'Untitled']) {
+      const candidate = page.getByText(title, { exact: true }).first()
+      if (await candidate.count() > 0) {
+        await candidate.evaluate((node) => node.click()).catch(() => {})
+        return
+      }
+    }
+  }
   await page.waitForTimeout(1200)
-  await page.getByText('未命名', { exact: true }).first().evaluate((node) => node.click()).catch(() => {})
+  await openFixtureSession()
   await page.waitForTimeout(1200)
   const pill = page.locator('[data-testid=token-dash-pill]')
   await pill.waitFor({ timeout: 20000 })
@@ -145,7 +157,7 @@ try {
   await page.waitForTimeout(300)
 
   // API 形态：切到近 30 天，让表内数据更完整
-  await jsClick(panel.getByRole('tab', { name: '近30天' }))
+  await jsClick(panel.getByRole('tab', { name: /近30天|Last 30 days/ }))
   await page.waitForTimeout(600)
   await panel.screenshot({ path: join(outDir, 'panel-api.png') })
   console.log('[shots] panel-api.png')
@@ -186,18 +198,18 @@ try {
     for (let round = 0; round < 4; round += 1) {
       await page.evaluate(() => {
         const buttons = [...document.querySelectorAll('[role=presentation] button,[role=dialog] button')]
-        const next = buttons.find((button) => /继续|跳过|稍后|关闭/.test(button.textContent ?? ''))
+        const next = buttons.find((button) => /继续|跳过|稍后|关闭|Continue|Skip|Later|Close/i.test(button.textContent ?? ''))
         if (next !== undefined) next.click()
-      })
-      await page.waitForTimeout(200)
-    }
-    await page.waitForTimeout(700)
-    await page.evaluate(() => {
-      document.body.setAttribute('data-ds-dark-theme', '1')
-      for (const node of document.querySelectorAll('[role=dialog],[role=presentation]')) node.remove()
-    })
-    await page.getByText('未命名', { exact: true }).first().evaluate((node) => node.click()).catch(() => {})
-    await page.waitForTimeout(800)
+        })
+        await page.waitForTimeout(200)
+        }
+        await page.waitForTimeout(700)
+        await page.evaluate(() => {
+        document.body.setAttribute('data-ds-dark-theme', '1')
+        for (const node of document.querySelectorAll('[role=dialog],[role=presentation]')) node.remove()
+        })
+        await openFixtureSession()
+        await page.waitForTimeout(800)
     const target = page.locator('[data-testid=token-dash-pill]')
     await target.waitFor({ timeout: 15000 })
     await jsClick(target)

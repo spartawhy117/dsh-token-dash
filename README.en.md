@@ -54,25 +54,25 @@ Screenshots use mock data so the full layout is visible at once.
 **P1 · Composer footer-right Pill**: pay-as-you-go / subscription variants; click to open, click outside, `×` or `Esc` to close.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/pill-api.png" alt="Pay-as-you-go pill" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/pill-api.png" alt="Pay-as-you-go pill" />
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/pill-sub.png" alt="Subscription pill" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/pill-sub.png" alt="Subscription pill" />
 </p>
 
 **P2 · Floating panel (current model)**: fixed 380, one row with three groups — used ring / used-budget / real balance — with the balance right-aligned to the panel edge, a full-width range control and the usage table.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/panel-api.png" alt="Floating panel - pay-as-you-go" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/panel-api.png" alt="Floating panel - pay-as-you-go" />
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/panel-sub-2.png" alt="Floating panel - two subscription windows" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/panel-sub-2.png" alt="Floating panel - two subscription windows" />
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/panel-sub-3.png" alt="Floating panel - three subscription windows" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/panel-sub-3.png" alt="Floating panel - three subscription windows" />
 </p>
 
 - Subscription windows use three slots: first left, second center, third right; two windows occupy the first two slots.
@@ -81,7 +81,7 @@ Screenshots use mock data so the full layout is visible at once.
 **P3 · Full dashboard**: cards for 7 providers, summary band, 8-column model breakdown and a settings capsule; the page owns its scrollbar at the window edge.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/settings.png" alt="Full dashboard" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/settings.png" alt="Full dashboard" />
 </p>
 
 - Pay-as-you-go card: budget input, planned balance, real balance, month-to-date spend; subscription card: one ring per window with remaining percentage and countdown.
@@ -146,7 +146,8 @@ Common events:
 ```bash
 npm test      # unit tests (80 passing)
 npm run e2e   # end-to-end (temp DSH_HOME + web profile + Playwright)
-npm run shots # regenerate the P1/P2/P3 screenshots in docs/pic from mock data
+npm run shots       # regenerate the Chinese P1/P2/P3 screenshots in docs/pic
+npm run shots -- --en # regenerate the English screenshots in docs/pic/en
 npm run pack  # build the release tarball into build/
 ```
 
