@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
       '社区': 'Community', '内置兜底': 'Built-in fallback',
       '查询失败': 'Query failed', '套餐查询失败': 'Quota query failed',
       '周': 'Week', '月': 'Month', '重置': 'Reset',
-      '按量 API': 'Pay-as-you-go', '订阅': 'Subscription', '账户套餐': 'Account plan',
+      'API 用量': 'API usage', '订阅': 'Subscription', '账户套餐': 'Account plan',
       '预算': 'Budget', '未设置': 'Not set', '今日 {value}': 'Today {value}',
       '余额': 'Balance', '余额 {value}': 'Balance {value}', '预算已用 {value}': 'Budget used {value}',
       '预算未设置': 'Budget not set', '收起': 'Collapse', '展开': 'Expand',
@@ -56,7 +56,7 @@ window.__ModuleLoader__.load({
       '目前支持 DeepSeek / Kimi / GLM / OpenRouter / Qwen API Key': 'Supports DeepSeek / Kimi / GLM / OpenRouter / Qwen API Keys',
       '刷新': 'Refresh', '关闭': 'Close',
       '未定价': 'Unpriced', '请求': 'Req', '命中': 'Hit',
-      '按量计价（按供应商）': 'Pay-as-you-go (by provider)',
+      'API 用量（按供应商）': 'API usage (by provider)',
       '订阅套餐（按供应商）': 'Subscription plans (by provider)',
       '名称': 'Name', '已用': 'Used', '已用 / 预算': 'Used / budget', '计划余额': 'Planned left', '真实余额': 'Real balance',
       '剩余 {value}': '{value} left', '本月已花': 'Spent this month',
@@ -99,7 +99,7 @@ window.__ModuleLoader__.load({
       '版本 {version}': 'Version {version}',
       '{name} · {action} Token 看板': '{name} · {action} Token dashboard',
       '{name} 月度预算': '{name} monthly budget',
-      '{name}，按量 API，{budget}，今日 {today}{balance}': '{name}, pay-as-you-go, {budget}, today {today}{balance}',
+      '{name}，API 用量，{budget}，今日 {today}{balance}': '{name}, API usage, {budget}, today {today}{balance}',
       '{name}，订阅，账户套餐，{value}': '{name}, subscription, account plan, {value}',
       '更新于 {time}': 'Updated {time}', '数据来自本机会话记录': 'From local session records',
       '未配置凭据': 'No credentials', '刷新中': 'Refreshing',
@@ -640,11 +640,14 @@ window.__ModuleLoader__.load({
       } }))
     }
 
-    function Segmented({ value, options, onChange, label, kind = 'tablist' }) {
+    function Segmented({ value, options, onChange, label, kind = 'tablist', fit = false }) {
       const itemRole = kind === 'radiogroup' ? 'radio' : 'tab'
       return h('div', {
         role: kind, 'aria-label': label,
-        style: { display: 'flex', width: '100%', height: 28, padding: 2, boxSizing: 'border-box', gap: 2, borderRadius: 8, background: T.segment },
+        style: {
+          display: 'flex', width: fit ? 'max-content' : '100%', height: 28, padding: 2,
+          boxSizing: 'border-box', gap: 2, borderRadius: 8, background: T.segment,
+        },
       }, options.map((option, index) => {
         const selected = option.value === value
         return h('button', {
@@ -660,8 +663,8 @@ window.__ModuleLoader__.load({
             onChange(options[(index + direction + options.length) % options.length].value)
           },
           style: {
-            flex: 1, minWidth: 0, height: 24, padding: '0 4px', borderRadius: 6, border: 'none',
-            fontSize: 11, fontWeight: 500, cursor: 'pointer', font: 'inherit',
+            flex: fit ? '0 0 auto' : 1, minWidth: 0, height: 24, padding: '0 4px', borderRadius: 6, border: 'none',
+            fontSize: 11, fontWeight: 500, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
             background: selected ? T.segmentOn : 'transparent',
             color: selected ? T.text : T.muted,
             boxShadow: selected ? 'var(--dsw-shadow-lv1, 0 1px 2px rgba(0,0,0,.08))' : 'none',
@@ -1036,7 +1039,7 @@ window.__ModuleLoader__.load({
       const current = providers.find((provider) => provider.id === summary?.currentProviderId) ?? providers[0]
       let prefix = '[API]'
       let bodyNodes = [h('span', { key: 'unknown' }, '--')]
-      let ariaText = tr('按量 API')
+      let ariaText = tr('API 用量')
       if (current?.kind === 'subscription') {
         prefix = `[${tr('订阅')}]`
         bodyNodes = subscriptionNodes(current)
@@ -1063,7 +1066,7 @@ window.__ModuleLoader__.load({
             h('span', { 'data-td-label': true, style: styles.summaryLabel }, tr('余额')),
             h('span', { style: styles.num }, balance)),
         ].filter(Boolean)
-        ariaText = tr('{name}，按量 API，{budget}，今日 {today}{balance}', { name: current.name, budget: hasBudget ? tr('预算已用 {value}', { value: fmtRatio(budget.percent) }) : tr('预算未设置'), today: fmtMoney(current.usage?.todayCost, current.currency), balance: balance === null ? '' : `，${tr('余额 {value}', { value: balance })}` })
+        ariaText = tr('{name}，API 用量，{budget}，今日 {today}{balance}', { name: current.name, budget: hasBudget ? tr('预算已用 {value}', { value: fmtRatio(budget.percent) }) : tr('预算未设置'), today: fmtMoney(current.usage?.todayCost, current.currency), balance: balance === null ? '' : `，${tr('余额 {value}', { value: balance })}` })
       }
       const hoverTitle = tr('{name} · {action} Token 看板', { name: current?.name ?? '', action: open ? tr('收起') : tr('展开') })
 
@@ -1228,7 +1231,7 @@ window.__ModuleLoader__.load({
       return h(React.Fragment, null,
         h('div', { style: styles.providerLine },
           h('span', { style: styles.title, title: provider.name }, provider.name),
-          h('span', { style: styles.providerChip }, `[ ${tr('按量 API')} ]`)),
+          h('span', { style: styles.providerChip }, `[ ${tr('API 用量')} ]`)),
         h('div', { 'data-testid': 'token-dash-summary-row', style: styles.summaryRow },
           h('span', { style: styles.summaryCell },
             h(InlineRing, {
@@ -1503,7 +1506,7 @@ window.__ModuleLoader__.load({
             updateControl)))
     }
 
-    /** P3 按量卡：每 provider 一张，竖排 Gauge + 常显预算输入 + 三行字段。 */
+    /** P3 API 用量卡：每 provider 一张，竖排 Gauge + 常显预算输入 + 三行字段。 */
     function BudgetTable({ providers, prefs, onSave }) {
       const [errors, setErrors] = useState({})
       const [saving, setSaving] = useState(null)
@@ -1551,7 +1554,7 @@ window.__ModuleLoader__.load({
           },
             h('div', { style: styles.apiCardHead },
               h('span', { style: styles.apiCardName, title: provider.name }, provider.name),
-              h('span', { style: styles.apiChip }, `[ ${tr('按量 API')} ]`)),
+              h('span', { style: styles.apiChip }, `[ ${tr('API 用量')} ]`)),
             h('div', { style: styles.apiGaugeWrap },
               h(QuotaGauge, {
                 label: tr('已用'), percent,
@@ -1782,7 +1785,7 @@ window.__ModuleLoader__.load({
           h('span', null, tr('刷新失败，保留上次数据')),
           h('button', { type: 'button', style: styles.button, onClick: () => { void refresh() } }, tr('重试'))) : null,
         api.length > 0 ? h('section', { style: styles.boardSection },
-          h('div', { style: styles.boardSectionHead }, h('b', { style: styles.sectionTitle }, tr('按量计价（按供应商）'))),
+          h('div', { style: styles.boardSectionHead }, h('b', { style: styles.sectionTitle }, tr('API 用量（按供应商）'))),
           h(BudgetTable, { providers: api, prefs, onSave: savePrefs })) : null,
         subscriptions.length > 0 ? h('section', { style: styles.boardSection },
           h('div', { style: styles.boardSectionHead },
@@ -1799,8 +1802,8 @@ window.__ModuleLoader__.load({
           h('div', { style: styles.boardSectionHead }, h('b', { style: styles.sectionTitle }, tr('范围与明细'))),
           h('div', { style: styles.rangeBox },
             h('div', { style: styles.rangeHead },
-              h('div', { style: { width: 300, maxWidth: '100%', flex: '0 0 300px', minWidth: 0 } }, h(Segmented, {
-                value: range, onChange: setRange, label: tr('时间范围'),
+              h('div', { style: { width: 'max-content', maxWidth: '100%', flex: '0 0 auto', minWidth: 0 } }, h(Segmented, {
+                value: range, onChange: setRange, label: tr('时间范围'), fit: true,
                 options: RANGES.map(([value, label]) => ({ value, label: tr(label) })),
               })),
               h('span', { style: styles.rangeMeta },

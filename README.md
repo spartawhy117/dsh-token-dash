@@ -10,7 +10,7 @@
 
 <p align="center">
   在 DSH 输入框旁看清今天的模型消耗、本月的预算余量，以及 7 家供应商的订阅窗口。<br />
-  填 Key 自动识别订阅或按量计费；费用、Tokens、缓存命中全部在本地估算；<br />
+  填 Key 自动识别订阅或 API 用量；费用、Tokens、缓存命中全部在本地估算；<br />
   当月数据可导出备份，换机或重装后一键导入恢复。
 </p>
 
@@ -34,11 +34,11 @@
 
 | 供应商 | 计费形态 | 凭据 | 能看到什么 |
 |---|---|---|---|
-| DeepSeek | 按量 | DS 账号钱包 / `DEEPSEEK_API_KEY` | 账户余额、本月已花、预算 |
-| Zhipu GLM Coding | 订阅 / 按量 | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + 周窗口 |
-| Kimi Coding | 订阅 / 按量 | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | 5h + 周/月窗口；订阅查询失败可回落余额 |
-| OpenRouter | 按量 | `OPENROUTER_API_KEY` | Credits（USD） |
-| Qwen | 按量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
+| DeepSeek | API 用量 | DS 账号钱包 / `DEEPSEEK_API_KEY` | 账户余额、本月已花、预算 |
+| Zhipu GLM Coding | 订阅 / API 用量 | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + 周窗口 |
+| Kimi Coding | 订阅 / API 用量 | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | 5h + 周/月窗口；订阅查询失败可回落余额 |
+| OpenRouter | API 用量 | `OPENROUTER_API_KEY` | Credits（USD） |
+| Qwen | API 用量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
 | OpenCode Go | 订阅 | `OPENCODE_GO_API_KEY` | 5h / 周 / 月窗口（USD） |
 | Command Code | 订阅 | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + 周窗口、Credits（CNY） |
 
@@ -51,10 +51,10 @@
 
 以下截图使用假数据演示，便于一次看到完整效果。
 
-**P1 · 输入框底栏右侧 Pill**：按量 / 订阅两种形态，点击展开浮层，点击外部、`×` 或 `Esc` 收起。
+**P1 · 输入框底栏右侧 Pill**：API 用量 / 订阅两种形态，点击展开浮层，点击外部、`×` 或 `Esc` 收起。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/pill-api.png" alt="按量 Pill" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/pill-api.png" alt="API 用量 Pill" />
 </p>
 
 <p align="center">
@@ -64,7 +64,7 @@
 **P2 · 浮层（当前模型）**：固定 380，单行三组「已用环 / 已用·预算 / 真实余额」，真实余额右对齐到面板右缘；时间范围撑满，下面是用量表。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/panel-api.png" alt="浮层 · 按量形态" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/panel-api.png" alt="浮层 · API 用量形态" />
 </p>
 
 <p align="center">
@@ -84,7 +84,7 @@
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/settings.png" alt="整页看板" />
 </p>
 
-- 按量卡：预算输入、计划余额、真实余额、本月已花；订阅卡：每个窗口一个环 + 剩余百分比 + 倒计时。
+- API 用量卡：预算输入、计划余额、真实余额、本月已花；订阅卡：每个窗口一个环 + 剩余百分比 + 倒计时。
 - 明细表：模型 / Tokens / 输入 / 缓存 / 输出 / 请求 / 命中 / 费用；除模型列外全部右对齐。
 - 设置区：胶囊外是「设置与数据管理」区块标题；胶囊内第一行刷新间隔 + 账户余额开关，下面是日志、导出导入、价格表与版本。
 - 间距只使用 4 / 8 / 12 / 16 / 24 / 32 六档，P2 / P3 同一套 token。

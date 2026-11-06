@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<title>按量卡状态全量</title>
+<title>API 用量卡状态全量</title>
 <style>
   :root { /*__SPEC_CSS__*/ }
   /*__BASE_CSS__*/
@@ -11,7 +11,7 @@
 <body>
 <div class="page">
   <section>
-    <h2>按量卡状态全量：normal / warn / over / 预算未设置 / 余额不支持（右侧可改月度预算，环与计划余额即时重算）</h2>
+    <h2>API 用量卡状态全量：normal / warn / over / 预算未设置 / 余额不支持（右侧可改月度预算，环与计划余额即时重算）</h2>
     <div class="grid api" id="cards"></div>
   </section>
 </div>
@@ -38,7 +38,7 @@
   const cardHtml = (data, index) => `
     <div class="cell">
       <div class="card" data-index="${index}">
-        <div class="head"><span class="name">${data.name}</span><span class="chip">[ 按量 API ]</span></div>
+        <div class="head"><span class="name">${data.name}</span><span class="chip">[ API 用量 ]</span></div>
         <div class="api-body">
           <div class="gauge">
             <div class="ring">${ringSvg(A.ring, A.stroke, null, 'empty')}<span class="ring-label">${A.label}</span></div>

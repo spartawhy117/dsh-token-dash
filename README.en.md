@@ -34,11 +34,11 @@
 
 | Provider | Billing | Credential | What you get |
 |---|---|---|---|
-| DeepSeek | Pay-as-you-go | DS account wallet / `DEEPSEEK_API_KEY` | Balance, month-to-date spend, budget |
-| Zhipu GLM Coding | Subscription / API | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + weekly windows |
-| Kimi Coding | Subscription / API | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`, optional `MOONSHOT_API_KEY` | 5h + weekly/monthly windows; falls back to balance |
-| OpenRouter | Pay-as-you-go | `OPENROUTER_API_KEY` | Credits (USD) |
-| Qwen | Pay-as-you-go | `DASHSCOPE_API_KEY` (CNY) / `DASHSCOPE_INTL_API_KEY` (USD) | Usage only; balance unsupported |
+| DeepSeek | API usage | DS account wallet / `DEEPSEEK_API_KEY` | Balance, month-to-date spend, budget |
+| Zhipu GLM Coding | Subscription / API usage | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + weekly windows |
+| Kimi Coding | Subscription / API usage | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`, optional `MOONSHOT_API_KEY` | 5h + weekly/monthly windows; falls back to balance |
+| OpenRouter | API usage | `OPENROUTER_API_KEY` | Credits (USD) |
+| Qwen | API usage | `DASHSCOPE_API_KEY` (CNY) / `DASHSCOPE_INTL_API_KEY` (USD) | Usage only; balance unsupported |
 | OpenCode Go | Subscription | `OPENCODE_GO_API_KEY` | 5h / weekly / monthly windows (USD) |
 | Command Code | Subscription | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + weekly windows, credits (CNY) |
 
@@ -51,10 +51,10 @@
 
 Screenshots use mock data so the full layout is visible at once.
 
-**P1 · Composer footer-right Pill**: pay-as-you-go / subscription variants; click to open, click outside, `×` or `Esc` to close.
+**P1 · Composer footer-right Pill**: API usage / subscription variants; click to open, click outside, `×` or `Esc` to close.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/pill-api.png" alt="Pay-as-you-go pill" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/pill-api.png" alt="API usage pill" />
 </p>
 
 <p align="center">
@@ -64,7 +64,7 @@ Screenshots use mock data so the full layout is visible at once.
 **P2 · Floating panel (current model)**: fixed 380, one row with three groups — used ring / used-budget / real balance — with the balance right-aligned to the panel edge, a full-width range control and the usage table.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/panel-api.png" alt="Floating panel - pay-as-you-go" />
+  <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/panel-api.png" alt="Floating panel - API usage" />
 </p>
 
 <p align="center">
@@ -84,7 +84,7 @@ Screenshots use mock data so the full layout is visible at once.
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/settings.png" alt="Full dashboard" />
 </p>
 
-- Pay-as-you-go card: budget input, planned balance, real balance, month-to-date spend; subscription card: one ring per window with remaining percentage and countdown.
+- API usage card: budget input, planned balance, real balance, month-to-date spend; subscription card: one ring per window with remaining percentage and countdown.
 - Breakdown: model / Tokens / input / cache / output / requests / hit rate / cost; everything except the model column is right-aligned.
 - Settings capsule: refresh interval + account-balance toggle; logs, export/import, price table and version below.
 - The settings section has an external "Settings and data" title above the capsule; the capsule itself keeps the refresh interval, logs/data controls and version row.

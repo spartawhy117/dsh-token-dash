@@ -270,7 +270,7 @@ try {
   const panelBox = await panel.boundingBox()
   assert.ok(panelBox !== null && Math.abs(panelBox.width - 380) <= 2, `panel width ${panelBox?.width} should be 380`)
   assert.match(await panel.innerText(), /当前模型/)
-  assert.match(await panel.innerText(), /按量 API/)
+  assert.match(await panel.innerText(), /API 用量/)
   assert.equal(await panel.getByRole('tab').count(), 4) // range capsule only
   assert.ok(!(await panel.innerText()).includes('本月预算'))
   assert.ok(!(await panel.innerText()).includes('订阅套餐（账户级）'))
@@ -413,7 +413,7 @@ try {
   await board.getByTestId('token-dash-settings-capsule').evaluate((node) => { node.style.position = 'static' })
   await page.screenshot({ path: join(tmpRoot, 'e2e', 'p3-board.png'), fullPage: true })
 
-  assert.match(await board.innerText(), /按量计价（按供应商）/)
+  assert.match(await board.innerText(), /API 用量（按供应商）/)
   assert.match(await board.innerText(), /订阅套餐（按供应商）/)
   assert.equal(await board.getByTestId('token-dash-settings-capsule').count(), 1)
   // Two tables split by kind.

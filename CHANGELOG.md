@@ -2,6 +2,14 @@
 
 本文件记录每个版本的**新增**与**修改**。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [2.0.2] - 2026-11-06
+
+### 修改
+
+- P3「时间范围」由固定 300px 改为按内容自适应，英文 `Last 7 days` / `Last 30 days` 不再换行。
+- provider 模式标签由「按量 API / Pay-as-you-go」改为「API 用量 / API usage」，P3 区块标题同步。
+- 补齐英文界面缺失的 5 个词条；英文 README 使用英文界面截图。
+
 ## [2.0.1] - 2026-11-05
 
 ### 修改
