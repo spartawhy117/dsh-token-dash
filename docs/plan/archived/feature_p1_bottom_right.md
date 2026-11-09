@@ -3,7 +3,7 @@
 > 状态：已实施（2.0.0 候选，未正式发布）<br>
 > 完成时间：2026-11-05<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
-> 关联资料：[GitHub issue #1](https://github.com/spartawhy117/dsh-token-dash/issues/1)、[`ui-design.md`](../../../ui-design.md) v3.7、看板 plan [`feature_board_cards_redesign.md`](../../active/dsh/feature_board_cards_redesign.md)
+> 关联资料：[GitHub issue #1](https://github.com/spartawhy117/dsh-token-dash/issues/1)、[`ui-design.md`](../../ui-design.md) v3.7、看板 plan [`feature_board_cards_redesign.md`](feature_board_cards_redesign.md)
 
 ## 一、最终需求与范围
 
@@ -104,5 +104,5 @@ P2 余额最初留空第 4 列 → 改为跨 3–4 列右对齐
 
 - GitHub issue #1：<https://github.com/spartawhy117/dsh-token-dash/issues/1>
 - UI 设计：`docs/ui-design.md` v3.7
-- 看板 plan：`docs/plan/active/dsh/feature_board_cards_redesign.md`
+- 看板 plan：`docs/plan/archived/feature_board_cards_redesign.md`
 - 测试 fixture：`test/fixtures/e2e-session.jsonl`

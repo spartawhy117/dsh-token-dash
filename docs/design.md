@@ -175,7 +175,7 @@ dsh-token-dash/
 | 页面 | `Pill` / `Panel` / `BoardPage` | 布局、取数、交互 | 重画弧或格式化百分比 |
 
 - 公共函数：`stateOf(percent, critical)` 判状态、`percentText(percent)` 格式化；三页共用。
-- 设计契约与状态矩阵见 [`ui-design.md`](ui-design.md) §2.5 与 [`ring.html`](../tools/preview/templates/ring.html)；实现方案见 [`feature_board_cards_redesign.md`](plan/active/dsh/feature_board_cards_redesign.md)。
+- 设计契约与状态矩阵见 [`ui-design.md`](ui-design.md) §2.5 与 [`ring.html`](../tools/preview/templates/ring.html)；实现方案见 [`feature_board_cards_redesign.md`](plan/archived/feature_board_cards_redesign.md)。
 
 ## 模块职责速查
 

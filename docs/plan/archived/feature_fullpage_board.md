@@ -3,7 +3,7 @@
 > 状态：已实施<br>
 > 完成时间：2026-11-04（`1.2.0-local.2`）<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
-> 关联资料：[`ui-design.md`](../../../ui-design.md)（v3.1）、施工稿（已归档）[`fullpage-board-build-checklist.md`](../../../checklist/archived/fullpage-board-build-checklist.md)、后续设计（已归档）[`feature_board_cards_redesign.md`](feature_board_cards_redesign.md)
+> 关联资料：[`ui-design.md`](../../ui-design.md)（v3.1）、施工稿（已归档）[`fullpage-board-build-checklist.md`](../../checklist/archived/fullpage-board-build-checklist.md)、后续设计（已归档）[`feature_board_cards_redesign.md`](feature_board_cards_redesign.md)
 
 ## 一、最终需求与范围
 

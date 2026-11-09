@@ -1,7 +1,7 @@
 # 看板视觉走查 checklist（设计定稿）
 
 > 状态：已归档（设计已全部落地，随 plan 归档）<br>
-> 依据（已归档）：[`feature_board_cards_redesign.md`](../../plan/archived/dsh/feature_board_cards_redesign.md)（`1.3.0-local.7`）<br>
+> 依据（已归档）：[`feature_board_cards_redesign.md`](../../plan/archived/feature_board_cards_redesign.md)（`1.3.0-local.7`）<br>
 > 预览：`npm run preview ring` / `inline-ring` / `cards-sub` / `cards-api` / `page-p1` / `page-p2` / `page-p3`<br>
 > 完成版本：`1.3.0-local.7`（2026-11-05）
 
@@ -86,6 +86,6 @@
 
 ## 六、关联
 
-- 实现方案：[`feature_board_cards_redesign.md`](../../plan/archived/dsh/feature_board_cards_redesign.md)
+- 实现方案：[`feature_board_cards_redesign.md`](../../plan/archived/feature_board_cards_redesign.md)
 - 施工记录：[`board-redesign-build-checklist.md`](board-redesign-build-checklist.md)
 - 设计契约：`docs/ui-design.md` v3.2

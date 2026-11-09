@@ -1,7 +1,7 @@
 # 看板卡片化施工 checklist
 
 > 状态：已归档（S0–S4 完成，随 plan 归档）<br>
-> 方案（已归档）：[`feature_board_cards_redesign.md`](../../plan/archived/dsh/feature_board_cards_redesign.md)<br>
+> 方案：[`feature_board_cards_redesign.md`](../../plan/archived/feature_board_cards_redesign.md)<br>
 > 设计：`ui-design.md` v3.2、[`board-visual-review-checklist.md`](board-visual-review-checklist.md)<br>
 > 完成版本：`1.3.0-local.7`（2026-11-05）
 

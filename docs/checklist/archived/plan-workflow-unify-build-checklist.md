@@ -10,8 +10,8 @@
 |---|---|
 | Q1 | 唯一 skill 源：CE `skills/plan-workflow` + `skills/checklist`，不再维护简化全局版 |
 | Q2 | 文档根统一 `docs/`；`doc/`、根 `plan/` 迁移后删除 |
-| Q3 | plan 路径 `docs/plan/active/dsh/feature_<topic>.md` |
-| Q4 | checklist 路径 `docs/checklist/{active,archived}/dsh/` |
+| Q3 | plan 路径 `docs/plan/active/dsh/feature_<topic>.md`（已废止：现为 `docs/plan/active/feature_<topic>.md`） |
+| Q4 | checklist 路径 `docs/checklist/{active,archived}/dsh/`（已废止：现为单层 `docs/checklist/{active,archived}/`） |
 | Q5 | 全局 skill 用目录 junction 指向 CE，不手工复制/修改 |
 | Q6 | CE skill 去掉 CE 限定，补 `dsh` 域，路径保持 workspace-relative |
 | Q7 | checklist 文件名维持 `<topic>-<阶段>-checklist.md`，不改前缀 |
@@ -34,7 +34,7 @@
 
 | 原 | 新 |
 |---|---|
-| `plan/active/token-dash/plan.md` | `docs/plan/active/dsh/feature_token_dash.md` |
+| `plan/active/token-dash/plan.md` | `docs/plan/active/dsh/feature_token_dash.md`（后续再上移为 `docs/plan/archived/feature_token_dash.md`） |
 | `doc/checklist/archived/*.md` | `docs/checklist/archived/*.md` |
 | `doc/design.md` / `doc/release.md` / `doc/pic/*.png` | `docs/design.md` / `docs/release.md` / `docs/pic/*.png` |
 | 全局简化版 skills | `~/.agents/skills/{plan-workflow,checklist}` junction → CE |

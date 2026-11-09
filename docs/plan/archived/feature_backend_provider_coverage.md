@@ -3,7 +3,7 @@
 > 状态：已实施（真机 OpenCode Go / Command Code 待验证）<br>
 > 完成时间：2026-11-05（`1.3.0-local.9`）<br>
 > 关联逻辑根：`dsh-token-dash`（`src/`、`index.js`）<br>
-> 关联资料：[`design.md`](../../../design.md)（v3.3）、第三方参考 [`shy3130-dsh-quota.md`](../../../reference/shy3130-dsh-quota.md) / [`invisiblesirius-dsh-quota-dashboard.md`](../../../reference/invisiblesirius-dsh-quota-dashboard.md)、旧能力清单 [`backend-capability-checklist.md`](../../../checklist/archived/backend-capability-checklist.md)
+> 关联资料：[`design.md`](../../design.md)（v3.3）、第三方参考 [`shy3130-dsh-quota.md`](../../reference/shy3130-dsh-quota.md) / [`invisiblesirius-dsh-quota-dashboard.md`](../../reference/invisiblesirius-dsh-quota-dashboard.md)、旧能力清单 [`backend-capability-checklist.md`](../../checklist/archived/backend-capability-checklist.md)
 
 ## 一、最终需求与范围
 
@@ -132,6 +132,6 @@ adapters.readProviders(ctx, prefs, cache)
 
 ## 六、关联资料
 
-- 设计：[`design.md`](../../../design.md) v3.3
-- 第三方：[`shy3130-dsh-quota.md`](../../../reference/shy3130-dsh-quota.md)、[`invisiblesirius-dsh-quota-dashboard.md`](../../../reference/invisiblesirius-dsh-quota-dashboard.md)
-- 旧能力清单：[`backend-capability-checklist.md`](../../../checklist/archived/backend-capability-checklist.md)
+- 设计：[`design.md`](../../design.md) v3.3
+- 第三方：[`shy3130-dsh-quota.md`](../../reference/shy3130-dsh-quota.md)、[`invisiblesirius-dsh-quota-dashboard.md`](../../reference/invisiblesirius-dsh-quota-dashboard.md)
+- 旧能力清单：[`backend-capability-checklist.md`](../../checklist/archived/backend-capability-checklist.md)

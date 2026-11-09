@@ -3,7 +3,7 @@
 > 状态：已实施<br>
 > 完成时间：2026-11-02<br>
 > 关联逻辑根：`dsh-token-dash`<br>
-> 关联资料：[施工 checklist（已归档）](../../checklist/archived/dsh/provider-boundary-build-checklist.md)、[主计划（已归档）](../archived/feature_token_dash.md)
+> 关联资料：[施工 checklist（已归档）](../../checklist/archived/provider-boundary-build-checklist.md)、[主计划（已归档）](../archived/feature_token_dash.md)
 
 ## 一、最终需求与范围
 

@@ -3,7 +3,7 @@
 > 状态：已实施<br>
 > 完成时间：2026-11-02<br>
 > 关联逻辑根：`dsh-token-dash`<br>
-> 关联资料：[UI checklist（已归档）](../../checklist/archived/dsh/token-dash-ui-build-checklist.md)、[治理 checklist（已归档）](../../checklist/archived/dsh/github-governance-build-checklist.md)、[Provider 边界（已归档）](feature_provider_boundary.md)、[UI 设计](../../ui-design.md)、[下一轮 UI 迭代](feature_ui_refresh.md)
+> 关联资料：[UI checklist（已归档）](../../checklist/archived/token-dash-ui-build-checklist.md)、[治理 checklist（已归档）](../../checklist/archived/github-governance-build-checklist.md)、[Provider 边界（已归档）](feature_provider_boundary.md)、[UI 设计](../../ui-design.md)、[下一轮 UI 迭代](feature_ui_refresh.md)
 
 ## 一、最终需求与范围
 
