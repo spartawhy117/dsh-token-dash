@@ -229,6 +229,8 @@ SummaryVM（core.js → client 的唯一 DTO）
 ## Provider 源表（v3.4）
 
 > 当前 8 家：DeepSeek / GLM / Kimi / OpenRouter / Qwen / OpenCode Go / Command Code / Ollama。前 5 家用 `legacy` 函数保留既有账号钱包、双路径等特例（DeepSeek 账号钱包 / API Key；Kimi Coding / 开放平台）；后 3 家由声明式 `credential + quota + usage? + preflight?` 驱动。详细能力见 [后端能力清单](checklist/archived/backend-capability-checklist.md) §4。
+>
+> Ollama 在宿主侧没有内置供应商（pi-ai 的 43 个 provider 数据无 `ollama`），必须以「自定义 OpenAI 兼容供应商」接入，route id 填 `ollama`：宿主按 `deriveKeyRef(route)` 把 Key 存成 `<ROUTE>_API_KEY`，与本表 `credential.refs` 同源；填别的名字则取不到 Key、余额卡不出现（2026-11-10 本机 `app.asar` 核查）。
 
 ```text
 quota-sources.js

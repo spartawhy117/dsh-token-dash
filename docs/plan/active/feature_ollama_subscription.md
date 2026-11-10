@@ -1,6 +1,6 @@
 # Ollama Cloud 余额与用量接入
 
-> 状态：待验收（CHG-01~11 已实施，L1 / L2 通过；真实 Key 手测未做）<br>
+> 状态：待验收（CHG-01~11 全部落地，L1 / L2 通过；真实 Key 手测未做）<br>
 > 创建时间：2026-11-10<br>
 > 更新时间：2026-11-10（第三轮：实施完成并回写验收；第二轮为代码复核 + 官方文档核对，纠正 `kind` / `credential` / 429 保旧值 / 历史重算四处缺口；D-5 / D-6 拍板为 A）<br>
 > 关联逻辑根：`dsh-token-dash`（`src/quota-sources.js` / `src/adapters.js` / `src/providers.js` / `src/pricing.js` / `src/core.js` / `src/store.js` / `client.js`）<br>
@@ -44,9 +44,19 @@
 | 测试硬编码 7 家：`providers.test.mjs` / `providers-vm.test.mjs`（`pricingLinks` 顺序与长度）、`adapters.test.mjs`（`misses` 全列表） | 加一家必然打破，需同批更新 |
 | e2e 用 `page.route` 注入 SummaryVM（`apiProviders`），不依赖真实 Key | 卡片渲染可 e2e 断言；429 / 401 只能在单测覆盖 |
 
+### 本机 DSH 安装包核查（2026-11-10，已关闭 provider 字符串待对齐项）
+
+| 事实 | 结论 |
+|---|---|
+| 安装目录 `%LOCALAPPDATA%\Programs\DeepSeek Harness`（Electron + `resources/app.asar`，`@deepseek-ai/dsh-*` 0.2.2-rc.1 系列） | 本机可自查，无需外部确认 |
+| `@earendil-works/pi-ai/dist/providers/data/` 共 43 个 provider 数据文件，**无 `ollama.json`** | DSH 没有内置 Ollama 供应商 |
+| 自定义供应商由 `CustomProviderCard` 声明，Key 走 `credentials.set`，引用名按 `deriveKeyRef(route) = <ROUTE>.toUpperCase().replace(/[^A-Z0-9]+/g,'_') + '_API_KEY'` 派生（同文件示例：`minimax-cn` → `MINIMAX_CN_API_KEY`） | 只有 route id 填 `ollama` 才得到 `OLLAMA_API_KEY`，与本插件 `credential.refs` 完全一致；填别的名字则 Key 取不到、余额卡不出现 |
+| 同一套 route id 就是 `message.source.provider` 的来源 | Ollama 场景下 provider 字符串必然等于用户自填的 route id；能出卡即说明 Key ref 匹配，二者自洽 |
+
+→ 结论：不需要再猜 `ollama` / `ollama-cloud`，`ALIASES` 保留两者只作为手写 `prefs` 的容错；README 必须写明「自定义供应商 route id 填 `ollama`」。
+
 ### 待对齐
 
-- DSH 事件里 Ollama 的 `provider` 字符串（`ollama` / `ollama-cloud`）需一条真实事件确认；未确认时按 `ollama` 建 id 并加别名。
 - 旧套餐 `included.session` 的真实窗口时长官方未写（只给 `resets_at`），不得换算成 `5h`。
 
 ## 一、需求
@@ -235,6 +245,7 @@ addRecord / repriceState / repriceUnpriced
 | 历史成本 | 不升 `costVersion` 则旧行继续带着 CNY 金额进 USD 桶（D-5 已定升 4） |
 | 重算边界 | `repriceState` 必须先按 `kindOf` 跳过订阅 provider，否则给订阅行写入金额并压掉 `'subscription'` / `'empty'` 两态；当前只靠 `billable` 过滤兜底 |
 | 余额口径 | `amount` 取「套餐剩余 + 购买余额」（D-6）；单值位不得只放套餐剩余，否则低报可用额度 |
+| 自定义 route 命名 | DSH 无内置 Ollama，Key 引用由 route 派生（`<ROUTE>_API_KEY`）；route 填别的名字时插件取不到 Key，表现为「无卡片」而不是报错——文档必须写明这一点，不能让用户以为插件坏了 |
 
 ### 2.5 日志
 
@@ -256,7 +267,7 @@ addRecord / repriceState / repriceUnpriced
 | CHG-08 | 修改 | `tools/preview/templates/cards-api.html` | 原型补余额明细行与 caption；尺寸仍取 `spec.mjs`，不新增字号 |
 | CHG-09 | 测试 | `test/unit/{quota-sources,adapters,pricing,core,providers,providers-vm}.test.mjs` | 二态 / purchased / 429 保旧值 / 401 / mismatch（含 override）/ `costVersion=4` / 重算后订阅行仍 `cost=0` 且零 token 行仍 `'empty'` / 8 家契约 / `misses` 列表 |
 | CHG-10 | 测试 | `scripts/e2e.mjs` | `apiProviders` 注入 ollama（USD + allowance + purchased）与 `rateLimited` 变体；断言 P3 行与 caption |
-| CHG-11 | 文档 | `docs/design.md` / `docs/ui-design.md` / `CHANGELOG.md` | 源表 7 → 8 家、源表形状增可选 `usage`；窗口 key 契约增 `session`；余额明细口径；`priceOverrides` 的 USD 示例（必须带 `currency`）；历史重算说明 |
+| CHG-11 | 文档 | `docs/design.md` / `docs/ui-design.md` / `CHANGELOG.md` / `README.md` / `README.en.md` | 源表 7 → 8 家、源表形状增可选 `usage`；窗口 key 契约增 `session`；余额明细口径；`priceOverrides` 的 USD 示例（必须带 `currency`）；历史重算说明；README 双语矩阵补 Ollama 与「自定义 route 必须填 `ollama`」 |
 
 > 2026-11-10 实施结果：CHG-01~11 全部落地（`2.1.0-local.5`）。L1 `npm test` 116 项（115 pass / 1 skip / 0 fail），L2 `npm run e2e` 通过（含 Ollama 卡的额度行、周期、限流与渠道用量断言）。L3 真实 Key 手测未做，`included` 旧套餐态只保证解析、UI 不渲染。
 
@@ -380,6 +391,7 @@ addRecord / repriceState / repriceUnpriced
 | `429` 保留旧值 + `rateLimited`，缓存等到 `Retry-After` | REQ-05 / RSK-01 | 单测 mock（含 `Retry-After` 头） | 已验证（L1） |
 | `401` → `unconfigured`；`403` / `503` → `error` | REQ-05 | 单测 | 已验证（L1） |
 | 8 家契约：`pricingLinks` 顺序 / 长度、`misses` 顺序 | 质量门槛 | 单测 | 已验证（L1） |
+| README 双语写明「自定义供应商 route id 填 `ollama`」与凭据派生关系 | REQ-02 / BND-05 | 文档核对 | 已验证（本机核查后补） |
 | 现有 7 家零回归 | 质量门槛 | `npm test` + `npm run e2e` | 已验证（L1 + L2） |
 
 ### 5.1 分层验收与自主执行守则
@@ -425,4 +437,5 @@ addRecord / repriceState / repriceUnpriced
 - 2026-11-10（第二轮）：对照代码发现四处会直接卡住实施的缺口——① 源表 `kind:'balance'` 不存在，且 `credential` 缺 `type` 会被静默跳过；② `readDeclarativeSource` 硬编码 `mode:'subscription'`，会把 ollama 固化成订阅（`cost=0`）；③ 429「保留上次值」在现有缓存结构下无法成立；④ 计价语义变化漏了 `costVersion` 与 `repriceState`。已在 §〇 / §2.4 / §3.0 修正。
 - 2026-11-10（第二轮）：官方文档补充 `403` / `503` / `400` 与 `scope` 参数、`period` 语义、旧套餐区间只有请求数；`/api/usage` 与 `/api/balance` 共用 10 rpm 配额，故用量按 30d 低频随刷新取一次。
 - 2026-11-10（拍板）：D-5 取 A——升 `costVersion` 4 并重算历史，前置补 `repriceState(state, kindOf)`，否则订阅行会被写入金额；D-6 取 A——`amount` = 套餐剩余 + 购买余额，P3 拆「套餐已用」「购买余额」两行。§2.3 / §2.4 / CHG-05 / §五 已同步。
-- 2026-11-10（实施）：CHG-01~11 落地，L1 116 项（115 pass / 1 skip）与 L2 e2e 通过；`2.1.0-local.5` 已打包安装。遗留：L3 真实 Key 手测、DSH 事件里 Ollama 的 `provider` 字符串待一条真实数据确认。
+- 2026-11-10（实施）：CHG-01~11 落地，L1 116 项（115 pass / 1 skip）与 L2 e2e 通过；`2.1.0-local.5` 已打包安装。遗留：L3 真实 Key 手测。
+- 2026-11-10（本机核查）：扫 `app.asar` 确认 DSH 无内置 Ollama（pi-ai 43 个 provider 数据无 `ollama.json`），自定义供应商 Key 引用按 `deriveKeyRef(route)` 派生成 `<ROUTE>_API_KEY`；route 填 `ollama` 才与 `credential.refs` 对齐。原「provider 字符串待确认」关闭，README 双语已补该约束。

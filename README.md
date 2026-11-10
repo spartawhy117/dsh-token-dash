@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  在 DSH 输入框旁看清今天的模型消耗、本月的预算余量，以及 7 家供应商的订阅窗口。<br />
+  在 DSH 输入框旁看清今天的模型消耗、本月的预算余量，以及 8 家供应商的订阅窗口。<br />
   填 Key 自动识别订阅或 API 用量；费用、Tokens、缓存命中全部在本地估算；<br />
   当月数据可导出备份，换机或重装后一键导入恢复。
 </p>
@@ -28,7 +28,7 @@
   <a href="https://awesome-dsh-plugin.com/zh/p/spartawhy117/dsh-token-dash"><img src="https://img.shields.io/badge/awesome--dsh--plugin-listed-6ea8ff" alt="awesome-dsh-plugin" /></a>
 </p>
 
-**三个入口，一份数据**：输入框底栏右侧 Pill 看当前模型；浮层看预算、余额与用量表；整页看 7 家供应商的全量卡片与模型明细。所有页面共用同一份本地账本，不重复计算。
+**三个入口，一份数据**：输入框底栏右侧 Pill 看当前模型；浮层看预算、余额与用量表；整页看 8 家供应商的全量卡片与模型明细。所有页面共用同一份本地账本，不重复计算。
 
 ## 支持矩阵
 
@@ -41,8 +41,10 @@
 | Qwen | API 用量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
 | OpenCode Go | 订阅 | `OPENCODE_GO_API_KEY` | 5h / 周 / 月窗口（USD） |
 | Command Code | 订阅 | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + 周窗口、Credits（CNY） |
+| Ollama Cloud | API 用量 | `OLLAMA_API_KEY` | 套餐剩余 + 购买余额（USD）、套餐已用、渠道 30 天用量 |
 
 - 在 DSH 的凭据设置中按上表名称保存 Key；插件只通过宿主 `credentials` 读取，不读环境变量或本机登录文件。
+- Ollama 在 DSH 里需要用「自定义 OpenAI 兼容供应商」接入：route id 必须填 `ollama`（凭据按 `<ROUTE>_API_KEY` 派生成 `OLLAMA_API_KEY`），自定义名填别的会取不到 Key，余额卡也不会出现。
 - 填 Key 后自动探测；GLM / Kimi / OpenCode Go / Command Code 可在「全量看板」底部重新检测订阅。
 - 订阅模型计入 Tokens，但不计费用；计费形态按 Key 固化，不随配额接口抖动。
 - 余额、配额、用量分开展示；余额失败不会把当天的 Token 记账清零。
@@ -78,7 +80,7 @@
 - 订阅窗口固定三槽位：第 1 窗左、第 2 窗中、第 3 窗右；只有两窗时占前两个槽位。
 - 模型列上限 150，Tokens / 请求 / 命中右对齐；长模型名用省略号，悬浮可看全名。
 
-**P3 · 整页看板**：7 家供应商卡片、摘要带、8 列模型明细、底部设置胶囊；页面自己滚动，滚动条贴窗口右缘。
+**P3 · 整页看板**：8 家供应商卡片、摘要带、8 列模型明细、底部设置胶囊；页面自己滚动，滚动条贴窗口右缘。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/settings.png" alt="整页看板" />

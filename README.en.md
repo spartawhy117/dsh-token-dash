@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  See today's model spend, monthly budget headroom, and subscription windows for 7 providers right next to the DSH input box.<br />
+  See today's model spend, monthly budget headroom, and subscription windows for 8 providers right next to the DSH input box.<br />
   Paste a key and the billing mode is detected automatically; cost, Tokens and cache hits are estimated locally;<br />
   export the current month and import it back after switching machines or reinstalling.
 </p>
@@ -41,8 +41,10 @@
 | Qwen | API usage | `DASHSCOPE_API_KEY` (CNY) / `DASHSCOPE_INTL_API_KEY` (USD) | Usage only; balance unsupported |
 | OpenCode Go | Subscription | `OPENCODE_GO_API_KEY` | 5h / weekly / monthly windows (USD) |
 | Command Code | Subscription | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + weekly windows, credits (CNY) |
+| Ollama Cloud | API usage | `OLLAMA_API_KEY` | Plan + purchased credits (USD), plan usage, 30-day channel usage |
 
 - Save keys under the names above in DSH's credential settings; the plugin reads them through the host `credentials` service, not environment variables or local login files.
+- Ollama is added through DSH's custom OpenAI-compatible provider: the route id must be `ollama` (the key reference is derived as `<ROUTE>_API_KEY` → `OLLAMA_API_KEY`). Any other id will not resolve the key and the balance card will not appear.
 - Keys are detected automatically; GLM / Kimi / OpenCode Go / Command Code can be re-detected from the dashboard footer.
 - Subscription models count toward Tokens but not cost; billing mode is pinned per key instead of following quota flakiness.
 - Balance, quota and usage are separate; a balance failure never resets today's Token ledger to zero.
@@ -78,7 +80,7 @@ Screenshots use mock data so the full layout is visible at once.
 - Subscription windows use three slots: first left, second center, third right; two windows occupy the first two slots.
 - Model column is capped at 150; Tokens / requests / hit rate are right-aligned.
 
-**P3 · Full dashboard**: cards for 7 providers, summary band, 8-column model breakdown and a settings capsule; the page owns its scrollbar at the window edge.
+**P3 · Full dashboard**: cards for 8 providers, summary band, 8-column model breakdown and a settings capsule; the page owns its scrollbar at the window edge.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/settings.png" alt="Full dashboard" />
