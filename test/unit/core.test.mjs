@@ -17,6 +17,7 @@ import {
   resolveProviderKind,
   stampProviderKinds,
 } from '../../src/core.js'
+import { configurePricing, resetPricingForTests } from '../../src/pricing.js'
 
 test('normalizeModel 去掉渠道前缀与后缀', () => {
   assert.equal(normalizeModel('deepseek/deepseek-v4.1-flash-free'), 'deepseek-v4.1-flash')
@@ -169,7 +170,7 @@ test('repriceState 用日级 token 重算旧成本', () => {
   }
   const result = repriceState(state)
   assert.equal(result.repriced, true)
-  assert.equal(state.costVersion, 3)
+  assert.equal(state.costVersion, 4)
   // 00:00 走 DeepSeek 闲时价：1M 输入 = 1
   assert.equal(state.days['2026-11-02'].providers['deepseek-official'].models['deepseek-flash'].cost, 1)
   // unknown 行按模型前缀归因后同样可计价
@@ -399,4 +400,69 @@ test('repriceUnpriced 只补 priced=false，unknown 按 owner 归因', () => {
   assert.equal(state.days['2026-11-02'].providers.zhipu.models['glm-5.3'].priced, false)
   // 幂等：再跑一次没有可补的
   assert.equal(repriceUnpriced(state, {}).rows, 0)
+})
+
+test('币种不匹配：USD provider 命中 CNY 价目时判未定价', () => {
+  const now = new Date(2026, 10, 2, 10, 0, 0).getTime()
+  const state = emptyState()
+  addRecord(state, { ts: now, provider: 'openrouter', model: 'deepseek-flash', input: 1_000_000, output: 0 })
+  const row = state.days[localDayKey(now)].providers.openrouter.models['deepseek-flash']
+  assert.equal(row.priced, false)
+  assert.equal(row.cost, 0)
+  assert.equal(row.reason, 'currency-mismatch')
+})
+
+test('repriceUnpriced 遇到币种不符：保持未定价并计入 skipped.currency', () => {
+  const state = emptyState()
+  state.days['2026-11-02'] = {
+    providers: {
+      openrouter: { models: { 'deepseek-flash': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 3, priced: false } } },
+    },
+  }
+  const result = repriceUnpriced(state, {})
+  assert.equal(result.rows, 0)
+  assert.equal(result.skipped.currency, 1)
+  const row = state.days['2026-11-02'].providers.openrouter.models['deepseek-flash']
+  assert.equal(row.priced, false)
+  assert.equal(row.cost, 3)
+  assert.equal(row.reason, 'currency-mismatch')
+})
+
+test('repriceState 保留订阅行与零消耗行，币种不符判未定价', () => {
+  const state = emptyState()
+  state.costVersion = 1
+  state.days['2026-11-02'] = {
+    providers: {
+      zhipu: { models: { 'glm-5.3': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 0, priced: 'subscription' } } },
+      openrouter: { models: { 'deepseek-flash': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 12, priced: true } } },
+      'deepseek-official': { models: { 'deepseek-flash': { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 0, priced: 'empty' } } },
+    },
+  }
+  const result = repriceState(state)
+  assert.equal(result.repriced, true)
+  const zhipu = state.days['2026-11-02'].providers.zhipu.models['glm-5.3']
+  assert.equal(zhipu.priced, 'subscription')
+  assert.equal(zhipu.cost, 0)
+  const openrouter = state.days['2026-11-02'].providers.openrouter.models['deepseek-flash']
+  assert.equal(openrouter.priced, false)
+  assert.equal(openrouter.cost, 0)
+  assert.equal(openrouter.reason, 'currency-mismatch')
+  const empty = state.days['2026-11-02'].providers['deepseek-official'].models['deepseek-flash']
+  assert.equal(empty.priced, 'empty')
+  assert.equal(empty.cost, 0)
+})
+
+test('Qwen 国际站（USD 快照）：命中央行价目同样判未定价', () => {
+  configurePricing({ currencyOf: (id) => (id === 'qwen' ? 'USD' : 'CNY') })
+  try {
+    const now = new Date(2026, 10, 2, 10, 0, 0).getTime()
+    const state = emptyState()
+    addRecord(state, { ts: now, provider: 'qwen', model: 'glm-5.3', input: 1_000_000, output: 0 })
+    const row = state.days[localDayKey(now)].providers.qwen.models['glm-5.3']
+    assert.equal(row.priced, false)
+    assert.equal(row.cost, 0)
+    assert.equal(row.reason, 'currency-mismatch')
+  } finally {
+    resetPricingForTests()
+  }
 })

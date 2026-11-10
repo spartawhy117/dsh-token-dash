@@ -25,8 +25,8 @@ test('providers and apiTotals are separated by billing mode and currency', () =>
   assert.equal(summary.apiTotals.USD.budget, 50)
   assert.ok(summary.breakdown.models.filter((item) => item.kind === 'subscription').length >= 0)
   assert.equal(summary.breakdown.models.some((item) => item.providerId === 'zhipu' && item.share === 0), true)
-  assert.equal(summary.pricingLinks.length, 7)
-  assert.deepEqual(summary.pricingLinks.map((item) => item.label), ['DeepSeek', 'Zhipu AI', 'Kimi', 'OpenRouter', 'Qwen', 'OpenCode Go', 'Command Code'])
+  assert.equal(summary.pricingLinks.length, 8)
+  assert.deepEqual(summary.pricingLinks.map((item) => item.label), ['DeepSeek', 'Zhipu AI', 'Kimi', 'OpenRouter', 'Qwen', 'OpenCode Go', 'Command Code', 'Ollama'])
 })
 
 test('no providers yields an empty VM', () => {

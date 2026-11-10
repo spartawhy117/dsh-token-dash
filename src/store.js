@@ -4,8 +4,8 @@ import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { emptyState, num } from './core.js'
 import { normalizeModel, normalizeProvider } from './providers.js'
 
-/** 计价模型版本：3 = 内置价对齐官方、社区峰谷识别与工作日/周末规则。 */
-export const COST_MODEL_VERSION = 3
+/** 计价模型版本：4 = 币种不匹配不计价（含 override），重算按形态与币种双判定。 */
+export const COST_MODEL_VERSION = 4
 
 export const DEFAULT_PREFS = {
   version: 1,

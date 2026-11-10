@@ -108,6 +108,9 @@ async function requestJson(url, headers) {
     const error = new Error(`http-${response.status}`)
     error.status = response.status
     error.body = body
+    // 429 带整数秒的 Retry-After，属于源级退避输入，不进任何展示文案
+    const retryAfter = Number(response.headers?.get?.('retry-after'))
+    if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter
     throw error
   }
   return body
@@ -116,7 +119,12 @@ async function requestJson(url, headers) {
 /** #47：错误分类（http+状态码 / timeout / network）——挂在条目 `_error`/`_quotaError` 上供日志还原原因。 */
 function errorDetail(error) {
   if (error?.status !== undefined) {
-    return { kind: 'http', status: error.status, ...(error.status >= 500 ? { upstream: true } : {}) }
+    return {
+      kind: 'http',
+      status: error.status,
+      ...(error.status >= 500 ? { upstream: true } : {}),
+      ...(error.retryAfter === undefined ? {} : { retryAfter: error.retryAfter }),
+    }
   }
   const name = `${error?.name ?? ''} ${error?.message ?? ''}`
   if (name.includes('Timeout') || name.includes('abort') || name.includes('Abort')) return { kind: 'timeout' }
@@ -266,10 +274,25 @@ function withQuery(url, query) {
   return `${url}${url.includes('?') ? '&' : '?'}${query}`
 }
 
-async function readDeclarativeSource(ctx, prefs, source) {
+/** 可选 usage 钩子：失败只留错误详情，绝不影响余额结果与账本。 */
+async function readSourceUsage(source, hit) {
+  if (source.usage === undefined) return { channel: undefined, error: undefined }
+  try {
+    const query = source.usage.range === undefined ? '' : `range=${encodeURIComponent(source.usage.range)}`
+    const body = await requestJson(withQuery(source.usage.url, query), { authorization: `Bearer ${hit.value}` })
+    const parsed = source.usage.parse(body)
+    return { channel: parsed?.channel ?? undefined, error: undefined }
+  } catch (error) {
+    return { channel: undefined, error: errorDetail(error) }
+  }
+}
+
+async function readDeclarativeSource(ctx, prefs, source, previous) {
   const hit = await resolveCredential(ctx, source.credential)
   if (hit === undefined) return null
-  const base = { id: source.id, name: providerLabel(source.id), kind: source.kind, mode: 'subscription', currency: source.currency }
+  const subscription = source.kind === 'subscription'
+  // mode 必须由 kind 派生：声明式订阅源才是订阅；写成常量会把 api 源固化成订阅（cost=0）
+  const base = { id: source.id, name: providerLabel(source.id), kind: source.kind, mode: subscription ? 'subscription' : 'api', currency: source.currency }
   const query = await sourceQuery(ctx, source)
   let body
   try {
@@ -280,21 +303,38 @@ async function readDeclarativeSource(ctx, prefs, source) {
       body = await requestJson(withQuery(source.quota.fallbackUrl, query), { authorization: `Bearer ${hit.value}` })
     }
   } catch (error) {
-    return { ...base, windows: [], _quotaError: errorDetail(error) }
+    const detail = errorDetail(error)
+    // 限流复用上一份快照，避免卡片在 429 时闪成「查询失败」；退避由缓存 until 承担
+    if (error.status === 429 && previous !== null && previous !== undefined) {
+      return { ...previous, _quotaError: detail, _rateLimited: true, fetchedAt: Date.now() }
+    }
+    const status = error.status === 401 ? 'unconfigured' : 'error'
+    return {
+      ...base,
+      windows: [],
+      ...(subscription ? {} : { balance: { amount: null, status, currency: source.currency, updatedAt: Date.now() } }),
+      _quotaError: detail,
+    }
   }
   const parsed = source.quota.parse(body)
   const windows = normalizeWindows(Array.isArray(parsed) ? parsed : parsed?.windows)
   const balance = Array.isArray(parsed) ? undefined : parsed?.balance
-  if (windows.length === 0 && balance === undefined) return { ...base, windows: [], _quotaError: { kind: 'parse' } }
-  return { ...base, windows, ...(balance === undefined ? {} : { balance }) }
+  const usage = await readSourceUsage(source, hit)
+  const extra = {
+    ...(balance === undefined ? {} : { balance }),
+    ...(usage.channel === undefined ? {} : { channel: usage.channel }),
+    ...(usage.error === undefined ? {} : { _channelError: usage.error }),
+  }
+  if (windows.length === 0 && balance === undefined) return { ...base, windows: [], _quotaError: { kind: 'parse' }, ...extra }
+  return { ...base, windows, ...extra }
 }
 
-async function readSource(ctx, prefs, source) {
+async function readSource(ctx, prefs, source, previous) {
   if (source.legacy !== undefined) {
     const reader = LEGACY_READERS[source.legacy]
     return reader(ctx, prefs)
   }
-  return readDeclarativeSource(ctx, prefs, source)
+  return readDeclarativeSource(ctx, prefs, source, previous)
 }
 
 /** 订阅重查专用：Kimi 只查 Coding 配额，不请求 moonshot 余额。 */
@@ -308,22 +348,30 @@ async function readKimiSubscription(ctx, prefs) {
 const TTL_OK = 60000
 const TTL_FAIL = 10000
 
+/** 限流条目按 Retry-After 延后重试，成功 60s / 失败 10s 的基线不变。 */
+function cacheExpiry(data, now) {
+  const retryAfter = data?._rateLimited === true ? Number(data?._quotaError?.retryAfter) : NaN
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return now + Math.max(TTL_FAIL, retryAfter * 1000)
+  return now + (data === null || data?._rateLimited === true ? TTL_FAIL : TTL_OK)
+}
+
 async function readCachedSource(ctx, prefs, source, cache) {
   const now = Date.now()
   const cached = cache.get(source.id)
-  const ttl = cached?.ok === true ? TTL_OK : TTL_FAIL
-  if (cached !== undefined && cached.promise === null && now - cached.at < ttl) return cached.data
+  if (cached !== undefined && cached.promise === null && now < (cached.until ?? now)) return cached.data
   if (cached?.promise !== undefined && cached.promise !== null) return cached.promise
-  const promise = readSource(ctx, prefs, source)
+  const promise = readSource(ctx, prefs, source, cached?.data ?? null)
     .then((data) => {
-      cache.set(source.id, { at: Date.now(), ok: data !== null, data, promise: null })
+      const at = Date.now()
+      cache.set(source.id, { at, ok: data !== null && data?._rateLimited !== true, data, promise: null, until: cacheExpiry(data, at) })
       return data
     })
     .catch((error) => {
-      cache.set(source.id, { at: Date.now(), ok: false, data: null, promise: null })
+      const at = Date.now()
+      cache.set(source.id, { at, ok: false, data: null, promise: null, until: at + TTL_FAIL })
       throw error
     })
-  cache.set(source.id, { at: cached?.at ?? 0, ok: cached?.ok === true, data: cached?.data ?? null, promise })
+  cache.set(source.id, { at: cached?.at ?? 0, ok: cached?.ok === true, data: cached?.data ?? null, promise, until: cached?.until ?? null })
   return promise
 }
 
@@ -350,6 +398,10 @@ export function toSnapshot(entry) {
     currency: entry.currency,
     status,
     balance,
+    // 渠道侧只读用量与限流标记：仅展示用，不参与计价（REQ-04）
+    ...(entry.channel === undefined ? {} : { channel: entry.channel }),
+    ...(entry._channelError === undefined ? {} : { channelError: entry._channelError }),
+    rateLimited: entry._rateLimited === true,
     mode: entry.mode === 'subscription' || entry.mode === 'api' ? entry.mode : 'unknown',
     windows: Array.isArray(entry.windows) ? entry.windows : Array.isArray(entry.plans) ? entry.plans : [],
     error,
@@ -418,7 +470,11 @@ export async function readSubscriptions(ctx, prefs) {
 export function logAdapterEvents(log, providers) {
   const info = (module, event, meta) => log.info(module, event, meta)
   // 错误详情合并进 meta：kind=http 时带 status，便于报障还原原因
-  const errorMeta = (detail) => (detail === null || detail === undefined ? {} : detail.kind === 'http' ? { errorKind: detail.kind, httpStatus: detail.status } : { errorKind: detail.kind })
+  const errorMeta = (detail) => (detail === null || detail === undefined
+    ? {}
+    : detail.kind === 'http'
+      ? { errorKind: detail.kind, httpStatus: detail.status, ...(detail.retryAfter === undefined ? {} : { retryAfter: detail.retryAfter }) }
+      : { errorKind: detail.kind })
   for (const item of providers) {
     if (item.id === 'deepseek-official') {
       if (item.balance?.status === 'ok') info('adapter.deepseek', 'balance.ok', { amount: item.balance.amount })
@@ -458,6 +514,15 @@ export function logAdapterEvents(log, providers) {
       else if (item.quotaError?.kind === 'parse') info(module, 'quota.parse', {})
       else info(module, 'quota.fail', { windows: 0, ...errorMeta(item.quotaError) })
       if (item.balance?.status === 'ok') info(module, 'credits.ok', { amount: item.balance.amount })
+      continue
+    }
+    if (item.id === 'ollama') {
+      const balance = item.balance
+      if (balance?.status === 'ok') info('adapter.ollama', 'quota.ok', { amount: balance.amount, purchased: balance.purchased ?? 0, legacy: balance.legacy === true })
+      else if (balance?.status === 'unconfigured') info('adapter.ollama', 'quota.auth', {})
+      else info('adapter.ollama', 'quota.fail', { status: balance?.status ?? 'error', ...errorMeta(item.quotaError ?? item.error) })
+      if (item.channel !== undefined) info('adapter.ollama', 'usage', { range: item.channel.range, usageUsd: item.channel.usageUsd })
+      else if (item.channelError !== undefined) info('adapter.ollama', 'usage.fail', errorMeta(item.channelError))
     }
   }
 }

@@ -8,6 +8,8 @@ const TIMEOUT = 6000
 export const OPENCODE_USAGE = 'https://opencode.ai/zen/go/v1/usage'
 export const OPENCODE_USAGE_FALLBACK = 'https://opencode.ai/api/v1/usage'
 export const COMMAND_CODE_CREDITS = 'https://api.commandcode.ai/alpha/billing/credits'
+export const OLLAMA_BALANCE = 'https://ollama.com/api/balance'
+export const OLLAMA_USAGE = 'https://ollama.com/api/usage'
 
 function clampPercent(value) {
   const n = Number(value)
@@ -97,6 +99,97 @@ export function parseCommandCodeCredits(body) {
   return { windows, balance }
 }
 
+function round2(value) {
+  return Math.round(value * 100) / 100
+}
+
+function round6(value) {
+  return Math.round(value * 1e6) / 1e6
+}
+
+/** 旧套餐窗口：只有剩余百分比与重置时间，没有金额。 */
+function legacyWindow(key, raw) {
+  if (raw === null || raw === undefined || typeof raw !== 'object') return null
+  const remaining = pickNumber(raw.remaining_percent)
+  if (remaining === null) return null
+  const resetAt = Date.parse(raw.resets_at)
+  return {
+    key,
+    usedPercent: round2(clampPercent(100 - remaining)),
+    resetAt: Number.isFinite(resetAt) ? resetAt : undefined,
+    source: 'official',
+  }
+}
+
+/**
+ * Ollama Cloud：`included` 是 oneOf 二态——金额态（balance_usd / allowance_usd / period）
+ * 与旧套餐态（session / weekly 百分比）。`purchased` 恒有，只含未过期额度。
+ * 金额态 `amount` = 套餐剩余 + 购买余额，`used` 只用于套餐进度，不做分母混用。
+ */
+export function parseOllamaBalance(body) {
+  const data = body?.data ?? body
+  const included = data?.included
+  const purchased = pickNumber(data?.purchased?.balance_usd)
+  const updatedAt = Date.now()
+  if (included === null || included === undefined || typeof included !== 'object') {
+    return { windows: [], balance: { amount: null, status: 'error', currency: 'USD', updatedAt, _error: { kind: 'parse' } } }
+  }
+  if (included.session !== undefined || included.weekly !== undefined) {
+    const windows = []
+    const session = legacyWindow('session', included.session)
+    const weekly = legacyWindow('week', included.weekly)
+    if (session !== null) windows.push(session)
+    if (weekly !== null) windows.push(weekly)
+    return {
+      windows,
+      balance: {
+        amount: purchased ?? 0,
+        ...(purchased === null ? {} : { purchased }),
+        legacy: true,
+        status: 'ok',
+        currency: 'USD',
+        updatedAt,
+      },
+    }
+  }
+  const left = pickNumber(included.balance_usd)
+  const allowance = pickNumber(included.allowance_usd)
+  if (left === null || allowance === null) {
+    return { windows: [], balance: { amount: null, status: 'error', currency: 'USD', updatedAt, _error: { kind: 'parse' } } }
+  }
+  const periodEnd = Date.parse(included.period?.until)
+  return {
+    windows: [],
+    balance: {
+      amount: round6(left + (purchased ?? 0)),
+      packageLeft: left,
+      allowance,
+      used: round6(Math.max(0, allowance - left)),
+      ...(purchased === null ? {} : { purchased }),
+      ...(Number.isFinite(periodEnd) ? { periodEnd } : {}),
+      status: 'ok',
+      currency: 'USD',
+      updatedAt,
+    },
+  }
+}
+
+/** `/api/usage` 只读参考：仅取 totals，缺失字段留 null，不参与任何计价。 */
+export function parseOllamaUsage(body) {
+  const totals = body?.totals
+  if (totals === null || totals === undefined || typeof totals !== 'object') return {}
+  return {
+    channel: {
+      range: typeof body?.range === 'string' ? body.range : null,
+      usageUsd: pickNumber(totals.usage_usd),
+      requests: pickNumber(totals.request_count),
+      inputTokens: pickNumber(totals.input_tokens),
+      cachedInputTokens: pickNumber(totals.cached_input_tokens),
+      outputTokens: pickNumber(totals.output_tokens),
+    },
+  }
+}
+
 export const PROVIDER_SOURCES = [
   { id: 'deepseek-official', kind: 'api', currency: 'CNY', legacy: 'deepseek' },
   { id: 'zhipu', kind: 'subscription', currency: 'CNY', legacy: 'glm' },
@@ -117,6 +210,14 @@ export const PROVIDER_SOURCES = [
     credential: { type: 'bearer', refs: ['COMMAND_CODE_API_KEY'] },
     preflight: { refs: ['COMMAND_CODE_ORG_ID'], param: 'orgId' },
     quota: { url: COMMAND_CODE_CREDITS, parse: parseCommandCodeCredits },
+  },
+  {
+    id: 'ollama',
+    kind: 'api',
+    currency: 'USD',
+    credential: { type: 'bearer', refs: ['OLLAMA_API_KEY'] },
+    quota: { url: OLLAMA_BALANCE, parse: parseOllamaBalance },
+    usage: { url: OLLAMA_USAGE, range: '30d', parse: parseOllamaUsage },
   },
 ]
 

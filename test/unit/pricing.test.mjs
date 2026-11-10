@@ -6,6 +6,7 @@ import {
   catalogInfo,
   configurePricing,
   loadCommunityPricing,
+  loadRouterPricing,
   resetPricingForTests,
   resolvePrice,
   setCatalogForTests,
@@ -181,4 +182,67 @@ test('全量自检：每个条目用自身名匹配必须回到自身', () => {
   }
   assert.equal(failed, 0)
   assert.ok(info.models > 0)
+})
+
+test('币种不匹配标注：USD provider 回退社区表时 mismatch=true', () => {
+  setup()
+  configurePricing({ currencyOf: () => 'USD' })
+  try {
+    const quote = resolvePrice('glm-5.3', 'my-relay')
+    assert.equal(quote.currency, 'CNY')
+    assert.equal(quote.mismatch, true)
+  } finally {
+    resetPricingForTests()
+  }
+})
+
+test('币种一致：CNY provider 命中社区表 mismatch=false', () => {
+  setup()
+  try {
+    const quote = resolvePrice('glm-5.3', 'my-relay')
+    assert.equal(quote.currency, 'CNY')
+    assert.equal(quote.mismatch, false)
+  } finally {
+    resetPricingForTests()
+  }
+})
+
+test('override 缺 currency 默认 CNY：USD provider 判 mismatch，显式 USD 一致', () => {
+  setup()
+  configurePricing({ currencyOf: () => 'USD', overrides: { 'glm-5.3': { input: 1, output: 2 } } })
+  try {
+    assert.equal(resolvePrice('glm-5.3', 'my-relay').mismatch, true)
+  } finally {
+    resetPricingForTests()
+  }
+  setup()
+  configurePricing({ currencyOf: () => 'USD', overrides: { 'glm-5.3': { input: 1, output: 2, currency: 'USD' } } })
+  try {
+    const quote = resolvePrice('glm-5.3', 'my-relay')
+    assert.equal(quote.currency, 'USD')
+    assert.equal(quote.mismatch, false)
+  } finally {
+    resetPricingForTests()
+  }
+})
+
+test('路由表命中：USD provider 用路由价，mismatch=false', async () => {
+  setup()
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ data: [{ id: 'z-ai/glm-5.3', pricing: { prompt: '0.000008', completion: '0.000028' } }] }),
+  })
+  try {
+    assert.equal(await loadRouterPricing(), true)
+    configurePricing({ currencyOf: () => 'USD' })
+    const quote = resolvePrice('glm-5.3', 'my-relay')
+    assert.equal(quote.table, 'router')
+    assert.equal(quote.currency, 'USD')
+    assert.equal(quote.mismatch, false)
+  } finally {
+    globalThis.fetch = realFetch
+    resetPricingForTests()
+  }
 })

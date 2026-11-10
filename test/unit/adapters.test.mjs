@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { logAdapterEvents, logAdapterFailures, parseGlmQuota, parseKimiQuota, parseOpenRouterCredits, readProviders, readSubscriptions, toSnapshot } from '../../src/adapters.js'
 import { parseCommandCodeCredits, parseOpenCodeUsage } from '../../src/quota-sources.js'
+import { emptyState, stampProviderKinds } from '../../src/core.js'
 
 test('GLM parses TOKENS_LIMIT unit 3/6 and ignores TIME_LIMIT', () => {
   const windows = parseGlmQuota({
@@ -114,6 +115,7 @@ test('readProviders 空结果附带 misses，区分未配置与隐藏', async ()
     'qwen:none',
     'opencode-go:none',
     'command-code:none',
+    'ollama:none',
   ])
   const hidden = await readProviders(ctxWith({ DASHSCOPE_API_KEY: 'sk-test' }), { billingModes: { qwen: 'hide' } })
   assert.equal(hidden.misses.includes('qwen:hidden'), true)
@@ -268,6 +270,84 @@ test('readSubscriptions 只重查订阅配额，不请求余额', async () => {
     // Kimi 自动模式下 quota 失败：回落按量条目，但不查 moonshot 余额
     assert.equal(subs.find((item) => item.id === 'moonshot').kind, 'api')
     assert.equal(fetched.some((url) => url.includes('users/me/balance')), false)
+  } finally {
+    restore()
+  }
+})
+
+test('Ollama：金额态快照带 purchased / channel，形态为 api', async () => {
+  const restore = mockFetch(async (url) => {
+    if (url.includes('/api/usage')) {
+      return { ok: true, status: 200, json: async () => ({ range: '30d', totals: { request_count: 3, usage_usd: 0.17, input_tokens: 1200, cached_input_tokens: 200, output_tokens: 300 } }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ included: { balance_usd: 72.5, allowance_usd: 100 }, purchased: { balance_usd: 25 } }) }
+  })
+  try {
+    const providers = await readProviders(ctxWith({ OLLAMA_API_KEY: 'sk-test' }), {})
+    const ollama = providers.find((item) => item.id === 'ollama')
+    assert.equal(ollama.kind, 'api')
+    assert.equal(ollama.mode, 'api')
+    assert.equal(ollama.currency, 'USD')
+    assert.equal(ollama.balance.amount, 97.5)
+    assert.equal(ollama.balance.allowance, 100)
+    assert.equal(ollama.balance.used, 27.5)
+    assert.equal(ollama.balance.purchased, 25)
+    assert.equal(ollama.channel.usageUsd, 0.17)
+    assert.equal(ollama.rateLimited, false)
+    // 形态不被固化成订阅：固化的只能是 api
+    const state = emptyState()
+    assert.equal(stampProviderKinds(state, providers), true)
+    assert.equal(state.providerKinds.ollama, 'api')
+  } finally {
+    restore()
+  }
+})
+
+test('Ollama：401 记未配置，403 / 503 记错误', async () => {
+  for (const [status, expected] of [[401, 'unconfigured'], [403, 'error'], [503, 'error']]) {
+    const restore = mockFetch(async () => ({ ok: false, status, json: async () => ({ error: 'x' }) }))
+    try {
+      const providers = await readProviders(ctxWith({ OLLAMA_API_KEY: 'sk-test' }), {})
+      const ollama = providers.find((item) => item.id === 'ollama')
+      assert.equal(ollama.balance.status, expected)
+      assert.equal(ollama.balance.amount, null)
+      assert.deepEqual(ollama.windows, [])
+    } finally {
+      restore()
+    }
+  }
+})
+
+test('Ollama：429 复用旧快照并按 Retry-After 退避', async () => {
+  let calls = 0
+  const restore = mockFetch(async (url) => {
+    if (url.includes('/api/usage')) {
+      return { ok: true, status: 200, json: async () => ({ range: '30d', totals: { usage_usd: 0.17 } }) }
+    }
+    calls += 1
+    if (calls === 1) {
+      return { ok: true, status: 200, json: async () => ({ included: { balance_usd: 72.5, allowance_usd: 100 }, purchased: { balance_usd: 25 } }) }
+    }
+    return {
+      ok: false,
+      status: 429,
+      headers: { get: (name) => (String(name).toLowerCase() === 'retry-after' ? '30' : null) },
+      json: async () => ({ error: 'too many requests' }),
+    }
+  })
+  try {
+    const cache = new Map()
+    const ctx = ctxWith({ OLLAMA_API_KEY: 'sk-test' })
+    const first = await readProviders(ctx, {}, cache)
+    assert.equal(first.find((item) => item.id === 'ollama').balance.amount, 97.5)
+    cache.set('ollama', { ...cache.get('ollama'), until: Date.now() - 1 })
+    const second = await readProviders(ctx, {}, cache)
+    const stale = second.find((item) => item.id === 'ollama')
+    assert.equal(stale.rateLimited, true)
+    assert.equal(stale.balance.amount, 97.5)
+    assert.equal(stale.quotaError.status, 429)
+    assert.equal(stale.quotaError.retryAfter, 30)
+    assert.ok(cache.get('ollama').until - Date.now() > 20_000)
   } finally {
     restore()
   }

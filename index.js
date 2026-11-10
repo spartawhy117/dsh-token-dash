@@ -310,7 +310,7 @@ export function apply(ctx) {
         applyPricingConfig()
         const recovery = await recoverState(dir, state, logger)
         // 旧计价模型（costVersion < 3）一次性重算，保留给 v2 历史数据
-        const repriced = repriceState(state)
+        const repriced = repriceState(state, kindOf)
         if (repriced.repriced) logger.info('boot', 'state.reprice', { rows: repriced.rows, recovered: recovery.recovered })
         const result = await backfill(scoped, state, kindOf)
         // 启动补算：只补 priced=false，已计价 / 订阅 / 零消耗一律不动（REQ-09）

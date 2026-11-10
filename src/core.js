@@ -64,7 +64,7 @@ export function costOf(record) {
 export function emptyState() {
   return {
     version: 1,
-    costVersion: 3,
+    costVersion: 4,
     days: {},
     watermarks: {},
     headers: {},
@@ -82,9 +82,10 @@ function dayStartTs(dayKey) {
 /**
  * 旧计价模型的成本在入账时写死；定价修复后按日级 token 与当日 00:00 价目重算。
  * 日级聚合没有单条记录时间，峰谷只能按 00:00（闲时）代表，结果属于估算。
+ * 重算同样走「形态先于计价 + 币种不匹配不计价」，订阅行与零消耗行保持原状态。
  */
-export function repriceState(state) {
-  if (state.costVersion === 3) return { repriced: false, rows: 0 }
+export function repriceState(state, kindOf = (id) => providerKind(id)) {
+  if (state.costVersion === 4) return { repriced: false, rows: 0 }
   let rows = 0
   for (const [dayKey, bucket] of Object.entries(state.days ?? {})) {
     const ts = dayStartTs(dayKey)
@@ -93,17 +94,29 @@ export function repriceState(state) {
       for (const [model, row] of Object.entries(providerBucket?.models ?? {})) {
         // unknown 行只影响计价归属；展示层仍按模型前缀归因
         const owner = providerId === 'unknown' ? providerFromModel(model) : providerId
+        // 形态先于计价：订阅 provider 的行保持原值，重算不得写成金额
+        if (owner !== null && kindOf(owner) !== 'api') continue
+        const empty = num(row.input) + num(row.cacheRead) + num(row.cacheWrite) + num(row.output) === 0
         const price = owner === null ? null : resolvePrice(model, owner, ts)
-        const missing = price === null || price.input === null || price.output === null
-        row.cost = missing
+        const missing = price === null || price.mismatch === true || price.input === null || price.output === null
+        row.cost = missing || empty
           ? 0
           : costOf({ ts, provider: owner ?? providerId, model, input: row.input, cacheRead: row.cacheRead, cacheWrite: row.cacheWrite, output: row.output })
-        row.priced = !missing
+        if (empty) {
+          row.priced = 'empty'
+          delete row.reason
+        } else if (missing) {
+          row.priced = false
+          row.reason = price === null ? explainPriceMiss(model) : 'currency-mismatch'
+        } else {
+          row.priced = true
+          delete row.reason
+        }
         rows += 1
       }
     }
   }
-  state.costVersion = 3
+  state.costVersion = 4
   return { repriced: true, rows }
 }
 
@@ -171,9 +184,10 @@ export function addRecord(state, record, kindOf = (id) => providerKind(id)) {
     delete row.reason
   } else {
     const price = resolvePrice(model, provider, record.ts)
-    if (price === null) {
+    // 币种不匹配按未定价处理：宁可空着，也不把 CNY 报价写进 USD 桶（REQ-03）
+    if (price === null || price.mismatch === true) {
       row.priced = false
-      row.reason = explainPriceMiss(model)
+      row.reason = price === null ? explainPriceMiss(model) : 'currency-mismatch'
     } else {
       row.priced = true
       delete row.reason
@@ -196,7 +210,7 @@ export function addRecord(state, record, kindOf = (id) => providerKind(id)) {
  */
 export function repriceUnpriced(state, scope, kindOf = (id) => providerKind(id)) {
   const month = typeof scope?.month === 'string' && /^\d{4}-\d{2}$/.test(scope.month) ? scope.month : null
-  const result = { scope: scope?.month ?? 'all', rows: 0, skipped: { 'no-owner': 0, kind: 0, 'no-price': 0 } }
+  const result = { scope: scope?.month ?? 'all', rows: 0, skipped: { 'no-owner': 0, kind: 0, 'no-price': 0, currency: 0 } }
   for (const [dayKey, bucket] of Object.entries(state.days ?? {})) {
     if (month !== null && !dayKey.startsWith(`${month}-`)) continue
     const ts = dayStartTs(dayKey)
@@ -217,6 +231,12 @@ export function repriceUnpriced(state, scope, kindOf = (id) => providerKind(id))
         const price = resolvePrice(model, owner, ts)
         if (price === null) {
           result.skipped['no-price'] += 1
+          continue
+        }
+        // 币种不符的行保持未定价，只把原因改写清楚，等用户补 USD 单价后再补算
+        if (price.mismatch === true) {
+          result.skipped.currency += 1
+          row.reason = 'currency-mismatch'
           continue
         }
         row.cost = (

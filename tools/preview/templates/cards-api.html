@@ -31,6 +31,11 @@
     { name: '通义千问', cur: '¥', used: 6.43, budget: '5.00', real: '—', month: '¥6.43' },
     { name: 'Kimi API', cur: '¥', used: 0, budget: '', real: '¥12.00', month: '¥3.20' },
     { name: 'GLM API', cur: '¥', used: 6, budget: '50.00', real: '—', month: '¥6.00' },
+    {
+      name: 'Ollama', cur: '$', used: 27.5, budget: '100.00', real: '$97.50', month: '$31.20',
+      allowance: '$27.50 / $100.00', purchased: '$25.00',
+      capt: 'ok · 27.5% · 周期至 10-15 09:30 · 渠道用量 $0.17',
+    },
   ]
 
   const money = (cur, value) => value < 0 ? `-${cur}${Math.abs(value).toFixed(2)}` : `${cur}${value.toFixed(2)}`
@@ -54,6 +59,8 @@
         </div>
         <div class="kv"><span class="k">计划余额</span><span class="v" data-role="plan">—</span></div>
         <div class="kv"><span class="k">真实余额</span><span class="v">${data.real}</span></div>
+        ${data.allowance === undefined ? '' : `<div class="kv"><span class="k">套餐已用</span><span class="v">${data.allowance}</span></div>`}
+        ${data.purchased === undefined ? '' : `<div class="kv"><span class="k">购买余额</span><span class="v">${data.purchased}</span></div>`}
         <div class="kv"><span class="k">本月已花</span><span class="v">${data.month}</span></div>
       </div>
       <span class="cap" data-role="cap"></span>
@@ -78,9 +85,9 @@
     plan.className = `v${planValue !== null && planValue < 0 ? ' over' : ''}`
 
     const cap = card.parentElement.querySelector('[data-role=cap]')
-    cap.textContent = state === 'empty'
+    cap.textContent = data.capt ?? (state === 'empty'
       ? '预算未设置'
-      : `${state} · ${percent.toFixed(1)}%`
+      : `${state} · ${percent.toFixed(1)}%`)
   }
 
   document.getElementById('cards').innerHTML = cards.map((data, index) => cardHtml(data, index)).join('')

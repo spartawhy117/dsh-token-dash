@@ -24,10 +24,12 @@ const ALIASES = {
   'opencode-go': 'opencode-go',
   commandcode: 'command-code',
   'command-code': 'command-code',
+  'ollama-cloud': 'ollama',
+  ollama: 'ollama',
 }
 
 /** Display order is also the P3 pricing-link order. */
-export const PROVIDER_ORDER = ['deepseek-official', 'zhipu', 'moonshot', 'openrouter', 'qwen', 'opencode-go', 'command-code']
+export const PROVIDER_ORDER = ['deepseek-official', 'zhipu', 'moonshot', 'openrouter', 'qwen', 'opencode-go', 'command-code', 'ollama']
 
 const PROVIDERS = {
   'deepseek-official': {
@@ -115,6 +117,16 @@ const PROVIDERS = {
     prefixes: [],
     modelLabels: {},
     pricingUrl: 'https://commandcode.ai/',
+  },
+  // 额度 + 逐笔按量（USD）：不补默认模型行（模型名不固定，补 0 值行反而误导）
+  ollama: {
+    id: 'ollama',
+    label: 'Ollama',
+    currency: 'USD',
+    subscription: false,
+    prefixes: [],
+    modelLabels: {},
+    pricingUrl: 'https://ollama.com/pricing',
   },
 }
 

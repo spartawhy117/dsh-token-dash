@@ -72,6 +72,17 @@ const apiProviders = [
   provider('openrouter', 'OpenRouter', 'api', 'USD', { currencySource: 'snapshot', budget: budget(50, 'USD', 19, 0.38), balance: { amount: 7.66, status: 'ok', currency: 'USD', updatedAt: now } }),
   // 未声明币种的自填 provider：卡片应标「按社区表 CNY」
   provider('siliconflow', 'siliconflow', 'api', 'CNY', { currencySource: 'community', budget: budget(100, 'CNY', 1.24, 0.0124) }),
+  // 额度 + 购买余额 + 周期 + 渠道用量；速率限制时保留旧值并标「限流中」
+  provider('ollama', 'Ollama', 'api', 'USD', {
+    currencySource: 'snapshot',
+    rateLimited: true,
+    budget: budget(100, 'USD', 31.2, 0.312),
+    balance: {
+      amount: 97.5, packageLeft: 72.5, allowance: 100, used: 27.5, purchased: 25,
+      periodEnd: now + 3 * 86400_000, status: 'ok', currency: 'USD', updatedAt: now,
+    },
+    channel: { range: '30d', usageUsd: 0.17, requests: 3, inputTokens: 1200, cachedInputTokens: 200, outputTokens: 300 },
+  }),
 ]
 const subProviders = [
   provider('zhipu', 'GLM Coding', 'subscription', 'CNY', { windows: [{ key: '5h', usedPercent: 42.5, resetAt: now + 3600_000 }, { key: 'week', usedPercent: 18.2, resetAt: now + 26 * 3600_000 }] }),
@@ -468,6 +479,16 @@ try {
   assert.match(await board.getByTestId('token-dash-budget-used-deepseek-official').innerText(), /12\.3%/)
   assert.match(await board.getByTestId('token-dash-budget-plan-deepseek-official').innerText(), /¥87\.66/)
   assert.match(await board.getByTestId('token-dash-budget-balance-deepseek-official').innerText(), /¥49\.86/)
+  // 额度 + 购买余额：单值位是合计，进度与购买额拆行，周期 / 限流 / 渠道用量进 caption
+  assert.match(await board.getByTestId('token-dash-budget-balance-ollama').innerText(), /\$97\.50/)
+  assert.match(await board.getByTestId('token-dash-budget-allowance-ollama').innerText(), /\$27\.50 \/ \$100\.00/)
+  assert.match(await board.getByTestId('token-dash-budget-purchased-ollama').innerText(), /\$25\.00/)
+  const ollamaCard = await board.getByTestId('token-dash-budget-row-ollama').innerText()
+  assert.match(ollamaCard, /周期至/)
+  assert.match(ollamaCard, /限流中/)
+  assert.match(ollamaCard, /渠道用量 \$0\.17/)
+  const openrouterCard = await board.getByTestId('token-dash-budget-row-openrouter').innerText()
+  assert.equal(openrouterCard.includes('限流中'), false)
   assert.equal(await board.locator('[data-testid^=token-dash-budget-gauge-label-]').count(), apiProviders.length)
   // Subscription cards: only actual windows (two-window providers have no month cell).
   const windowCount = subProviders.reduce((total, provider) => total + (provider.windows?.length ?? 0), 0)

@@ -13,23 +13,26 @@ import {
   providerLabel,
 } from '../../src/providers.js'
 
-test('registry descriptors keep the seven-provider contract', () => {
-  assert.deepEqual(pricingLinks().map((item) => item.id), ['deepseek-official', 'zhipu', 'moonshot', 'openrouter', 'qwen', 'opencode-go', 'command-code'])
-  assert.deepEqual(pricingLinks().map((item) => item.label), ['DeepSeek', 'Zhipu AI', 'Kimi', 'OpenRouter', 'Qwen', 'OpenCode Go', 'Command Code'])
-  assert.equal(pricingLinks().length, 7)
+test('registry descriptors keep the eight-provider contract', () => {
+  assert.deepEqual(pricingLinks().map((item) => item.id), ['deepseek-official', 'zhipu', 'moonshot', 'openrouter', 'qwen', 'opencode-go', 'command-code', 'ollama'])
+  assert.deepEqual(pricingLinks().map((item) => item.label), ['DeepSeek', 'Zhipu AI', 'Kimi', 'OpenRouter', 'Qwen', 'OpenCode Go', 'Command Code', 'Ollama'])
+  assert.equal(pricingLinks().length, 8)
   assert.equal(providerLabel('deepseek-account'), 'DeepSeek')
   assert.equal(providerLabel('zai-coding'), 'Zhipu AI')
   assert.equal(providerLabel('opencode'), 'OpenCode Go')
   assert.equal(providerLabel('commandcode'), 'Command Code')
+  assert.equal(providerLabel('ollama-cloud'), 'Ollama')
   assert.equal(providerCurrency('openrouter'), 'USD')
   assert.equal(providerCurrency('qwen'), 'CNY')
   assert.equal(providerCurrency('opencode-go'), 'USD')
   assert.equal(providerCurrency('command-code'), 'CNY')
+  assert.equal(providerCurrency('ollama'), 'USD')
   assert.equal(canBeSubscription('zhipu'), true)
   assert.equal(canBeSubscription('moonshot'), true)
   assert.equal(canBeSubscription('opencode-go'), true)
   assert.equal(canBeSubscription('command-code'), true)
   assert.equal(canBeSubscription('openrouter'), false)
+  assert.equal(canBeSubscription('ollama'), false)
   assert.equal(providerDescriptor('unknown'), null)
 })
 
@@ -42,6 +45,7 @@ test('default models and compat table stay unchanged', () => {
     qwen: 'qwen3.8-max',
     'opencode-go': '-',
     'command-code': '-',
+    ollama: undefined,
   })
   for (const [id, model] of Object.entries(DEFAULT_MODELS)) {
     assert.equal(defaultModelFor(id), model)

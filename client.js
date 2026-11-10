@@ -113,6 +113,10 @@ window.__ModuleLoader__.load({
       '价格取社区价目表（人民币），与渠道账单可能有差异': 'Priced from the community table (CNY); may differ from your provider bill',
       '无匹配价目': 'No matching price', '候选模型不唯一': 'Ambiguous model match',
       '模型名无效': 'Invalid model name', '订阅不计价': 'Subscription, not billed',
+      '套餐已用': 'Plan used', '购买余额': 'Purchased credits',
+      '周期至 {time}': 'Cycle ends {time}', '限流中': 'Rate limited',
+      '渠道用量 {value}': 'Channel usage {value}',
+      '价目表为 CNY，该 provider 按 USD 结算；可用 priceOverrides 补 USD 单价': 'Price table is CNY while this provider bills in USD; add a USD priceOverrides entry',
     }
     const ZH = Object.fromEntries(Object.keys(EN).map((key) => [key, key]))
     /** 未定价原因 → 可读文案；未知 reason 回退「未定价」。 */
@@ -121,6 +125,7 @@ window.__ModuleLoader__.load({
       ambiguous: '候选模型不唯一',
       'invalid-model': '模型名无效',
       'kind-skip': '订阅不计价',
+      'currency-mismatch': '价目表为 CNY，该 provider 按 USD 结算；可用 priceOverrides 补 USD 单价',
     }
     const MESSAGES = { zh: ZH, en: EN }
     let localeService = null
@@ -911,6 +916,18 @@ window.__ModuleLoader__.load({
       return tr('查询失败')
     }
 
+    /** P3 API 卡底部说明：状态 · 比例，再补余额周期 / 限流 / 渠道用量（渠道值只读）。 */
+    function apiCardCaption(provider, { hasBudget, percent, budget }) {
+      const parts = [`${hasBudget ? stateOf(percent, API_CRITICAL) : 'unset'} · ${hasBudget ? fmtRatio(budget.percent) : '—'}`]
+      const periodEnd = Number(provider.balance?.periodEnd)
+      const period = Number.isFinite(periodEnd) && periodEnd > 0 ? resetParts(periodEnd).absolute : null
+      if (period !== null) parts.push(tr('周期至 {time}', { time: period }))
+      if (provider.rateLimited === true) parts.push(tr('限流中'))
+      const usageUsd = Number(provider.channel?.usageUsd)
+      if (Number.isFinite(usageUsd)) parts.push(tr('渠道用量 {value}', { value: fmtMoney(usageUsd, provider.currency) }))
+      return parts.join(' · ')
+    }
+
     function windowLabel(key) { return { '5h': '5h', week: tr('周'), month: tr('月') }[key] ?? key }
 
     function subscriptionText(provider) {
@@ -1574,6 +1591,9 @@ window.__ModuleLoader__.load({
           const used = Number(budget?.used ?? 0)
           const plan = hasBudget ? Number(budget.amount) - used : null
           const balance = balanceText(provider, true)
+          // Ollama 这类「额度 + 购买余额」的 provider：进度只用 allowance / used，单值位不重复
+          const allowance = Number(provider.balance?.allowance)
+          const purchased = Number(provider.balance?.purchased)
           const entry = prefs?.budgets?.[provider.id]
           const initial = entry === undefined ? '' : (entry.amount > 0 ? entry.amount.toFixed(2) : '')
           const error = errors[provider.id]
@@ -1629,6 +1649,22 @@ window.__ModuleLoader__.load({
             h('div', { style: styles.kvRow },
               h('span', { style: styles.kvLabel }, tr('真实余额')),
               h('span', { 'data-testid': `token-dash-budget-balance-${provider.id}`, style: styles.kvValue }, balance ?? '—')),
+            Number.isFinite(allowance) && allowance > 0
+              ? h('div', { style: styles.kvRow },
+                h('span', { style: styles.kvLabel }, tr('套餐已用')),
+                h('span', {
+                  'data-testid': `token-dash-budget-allowance-${provider.id}`,
+                  style: styles.kvValue,
+                }, `${fmtMoney(provider.balance?.used, provider.currency)} / ${fmtMoney(allowance, provider.currency)}`))
+              : null,
+            Number.isFinite(purchased) && purchased > 0
+              ? h('div', { style: styles.kvRow },
+                h('span', { style: styles.kvLabel }, tr('购买余额')),
+                h('span', {
+                  'data-testid': `token-dash-budget-purchased-${provider.id}`,
+                  style: styles.kvValue,
+                }, fmtMoney(purchased, provider.currency)))
+              : null,
             h('div', { style: styles.kvRow },
               h('span', { style: styles.kvLabel }, tr('本月已花')),
               h('span', {
@@ -1643,8 +1679,7 @@ window.__ModuleLoader__.load({
                     style: { fontSize: 10, color: T.weak },
                   }, tr('按社区表 CNY'))
                   : null)),
-            h('div', { style: styles.cardCaption },
-              `${hasBudget ? stateOf(percent, API_CRITICAL) : 'unset'} · ${hasBudget ? fmtRatio(budget.percent) : '—'}`))
+            h('div', { style: styles.cardCaption }, apiCardCaption(provider, { hasBudget, percent, budget })))
         }))
     }
 

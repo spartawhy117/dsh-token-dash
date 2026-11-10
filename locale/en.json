@@ -112,5 +112,11 @@
   "无匹配价目": "No matching price",
   "候选模型不唯一": "Ambiguous model match",
   "模型名无效": "Invalid model name",
-  "订阅不计价": "Subscription, not billed"
+  "订阅不计价": "Subscription, not billed",
+  "套餐已用": "Plan used",
+  "购买余额": "Purchased credits",
+  "周期至 {time}": "Cycle ends {time}",
+  "限流中": "Rate limited",
+  "渠道用量 {value}": "Channel usage {value}",
+  "价目表为 CNY，该 provider 按 USD 结算；可用 priceOverrides 补 USD 单价": "Price table is CNY while this provider bills in USD; add a USD priceOverrides entry"
 }

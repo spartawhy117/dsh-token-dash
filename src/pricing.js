@@ -67,6 +67,8 @@ export function resolvePrice(model, provider, ts = Date.now()) {
   const modelId = normalizeModel(model)
   if (modelId === 'unknown') return null
   const providerId = normalizeProvider(provider)
+  /** provider 应使用的币种；与技术表币种不同即 mismatch（判定权在 core，这里只标注）。 */
+  const currency = currencyOf(providerId)
 
   const override = overrideQuote(modelId, providerId)
   if (override !== null) {
@@ -76,6 +78,7 @@ export function resolvePrice(model, provider, ts = Date.now()) {
       cacheWrite: override.cacheWrite,
       output: override.output,
       currency: override.currency,
+      mismatch: override.currency !== currency,
       confidence: 'override',
       approximate: false,
       catalogModel: modelId,
@@ -86,7 +89,7 @@ export function resolvePrice(model, provider, ts = Date.now()) {
 
   const matched = resolveMatch(modelId, catalog.entries)
   if (matched === null) return null
-  const table = selectTable(matched.entry, currencyOf(providerId))
+  const table = selectTable(matched.entry, currency)
   const prices = effectivePrices(table.entry, ts)
   if (prices === null || prices.input === null || prices.output === null) return null
   return {
@@ -95,6 +98,7 @@ export function resolvePrice(model, provider, ts = Date.now()) {
     cacheWrite: prices.cacheWrite,
     output: prices.output,
     currency: table.currency,
+    mismatch: table.currency !== currency,
     confidence: matched.confidence,
     approximate: matched.confidence === 'fuzzy',
     catalogModel: table.entry.modelId,

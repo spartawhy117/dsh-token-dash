@@ -4,6 +4,32 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0-local.5] - 2026-11-10
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+- 新增 Ollama 供应商：P3 卡片显示套餐剩余与购买余额的合计、套餐已用进度、额度周期结束时间与渠道 30 天用量；余额接口限流时保留上次数值并标注「限流中」。
+
+#### 修改
+
+- 计价改为「价目币种必须与供应商一致」：价目表为人民币而供应商按美元结算时，该模型显示「未定价」并说明原因，不再把人民币数值当成美元金额；OpenRouter 与 Qwen 国际站同步修正。
+- 历史成本按新规则重算一次（`costVersion 4`）；订阅与零消耗记录保持原样。
+
+### English
+
+#### Added
+
+- New Ollama provider: the P3 card shows total remaining credits (plan + purchased), plan usage progress, cycle end, and 30-day channel usage; when the balance endpoint is rate limited the last values stay visible with a "Rate limited" note.
+
+#### Changes
+
+- Pricing now requires the price-table currency to match the provider currency: when a CNY table meets a USD provider the model is shown as unpriced with a reason instead of rendering CNY numbers as USD. OpenRouter and Qwen international keys are corrected the same way.
+- Historical costs are recalculated once under the new rule (`costVersion 4`); subscription and zero-usage rows stay untouched.
+
 ## [2.1.0-local.4] - 2026-11-10
 
 > 本地构建，未发布
