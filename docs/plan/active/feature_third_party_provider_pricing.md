@@ -851,6 +851,58 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 
 ## 九、自测反馈台
 
+### Issue #1 [待用户验证] 2026-11-10 进入面板 / 看板不主动刷新，首屏还要等探测
+
+#### 9.1 复现
+
+- 触发：已有会话在用（刚发完一轮对话）→ 点 Pill 展开 P2，或切到 P3 看板。
+- 当前：面板显示上次轮询的旧数字；`refreshMs = 60000` 下最坏等满 60s。首次进入还要叠加一次 30s 首屏阻塞。
+- 期望：**展开即刷新一次**；面板可见期间轮询周期缩短（10s）。
+- 影响：刚花完钱看不到变化，用户误判"没记账"。
+
+#### 9.2 关键时序（问题定位图）
+
+```text
+【第 1 步】Pill 挂载：useEffect(() => { load() }, [load]) 拉一次；usePolling 只 start() 计时器（无立即调用）
+【第 2 步：★问题根源】P2 展开：open 由 false → true，只执行 measurePanel（尺寸测量），
+         没有任何 load()/refresh()；P3 若已挂载（宿主 main 面板常驻）也不会重新挂载
+【第 3 步】用户看到 step 1 或上一次 interval 的结果；下一条数据最坏在 60s 后
+【对比】visibilitychange 通道已存在：document.hidden → false 时 task() + start()，
+         说明"可见即刷新"机制已有，缺的是"展开/激活"这条触发
+【修复】展开时 load 一次（5s 去重）；可见期轮询 10s，关闭回 refreshMs
+```
+
+日志佐证（`dsh-token-dash-20261110.log`，local.2 启动）：`12:16:15.884` 三个 slot `mount.ok` → `12:16:46.162` 才出现首条 `vm.build`；其后 `vm.build` 间隔 71s / 179s，期间展开面板没有新增请求。
+
+#### 9.3 结论
+
+- 根因：`client.js` · `usePolling` 只负责定时器，展开动作未接入刷新链；`Pill` 的 `open` 状态只驱动尺寸测量。
+- 修复后路径：`open: true` → `load()`（5s 内去重）→ 立即出数；可见期 10s 轮询 → 对话进行中也在跟。
+- 不变路径：`visibilitychange`、手动刷新按钮、`/providers/refresh` 逻辑不动。
+- 遗留：宿主 `addRecord` 后主动推送（SSE / 轻量 `rev` 探测）不做，见 9.5。
+
+#### 9.4 修复实施
+
+- `client.js` · `Pill`：`lastLoadAt` 记录上次拉取时间；`open` 变 true 且距上次 > 2s 时 `load()`（2s 窗口挡开合抖动与 `refreshMs` 回填导致的重跑）；轮询周期 `open ? 10s : refreshMs`。
+- `client.js` · `BoardPage`：常驻轮询周期取 `min(10s, refreshMs)`，进入页面仍是首帧 `refresh()`。
+- 首屏 30s 阻塞（`/summary` 等 `refreshProviderCache`）本轮不改，转入 9.5 遗留，避免一次改动跨前后端。
+
+#### 9.5 不改的位置与理由
+
+- `index.js` · `/summary` 的 `await refreshProviderCache()`：改成"先返回旧快照 + 后台探测"属宿主契约变更，需单独的取证（哪一路探测慢）与验收，不在本轮。
+- `usePolling` 本体：不内置"立即执行一次"，避免所有调用方语义被改；由调用方按场景控制。
+
+#### 9.6 验收
+
+- 环境与方式：`npm test` + `npm run e2e`（Playwright 统计 `/summary` 请求数，新增断言「展开面板应触发一次新的 `/summary`」）。
+- 结果：
+  - `npm test`：99 pass / 1 skipped（local 版本跳过 release-notes）。
+  - `npm run e2e`：通过；`summaryBeforeOpen → openPanel()` 后计数增加，A 项成立。
+  - B 项（可见期 10s 轮询）未做时长断言（会额外等 10s 拖慢 e2e），留待装包后现场观察：面板保持打开 30s，`[TD:vm] build` 应出现 ≥3 条。
+- 剩余风险：10s 轮询在长开面板时把请求量提到约 6 倍（单次为本地内存读，开销可忽略）。
+
+### 反馈流水
+
 - 2026-11-09：确认根因为 provider 白名单前置，非模型名匹配；社区表大量行被插件自行丢弃。
 - 2026-11-09：原型验证纯模型名四级解析，表内自匹配全通过。
 - 2026-11-09：用户拍板 D-1（纯模型名）与 D-2（复用表内别名规则）。

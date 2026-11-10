@@ -151,6 +151,7 @@ const usageFor = (range) => ({
 })
 let failSummary = false
 let failUsage = false
+let summaryRequests = 0
 let updateAvailable = false
 let updateRequests = 0
 let usageDelay = 0
@@ -237,6 +238,7 @@ try {
     } catch { /* ignore malformed log */ }
   })
   await page.route('**/token-dash/api/summary*', async (route) => {
+    summaryRequests += 1
     if (failSummary) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, reason: 'mock-summary' }) })
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: currentSummary }) })
   })
@@ -301,7 +303,9 @@ try {
     await page.waitForTimeout(250)
   }
   const panel = page.locator('[data-testid=token-dash-panel]')
+  const summaryBeforeOpen = summaryRequests
   await openPanel()
+  assert.ok(summaryRequests > summaryBeforeOpen, '展开面板应触发一次新的 /summary（Issue #1）')
   await page.screenshot({ path: join(tmpRoot, 'e2e', 'p2-current.png'), fullPage: true })
 
   // P2: adaptive width, no tabs, current-model four columns.

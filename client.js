@@ -982,12 +982,14 @@ window.__ModuleLoader__.load({
       const [panelShift, setPanelShift] = useState(0)
       const pillRef = useRef(null)
       const panelRef = useRef(null)
+      const lastLoadAt = useRef(0)
 
       useEffect(() => {
         try { if (window.localStorage.getItem('token-dash-hint-seen') !== '1') setHint(true) } catch { /* ignore */ }
       }, [])
 
       const load = useCallback(async () => {
+        lastLoadAt.current = Date.now()
         setRefreshing(true)
         try {
           const data = await getJson(summaryPath(active))
@@ -1006,7 +1008,13 @@ window.__ModuleLoader__.load({
       }, [])
 
       useEffect(() => { load() }, [load])
-      usePolling(load, { refreshMs })
+      // 展开即刷新：距上次拉取超过 2s 才发，避免开合抖动与 refreshMs 变化引起的重跑；可见期轮询缩到 10s
+      useEffect(() => {
+        if (!open) return
+        if (Date.now() - lastLoadAt.current < 2000) return
+        void load()
+      }, [open, load])
+      usePolling(load, { refreshMs: open ? Math.min(10_000, refreshMs) : refreshMs })
 
       const refreshSubs = useCallback(async () => {
         try { await fetch(`${API}/providers/refresh`, { method: 'POST', headers: { accept: 'application/json' } }) } catch { /* fall through */ }
@@ -1766,7 +1774,8 @@ window.__ModuleLoader__.load({
       }, [loadSummary, loadPrefs, loadUsage])
 
       useEffect(() => { void refresh() }, [refresh])
-      usePolling(() => { void loadSummary() }, { refreshMs: Number(summary?.refreshMs) || 60000 })
+      // 看板常驻，轮询周期取 min(10s, refreshMs)，对话进行中也能跟上
+      usePolling(() => { void loadSummary() }, { refreshMs: Math.min(10_000, Number(summary?.refreshMs) || 60000) })
 
       const savePrefs = useCallback(async (patch) => {
         if (prefsRef.current === null) return { ok: false, reason: 'not-ready' }
