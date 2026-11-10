@@ -4,6 +4,26 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0-local.2] - 2026-11-10
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 修正启动日志：价格表实际已就绪时不再误报 `pricing.ready timeout-degraded`（竞速结束后清理定时器）。
+- `pricing.config` 每次启动只记一条，不再同一毫秒重复。
+- 功能与 `2.1.0-local.1` 相同：纯模型名计价、形态四档判定、币种可声明、未定价启动补算。
+
+### English
+
+#### Changes
+
+- Startup logs: no more false `pricing.ready timeout-degraded` when the catalog is already loaded (the racing timer is cleared).
+- `pricing.config` is logged once per startup instead of twice in the same millisecond.
+- Feature set is identical to `2.1.0-local.1`: model-name-only pricing, four-way kind resolution, declarable currency, unpriced backfill at startup.
+
 ## [2.1.0-local.1] - 2026-11-10
 
 > 本地构建，未发布
