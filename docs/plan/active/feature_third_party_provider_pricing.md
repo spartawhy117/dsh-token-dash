@@ -2,7 +2,7 @@
 
 > 状态：已对齐<br>
 > 创建时间：2026-11-09<br>
-> 更新时间：2026-11-10（按 `design.md` v3.9 重写：边界收敛为 L2「估算 + 纠偏」，形态四档判定，币种可声明，未定价闭环；不做厂商识别；补 §5.1 分层验收与 §5.2 E2E 用例）<br>
+> 更新时间：2026-11-10（按 `design.md` v3.9 重写：边界收敛为 L2「估算 + 纠偏」，形态四档判定，币种可声明，未定价闭环；不做厂商识别；§5.1 分层验收 L1–L3 自动 + L4 真实调用采样（opt-in、限额））<br>
 > 关联逻辑根：`dsh-token-dash`（`src/catalog.js` / `src/match.js` / `src/pricing.js` / `src/core.js` / `src/store.js` / `src/providers.js` / `index.js` / `client.js`）<br>
 > 关联资料：[`design.md`](../../design.md) §设计目标 / §两条独立链路 / §第三方接入与扩展边界、[`ui-design.md`](../../ui-design.md) §5.5 范围与明细 / §5.7 设置与数据管理 / §7 文案与空态
 
@@ -744,20 +744,32 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 
 | 层 | 内容 | 方式 | 资源消耗 | 无人值守 |
 |---|---|---|---|---|
-| L1 单测 | `catalog` / `match` / `pricing` / `core` / `store` 的纯函数与入账口径 | `npm test` | 无（进程内） | 待授权（见 D-19） |
-| L2 API 契约 | 临时 `DSH_HOME` + `web` profile：`/summary`、`/usage`、`/prefs`、`POST /pricing/reprice` 的真实 HTTP 断言 | `node scripts/e2e.mjs`（API 段） | 本地进程；价目表拉取失败时降级内置表 | 待授权 |
-| L3 UI 状态 | Playwright 拦截 `/summary`、`/usage`，断言 `≈` / `未定价` / `—` / 币种标注 / 设置区行数 | 同上（UI 段） | 本地 Chromium | 待授权 |
-| L4 真实账本 | 本机 `daily.json` 中 `tencent :: deepseek-v4.1-flash-ioa` 是否出价 | 人工核对 | 只读本地文件 | 需用户在场 |
+| L1 单测 | `catalog` / `match` / `pricing` / `core` / `store` 的纯函数与入账口径 | `npm test` | 无（进程内） | **自动** |
+| L2 API 契约 | 临时 `DSH_HOME` + `web` profile：`/summary`、`/usage`、`/prefs`、`POST /pricing/reprice` 的真实 HTTP 断言 | `node scripts/e2e.mjs`（API 段） | 本地进程；价目表拉取失败时降级内置表 | **自动** |
+| L3 UI 状态 | Playwright 拦截 `/summary`、`/usage`，断言 `≈` / `未定价` / `—` / 币种标注 / 设置区行数 | 同上（UI 段） | 本地 Chromium | **自动** |
+| L4 真实调用采样 | 用真实 Key 发 1~4 次极短请求，跑通「宿主事件 → 记账 → 出价 → VM」全链路 | `TOKEN_DASH_E2E_LIVE=1 node scripts/e2e.mjs` | **真实 token**：单轮 ≤ 5 万 tokens，实测约 ¥0.01 以内 | 默认跳过；开关打开后自动，限额内无需在场 |
+| L5 真实账本核对 | 本机 `daily.json` 中 `tencent :: deepseek-v4.1-flash-ioa` 是否出价 | 人工核对 | 只读本地文件 | 需用户在场 |
 
-**为什么 L2 不断言金额**：e2e 可能在离线环境执行，社区表拉不到时降级内置表，金额不稳定；金额级验收放 L4，L2 只断言结构与状态（`priced` / `unpriced` / `currencySource`）。
+**为什么 L2 不断言金额**：e2e 可能在离线环境执行，社区表拉不到时降级内置表，金额不稳定；金额级验收由 L4（真实调用，金额可观测）与 L5（本机账本）承担，L2 只断言结构与状态（`priced` / `unpriced` / `currencySource`）。
+
+**L4 的限额与安全（硬约束）**：
+
+| 项 | 约束 |
+|---|---|
+| 开关 | 仅当 `TOKEN_DASH_E2E_LIVE=1` 时执行，否则整段 skip 并打印原因；默认不在 `npm run e2e` 中启用 |
+| 模型 | 固定最便宜的可用型号（默认 `deepseek-v4.1-flash`），禁止高档位 / 长上下文 |
+| 用量 | 每次 `max_tokens ≤ 64`、prompt ≤ 32 tokens；单轮 ≤ 4 次请求；累计 ≤ 5 万 tokens |
+| 成本 | 预估单轮 < ¥0.01；日志打印实际 token 数与估算成本，便于对账 |
+| 凭据 | 只从 `DSH_E2E_LIVE_KEY` 环境变量读取，不落盘、不进 fixture、不打印；断言日志与 `/summary` 响应中无 key 片段 |
+| 失败处理 | L4 失败不阻塞 L1–L3 结论，单独标记；连续 2 轮失败即停（防误配刷量） |
 
 **守则五要素**（缺一不启用无人值守）：
 
-1. **执行范围**：L1 → L2 → L3 依序，低层不过不进高层；L4 不自动执行。
+1. **执行范围**：L1 → L2 → L3 依序，低层不过不进高层；L4 仅在开关打开且限额内自动执行；L5 不自动执行。
 2. **修复边界**：只允许改测试与 fixture 适配（选择器、断言、fixture 字段、时间对齐）；不得触碰 §四 的 `BND-01~13`——尤其不得为让断言通过而改 `quota-sources.js` / `adapters.js`（`BND-05`）、不得新增设置项（`BND-09`）、不得改 `daily.json` 桶结构（`BND-06`）。
-3. **停机条件**：同一用例连续 3 轮失败、或修复需突破任一 `BND`、或改动文件 > 5 个 → 停止自动修复，输出失败清单与已改文件。
+3. **停机条件**：同一用例连续 3 轮失败、或修复需突破任一 `BND`、或改动文件 > 5 个、或 L4 累计 token 超 5 万 → 停止自动化，输出失败清单与已改文件。
 4. **记录去向**：每轮结果记 §九；未解决项标 `[待用户验证]` 并附复现命令；通过项回写上方验收表。
-5. **commit / push**：每轮独立 commit（可单独 revert）；`push` 与 L4 均需用户显式授权。
+5. **commit / push**：每轮独立 commit（可单独 revert）；`push` 需用户显式授权，L4 的开关与限额变更同样需授权（记 D-19）。
 
 ### 5.2 E2E 用例（fixture 与断言）
 
@@ -788,8 +800,15 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | E2E-09 | 真实路径 `GET /summary`（临时 `DSH_HOME`）返回的 `cost.unpriced` 为数组且每项含 `reason`，`currencySource` ∈ `prefs` / `snapshot` / `community` | REQ-08 / REQ-11 |
 | E2E-10 | `POST /token-dash/api/pricing/reprice` 返回 `{ ok:true, data:{ rows, skipped, reasons } }`；非法 `scope` → 400 | REQ-09 |
 | E2E-11 | `PUT /prefs` 带 `priceOverrides` / `providerCurrency` 后 `GET /prefs` 回读一致；非法条目被丢弃但仍 200 | REQ-14 / BND-09 |
+| E2E-12 | override 生效：写入 `priceOverrides['tencent:deepseek-v4.1-flash-ioa']` 后该行金额等于按 override 单价算出的值，且**不带** `≈`（`confidence='override'`）；删除键后回到模糊价 | REQ-05 / CHG-03 |
+| E2E-13 | 币种切换：把该 provider 声明为 `USD` 后卡片币种变 `$`，未声明时回 `¥` 并带「按社区表 CNY」 | REQ-11 / REQ-14 |
+| E2E-14 | reprice 幂等：连续调用两次 `POST /pricing/reprice`，第二次 `data.rows === 0` | REQ-09 |
+| E2E-15 | 冷启动降级：拦截价目拉取使其失败，上传事件后仍产生 `daily.json` 行，日志出现 `pricing.ready` 且 `source=timeout-degraded` | REQ-07 / RSK-05 |
+| E2E-16 | unknown 归因：`provider:'unknown'` + 可识别模型名，记账后按 owner 出价，不出现 `no-owner` 跳过 | REQ-01 / RSK-07 |
+| E2E-17 | L4 真实调用（opt-in）：真实请求落地后 `/summary` 出现该请求，`priced === true`、`cost > 0`、`confidence` 非空 | REQ-01 / REQ-03 / 全局质量门槛 |
+| E2E-18 | 安全：L4 运行日志与 `/summary`、`/usage` 响应中均不含 `DSH_E2E_LIVE_KEY` 明文或其前 8 位 | 全局质量门槛 / BND-12 |
 
-**执行顺序**：`npm test`（L1）→ `node scripts/e2e.mjs`（先 L2 API 段，后 L3 UI 段）→ L4 人工核对。
+**执行顺序**：`npm test`（L1）→ `node scripts/e2e.mjs`（L2 API 段 → L3 UI 段）→ 若 `TOKEN_DASH_E2E_LIVE=1` 再跑 L4 采样 → L5 人工核对。
 
 **禁止**：为让 L2 / L3 通过而放宽断言（如把 `≈` 断言改成任意金额）、在 `scripts/e2e.mjs` 里绕过真实接口直接读源码常量、或跳过 L2 直接跑 L3。
 
@@ -827,7 +846,7 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | D-16 | 第三方拓展做到哪一层 | A 厂商级精确 / B 估算 + 纠偏（L2）/ C 仅记录 | **B** | 已定（2026-11-10） |
 | D-17 | 第三方订阅如何接入 | A 本轮一并做 / B 按独立 feature 逐个接入 | **B** | 已定（2026-11-10） |
 | D-18 | 是否做离线形态分类器 | A 做（名字/模型族推断）/ B 不做，四档判定 + 声明纠偏 | **B** | 已定（2026-11-10） |
-| D-19 | 分层验收的无人值守范围 | A L1–L3 全自动 / B 仅 L1 自动，L2/L3 需用户在场 / C 全部手动 | 暂按 **B** 执行 | **待用户确认**：确认后 L2/L3 可进无人值守；`push` 与 L4 始终需显式授权 |
+| D-19 | 分层验收的无人值守范围 | A 仅 L1 / B L1–L3 自动 / C L1–L3 + L4 真实调用（opt-in、限额） | **C** | 已定（2026-11-10）：L1–L3 全自动；L4 由 `TOKEN_DASH_E2E_LIVE=1` 开启，单轮 ≤ 4 次请求 / ≤ 5 万 tokens / 仅最便宜模型；`push` 仍逐轮授权 |
 
 ## 九、自测反馈台
 
@@ -845,4 +864,5 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 - 2026-11-10：离线分类器原型验证「只能猜倾向」，拍板 D-18 不做；识别降级为别名表 + 声明。
 - 2026-11-10：按 `design.md` v3.9 全文重写本计划；`design.md` §设计目标 / §两条独立链路 为结构与边界真源。
 - 2026-11-10：按 plan skill 分层验收规范补 §5.1（L1 单测 / L2 API 契约 / L3 UI / L4 真实账本 + 守则五要素），补 §5.2 E2E 用例（fixture 五行 + `E2E-01~11` 断言）；`CHG-11` 细化到具体 fixture 与断言；新增 D-19（无人值守范围，待用户确认，暂按仅 L1）。同时核对 `client.js` 现状费用列只判 `priced === false`，字符串态 `'empty'` 会渲染成 `¥0.00`，已在 CHG-07 标明必须补分支。
+- 2026-11-10：用户确认「e2e 尽量全面、可用少量 token 测试」→ D-19 定为 C：L1–L3 全自动，L4 真实调用采样由 `TOKEN_DASH_E2E_LIVE=1` 开启，限额 4 次/轮、5 万 tokens/轮、仅最便宜模型、估算单轮 < ¥0.01；§5.1 补限额与安全表，§5.2 补 `E2E-12~18`（override 生效、币种切换、reprice 幂等、冷启动降级、unknown 归因、L4 真实链路、密钥不外泄）。
 - 2026-11-10：本轮仅文档，**未修改任何代码**。
