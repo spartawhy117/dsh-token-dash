@@ -4,139 +4,45 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [2.1.0-local.6] - 2026-11-10
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 供应商探测日志改为「清单变化才记」：启动首轮与配置 Key / 掉线导致清单变动时输出 `provider.cache.state`（含已探测家数与 miss 清单），不再每轮刷新重复写 debug 行，便于确认某家 provider（如 Ollama）是否已注册但未配置。
-
-### English
-
-#### Changes
-
-- Provider probing now logs `provider.cache.state` only when the probe list changes (first run after start, after adding a key, or after a provider drops out), including configured providers and the miss list. This replaces the per-refresh debug line, so it is easy to confirm whether a provider (e.g. Ollama) is registered but unconfigured.
-
-## [2.1.0-local.5] - 2026-11-10
-
-> 本地构建，未发布
+## [2.1.0] - 2026-11-10
 
 ### 中文
 
 #### 新增
 
-- 新增 Ollama 供应商：P3 卡片显示套餐剩余与购买余额的合计、套餐已用进度、额度周期结束时间与渠道 30 天用量；余额接口限流时保留上次数值并标注「限流中」。
+- 新增 Ollama 供应商：卡片显示套餐剩余与购买余额的合计、套餐已用进度、额度周期结束时间与渠道 30 天用量；余额接口限流时保留上次数值并标注「限流中」。
+- 纯模型名计价：任意供应商（含第三方部署的 DeepSeek，如 `tencent`）都能按社区价目表出价，未命中时显示「未定价」并可补算。
+- 费用列四态：`≈` 近似价、精确价、「未定价」（带原因提示）、零消耗 `—`。
+- 未声明币种的第三方供应商在卡片标注「按社区表 CNY」；可用 `prefs.json` 的 `providerCurrency` 声明 CNY / USD。
+- `prefs.json` 新增 `priceOverrides` / `providerCurrency`（仅认文件，无设置界面）；新增排障接口 `POST /token-dash/api/pricing/reprice`，启动时自动补算未定价行。
 
 #### 修改
 
-- 计价改为「价目币种必须与供应商一致」：价目表为人民币而供应商按美元结算时，该模型显示「未定价」并说明原因，不再把人民币数值当成美元金额；OpenRouter 与 Qwen 国际站同步修正。
-- 历史成本按新规则重算一次（`costVersion 4`）；订阅与零消耗记录保持原样。
-
-### English
-
-#### Added
-
-- New Ollama provider: the P3 card shows total remaining credits (plan + purchased), plan usage progress, cycle end, and 30-day channel usage; when the balance endpoint is rate limited the last values stay visible with a "Rate limited" note.
-
-#### Changes
-
-- Pricing now requires the price-table currency to match the provider currency: when a CNY table meets a USD provider the model is shown as unpriced with a reason instead of rendering CNY numbers as USD. OpenRouter and Qwen international keys are corrected the same way.
-- Historical costs are recalculated once under the new rule (`costVersion 4`); subscription and zero-usage rows stay untouched.
-
-## [2.1.0-local.4] - 2026-11-10
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- P3 看板的 10 秒轮询改为同时刷新 `/summary` 与 `/usage`：费用、模型明细不再需要手动刷新。
-- `/summary`、`/usage` 日志新增 `probeMs`（供应商探测耗时）与 `durationMs`（整次请求耗时），用于定位首屏延迟。
-
-### English
-
-#### Changes
-
-- The P3 board's 10s poll now refreshes both `/summary` and `/usage`, so cost and model details update without a manual refresh.
-- `/summary` and `/usage` logs now carry `probeMs` (provider probing time) and `durationMs` (total request time) to diagnose first-paint latency.
-
-## [2.1.0-local.3] - 2026-11-10
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 展开 Pill 面板时立即刷新一次数据（2s 内去重），不再等下一次轮询。
-- 面板可见期间轮询缩短到 10 秒，关闭后恢复设置里的刷新间隔；P3 看板常驻时同样按 10 秒跟进。
-
-### English
-
-#### Changes
-
-- Expanding the Pill panel now refreshes immediately (deduped within 2s) instead of waiting for the next poll.
-- While the panel is open the poll interval drops to 10s and returns to the configured interval when closed; the P3 board polls at 10s as well.
-
-## [2.1.0-local.2] - 2026-11-10
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 修正启动日志：价格表实际已就绪时不再误报 `pricing.ready timeout-degraded`（竞速结束后清理定时器）。
-- `pricing.config` 每次启动只记一条，不再同一毫秒重复。
-- 功能与 `2.1.0-local.1` 相同：纯模型名计价、形态四档判定、币种可声明、未定价启动补算。
-
-### English
-
-#### Changes
-
-- Startup logs: no more false `pricing.ready timeout-degraded` when the catalog is already loaded (the racing timer is cleared).
-- `pricing.config` is logged once per startup instead of twice in the same millisecond.
-- Feature set is identical to `2.1.0-local.1`: model-name-only pricing, four-way kind resolution, declarable currency, unpriced backfill at startup.
-
-## [2.1.0-local.1] - 2026-11-10
-
-> 本地构建，未发布
-
-### 中文
-
-#### 新增
-
-- 纯模型名计价：任意 provider（含第三方部署的 DeepSeek，如 `tencent`）都能按社区价目表出价，未命中时显示「未定价」并可补算。
-- 费用列四态：`≈` 近似价、精确价、`未定价`（带原因 tooltip）、零消耗 `—`。
-- 未声明币种的第三方 provider 在卡片标注「按社区表 CNY」；可用 `prefs.providerCurrency` 声明 CNY / USD。
-- `POST /token-dash/api/pricing/reprice` 排障路由；启动时自动补算未定价行。
-- `prefs.json` 新增 `priceOverrides` / `providerCurrency`（仅认文件，无 UI）。
-
-#### 修改
-
-- 计价匹配改为四级短路（精确 → 别名 → 表内正则 → 结构化模糊），不再按 provider 白名单丢弃行。
-- 订阅类 provider 不再套模型价：`kind === 'subscription'` 时 `cost = 0`；形态判定改由 registry 兜底，不再读 `meta.kind`。
+- 计价改为「价目币种必须与供应商一致」：价目表为人民币而供应商按美元结算时，该模型显示「未定价」并说明原因，不再把人民币数值当成美元金额；OpenRouter 与 Qwen 国际站同步修正，历史成本按新规则重算一次（订阅与零消耗记录保持原样）。
+- 计价匹配改为四级短路（精确 → 别名 → 表内正则 → 结构化模糊），不再按供应商白名单丢弃行；订阅类供应商不再套模型价。
+- 展开 Pill 面板时立即刷新（2 秒内去重）；面板可见期间轮询 10 秒，关闭后恢复设置值，整页看板同样按 10 秒跟进，并同时刷新费用与模型明细。
+- 供应商探测日志改为「清单变化才记」：启动首轮与配置 Key / 掉线导致清单变动时输出一次（含已探测家数与未配置清单），不再每轮重复。
+- 启动日志修正：价格表已就绪时不再误报降级，配置日志每次启动只记一条；`/summary`、`/usage` 日志新增供应商探测耗时与整次请求耗时。
 - 设置区结构不变，仍为三行。
 
 ### English
 
 #### Added
 
-- Model-name-only pricing: any provider (including third-party DeepSeek deployments such as `tencent`) is priced from the community catalog; misses show as “Unpriced” and can be backfilled.
-- Four cost-cell states: `≈` approximate, exact, “Unpriced” with a reason tooltip, and `—` for zero-token rows.
-- Providers without a declared currency show “Community table (CNY)” on the card; declare `prefs.providerCurrency` to switch between CNY / USD.
-- `POST /token-dash/api/pricing/reprice` for troubleshooting, plus automatic backfill of unpriced rows at startup.
-- `prefs.json` gains `priceOverrides` / `providerCurrency` (file-only, no UI).
+- New Ollama provider: the card shows total remaining credits (plan + purchased), plan usage progress, cycle end, and 30-day channel usage; when the balance endpoint is rate limited the last values stay visible with a "Rate limited" note.
+- Model-name-only pricing: any provider (including third-party DeepSeek deployments such as `tencent`) is priced from the community catalog; misses show as "Unpriced" and can be backfilled.
+- Four cost-cell states: `≈` approximate, exact, "Unpriced" with a reason tooltip, and `—` for zero-token rows.
+- Providers without a declared currency show "Community table (CNY)" on the card; declare `prefs.json` `providerCurrency` to switch between CNY / USD.
+- `prefs.json` gains `priceOverrides` / `providerCurrency` (file-only, no settings UI) plus a troubleshooting route `POST /token-dash/api/pricing/reprice`; unpriced rows are backfilled at startup.
 
 #### Changes
 
-- Matching now short-circuits through exact → alias → table regex → structured fuzzy, and no longer drops rows by provider whitelist.
-- Subscription providers are no longer priced per token (`cost = 0`); kind falls back to the registry and no longer reads `meta.kind`.
-- Settings area is unchanged (still three rows).
+- Pricing now requires the price-table currency to match the provider currency: when a CNY table meets a USD provider the model is shown as unpriced with a reason instead of rendering CNY numbers as USD. OpenRouter and Qwen international keys are corrected the same way, and historical costs are recalculated once (subscription and zero-usage rows stay untouched).
+- Matching now short-circuits through exact → alias → table regex → structured fuzzy and no longer drops rows by provider whitelist; subscription providers are no longer priced per token.
+- Expanding the Pill panel refreshes immediately (deduped within 2s); while the panel is open the poll interval drops to 10s and returns to the configured value when closed. The full dashboard polls at 10s too and refreshes both cost and model details.
+- Provider probing now logs once when the probe list changes (first run after start, after adding a key, or after a provider drops out) with configured and unconfigured lists, instead of every refresh.
+- Startup logs: no more false degraded-catalog warning when the catalog is already loaded, the pricing config is logged once per startup, and `/summary` / `/usage` logs carry provider-probe and total request durations.
+- The settings area is unchanged (still three rows).
 
 ## [2.0.2] - 2026-11-06
 
