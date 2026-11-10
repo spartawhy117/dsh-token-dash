@@ -219,12 +219,15 @@ export function apply(ctx) {
   const kindOf = (id) => resolveProviderKind(state, prefs, id, metaOf(id))
   /** 币种判定：声明 > 快照 > registry（BND-10，不做换算）。 */
   const currencyOf = (id) => prefs?.providerCurrency?.[id] ?? metaOf(id)?.currency ?? providerCurrency(id)
+  let pricingConfigLogged = ''
   const applyPricingConfig = () => {
     configurePricing({ overrides: prefs?.priceOverrides ?? {}, currencyOf })
-    logger.info('pricing', 'config', {
-      overrides: Object.keys(prefs?.priceOverrides ?? {}).length,
-      currencies: Object.keys(prefs?.providerCurrency ?? {}).length,
-    })
+    const overrides = Object.keys(prefs?.priceOverrides ?? {}).length
+    const currencies = Object.keys(prefs?.providerCurrency ?? {}).length
+    const signature = `${overrides}/${currencies}`
+    if (signature === pricingConfigLogged) return   // 启动期会被调用两次，日志只在变化时打
+    pricingConfigLogged = signature
+    logger.info('pricing', 'config', { overrides, currencies })
   }
   const ready = Promise.all([loadState(dir, logger), loadPrefs(dir, logger)]).then(([loadedState, loadedPrefs]) => {
     state = loadedState ?? emptyState()
@@ -276,17 +279,20 @@ export function apply(ctx) {
   let pricingSettled = false
   function pricingGate() {
     if (pricingSettled) return Promise.resolve()
-    return Promise.race([
-      pricingReady.finally(() => { pricingSettled = true }),
-      new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          pricingSettled = true
-          logger.warn('pricing', 'ready', { waitedMs: 5000, source: 'timeout-degraded' })
-          resolve()
-        }, 5000)
-        timer.unref?.()
-      }),
-    ]).catch(() => { pricingSettled = true })
+    let settled = false
+    return new Promise((resolve) => {
+      const finish = (degraded) => {
+        if (settled) return
+        settled = true
+        pricingSettled = true
+        if (degraded) logger.warn('pricing', 'ready', { waitedMs: 5000, source: 'timeout-degraded' })
+        resolve()
+      }
+      const timer = setTimeout(() => finish(true), 5000)
+      timer.unref?.()
+      // 表已就绪时同步收敛，并清掉定时器——否则孤儿定时器会在 5s 后误报降级
+      pricingReady.then(() => { clearTimeout(timer); finish(false) }, () => { clearTimeout(timer); finish(false) })
+    })
   }
 
   ctx.inject(['sessionPersistence'], (scoped) => {
