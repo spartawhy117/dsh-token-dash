@@ -9,7 +9,7 @@ import { buildSummary, buildUsage, emptyState, localMonthKey, num, repriceState,
 import { ingest, backfill } from './src/collect.js'
 import { REFRESH_OPTIONS, createFlusher, dataDir, loadPrefs, loadState, logsDir, normalizeCurrencyMap, normalizeOverrides, recoverState, resolveHome, saveJson, saveMonths } from './src/store.js'
 import { buildExport, mergeImportDays, validateBundle } from './src/backup.js'
-import { logAdapterEvents, logAdapterFailures, readProviders, readSubscriptions } from './src/adapters.js'
+import { logAdapterEvents, logAdapterFailures, missSignature, readProviders, readSubscriptions } from './src/adapters.js'
 import { PROVIDER_SOURCES } from './src/quota-sources.js'
 import { catalogInfo, configurePricing, loadCommunityPricing, loadRouterPricing } from './src/pricing.js'
 import { providerCurrency } from './src/providers.js'
@@ -208,11 +208,11 @@ export function apply(ctx) {
   let prefs
   let state
   let providerCache = new Map()
-  let providerCacheMeta = { at: 0, hadProviders: false, degraded: false }
+  let providerCacheMeta = { at: 0, hadProviders: false, degraded: false, missSignature: null }
   const cacheData = () => [...providerCache.values()].map((entry) => entry.data).filter((item) => item !== null && item !== undefined)
   const clearProviderCache = () => {
     providerCache.clear()
-    providerCacheMeta = { at: 0, hadProviders: false, degraded: false }
+    providerCacheMeta = { at: 0, hadProviders: false, degraded: false, missSignature: null }
   }
   const metaOf = (id) => cacheData().find((item) => item.id === id)
   /** 形态判定：把当前快照交给 core，prefs / registry 的优先级由 core 决定。 */
@@ -353,6 +353,7 @@ export function apply(ctx) {
         const data = await readProviders(scoped, prefs, providerCache)
         const hadProviders = providerCacheMeta.hadProviders === true || data.length > 0
         providerCacheMeta = {
+          ...providerCacheMeta,
           at: Date.now(),
           hadProviders,
           degraded: data.length === 0 && hadProviders,
@@ -366,7 +367,17 @@ export function apply(ctx) {
         }
         logAdapterEvents(logger, data)
         logAdapterFailures(logger, data.failures)
-        logger.debug('provider', 'cache.state', { entries: providerCache.size, providers: data.length, misses: (data.misses ?? []).length })
+        // 只在探测清单变化时记一次：启动首轮必打，之后配 Key / 断网导致清单变动才再打，避免每轮刷屏
+        const signature = missSignature(data)
+        if (signature !== providerCacheMeta.missSignature) {
+          providerCacheMeta = { ...providerCacheMeta, missSignature: signature }
+          logger.info('provider', 'cache.state', {
+            entries: providerCache.size,
+            providers: data.length,
+            configured: data.map((item) => item.id),
+            misses: data.misses ?? [],
+          })
+        }
         if (stampProviderKinds(state, data)) {
           logger.info('provider', 'kind.stamp', { ids: Object.keys(state.providerKinds) })
           flusher.schedule()

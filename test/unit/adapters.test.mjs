@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { logAdapterEvents, logAdapterFailures, parseGlmQuota, parseKimiQuota, parseOpenRouterCredits, readProviders, readSubscriptions, toSnapshot } from '../../src/adapters.js'
+import { logAdapterEvents, logAdapterFailures, missSignature, parseGlmQuota, parseKimiQuota, parseOpenRouterCredits, readProviders, readSubscriptions, toSnapshot } from '../../src/adapters.js'
 import { parseCommandCodeCredits, parseOpenCodeUsage } from '../../src/quota-sources.js'
 import { emptyState, stampProviderKinds } from '../../src/core.js'
 
@@ -351,4 +351,14 @@ test('Ollama：429 复用旧快照并按 Retry-After 退避', async () => {
   } finally {
     restore()
   }
+})
+
+test('missSignature：清单不变则签名不变，用于缓存态日志去重', () => {
+  const full = { misses: ['deepseek-official:none', 'ollama:none'] }
+  assert.equal(missSignature(full), 'deepseek-official:none,ollama:none')
+  assert.equal(missSignature(full), missSignature({ misses: [...full.misses] }))
+  assert.notEqual(missSignature(full), missSignature({ misses: ['deepseek-official:none'] }))
+  assert.equal(missSignature({ misses: [] }), '')
+  assert.equal(missSignature({}), '')
+  assert.equal(missSignature(null), '')
 })

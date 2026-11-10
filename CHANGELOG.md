@@ -4,6 +4,22 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0-local.6] - 2026-11-10
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 供应商探测日志改为「清单变化才记」：启动首轮与配置 Key / 掉线导致清单变动时输出 `provider.cache.state`（含已探测家数与 miss 清单），不再每轮刷新重复写 debug 行，便于确认某家 provider（如 Ollama）是否已注册但未配置。
+
+### English
+
+#### Changes
+
+- Provider probing now logs `provider.cache.state` only when the probe list changes (first run after start, after adding a key, or after a provider drops out), including configured providers and the miss list. This replaces the per-refresh debug line, so it is easy to confirm whether a provider (e.g. Ollama) is registered but unconfigured.
+
 ## [2.1.0-local.5] - 2026-11-10
 
 > 本地构建，未发布

@@ -251,6 +251,8 @@ addRecord / repriceState / repriceUnpriced
 
 `adapter.ollama.quota.ok`（`amount` / `purchased` / `legacy`）、`quota.fail`（`errorKind` / `httpStatus` / `retryAfter`）、`adapter.ollama.usage`（`range` / `usageUsd`，只读）、`probe.miss` 的 `ollama:none`。日志只记状态与计数，不记 Key 与响应体。
 
+探测清单变化时另记一次 `provider.cache.state`（`configured[]` / `misses[]`）：启动首轮必打，之后只有配 Key、断网或新增源导致清单变动才再打，未变化不重复写——用于确认「某家已注册但未配置」。
+
 ## 三、实现要点
 
 ### 3.0 开发改动总览（计划）
@@ -417,6 +419,7 @@ addRecord / repriceState / repriceUnpriced
 - `adapter.ollama.quota.fail`：`errorKind` / `httpStatus` / `retryAfter`
 - `adapter.ollama.usage`：`range` / `usageUsd`（只读）
 - `probe.miss`：`ollama:none`（未配置）/ `ollama:error`
+- `provider.cache.state`：探测清单变化时记 `configured[]` / `misses[]`（未变化不重复）
 
 ## 八、决策记录
 
@@ -439,3 +442,4 @@ addRecord / repriceState / repriceUnpriced
 - 2026-11-10（拍板）：D-5 取 A——升 `costVersion` 4 并重算历史，前置补 `repriceState(state, kindOf)`，否则订阅行会被写入金额；D-6 取 A——`amount` = 套餐剩余 + 购买余额，P3 拆「套餐已用」「购买余额」两行。§2.3 / §2.4 / CHG-05 / §五 已同步。
 - 2026-11-10（实施）：CHG-01~11 落地，L1 116 项（115 pass / 1 skip）与 L2 e2e 通过；`2.1.0-local.5` 已打包安装。遗留：L3 真实 Key 手测。
 - 2026-11-10（本机核查）：扫 `app.asar` 确认 DSH 无内置 Ollama（pi-ai 43 个 provider 数据无 `ollama.json`），自定义供应商 Key 引用按 `deriveKeyRef(route)` 派生成 `<ROUTE>_API_KEY`；route 填 `ollama` 才与 `credential.refs` 对齐。原「provider 字符串待确认」关闭，README 双语已补该约束。
+- 2026-11-10（local.6）：实测发现未配 Key 的源在日志里不可见（无 adapter 事件、`probe.miss` 仅在零 provider 时触发、`cache.state` 是 debug），把探测清单改为「变化即记」的 info，并抽 `missSignature` 单测；日志可直接看出 `ollama:none`。

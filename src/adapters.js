@@ -537,6 +537,14 @@ const FAILURE_MODULES = {
   'command-code': 'adapter.commandcode',
 }
 
+/**
+ * 探测结果签名：miss 清单不变时无需重复记日志，避免每轮刷新刷屏。
+ * 返回 `id:none,id:hidden,...` 的稳定字符串；无 miss 时为空串。
+ */
+export function missSignature(providers) {
+  return (providers?.misses ?? []).join(',')
+}
+
 /** Promise.allSettled 的拒绝项没有 entry，单独补 adapter.<id> 失败日志。 */
 export function logAdapterFailures(log, failures = []) {
   for (const item of failures) {
