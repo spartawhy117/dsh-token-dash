@@ -397,13 +397,25 @@ export function apply(ctx) {
         try {
           await ready
           if (url.pathname === `${ROUTE_PREFIX}/summary` && req.method === 'GET') {
-            if (Date.now() - providerCacheMeta.at > 5000) await refreshProviderCache()
+            const startedAt = Date.now()
+            let probeMs = 0
+            if (Date.now() - providerCacheMeta.at > 5000) {
+              const probeStartedAt = Date.now()
+              await refreshProviderCache()
+              probeMs = Date.now() - probeStartedAt
+            }
             const summary = buildSummary(state, prefs, Date.now(), cacheData())
             summary.version = CURRENT_VERSION
             summary.refreshMs = prefs.refreshMs
             summary.providersDegraded = providerCacheMeta.degraded === true
             summary.catalog = catalogInfo()
-            logger.info('vm', 'build', { providers: summary.providers.length, api: summary.providers.filter((item) => item.kind === 'api').length, subscription: summary.providers.filter((item) => item.kind === 'subscription').length })
+            logger.info('vm', 'build', {
+              providers: summary.providers.length,
+              api: summary.providers.filter((item) => item.kind === 'api').length,
+              subscription: summary.providers.filter((item) => item.kind === 'subscription').length,
+              probeMs,
+              durationMs: Date.now() - startedAt,
+            })
             json(res, 200, { ok: true, data: summary })
             return
           }
@@ -413,7 +425,13 @@ export function apply(ctx) {
               json(res, 400, { ok: false, reason: 'invalid-range' })
               return
             }
-            if (Date.now() - providerCacheMeta.at > 5000) await refreshProviderCache()
+            const startedAt = Date.now()
+            let probeMs = 0
+            if (Date.now() - providerCacheMeta.at > 5000) {
+              const probeStartedAt = Date.now()
+              await refreshProviderCache()
+              probeMs = Date.now() - probeStartedAt
+            }
             const usage = buildUsage(state, prefs, range, Date.now(), cacheData())
             logger.info('vm', 'usage', {
               range,
@@ -421,6 +439,8 @@ export function apply(ctx) {
               billable: usage.models.filter((item) => item.billable === true).length,
               tokens: usage.total.tokens,
               currencies: Object.keys(usage.totals).length,
+              probeMs,
+              durationMs: Date.now() - startedAt,
             })
             json(res, 200, { ok: true, data: usage })
             return

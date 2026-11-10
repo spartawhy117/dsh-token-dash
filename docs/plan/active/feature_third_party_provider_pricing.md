@@ -869,14 +869,18 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 【第 3 步】用户看到 step 1 或上一次 interval 的结果；下一条数据最坏在 60s 后
 【对比】visibilitychange 通道已存在：document.hidden → false 时 task() + start()，
          说明"可见即刷新"机制已有，缺的是"展开/激活"这条触发
-【修复】展开时 load 一次（5s 去重）；可见期轮询 10s，关闭回 refreshMs
+【第 4 步：★第二处问题根源】P3 的轮询只调 loadSummary()，而「范围与明细」的费用/模型表
+         全部来自 /usage（loadUsage 只在 refresh() 里调）→ 即使轮询跑了，明细区数字也不动
+【修复】展开时 load 一次（2s 去重）；可见期轮询 10s；P3 轮询同时刷 summary 与 usage
 ```
 
 日志佐证（`dsh-token-dash-20261110.log`，local.2 启动）：`12:16:15.884` 三个 slot `mount.ok` → `12:16:46.162` 才出现首条 `vm.build`；其后 `vm.build` 间隔 71s / 179s，期间展开面板没有新增请求。
 
 #### 9.3 结论
 
-- 根因：`client.js` · `usePolling` 只负责定时器，展开动作未接入刷新链；`Pill` 的 `open` 状态只驱动尺寸测量。
+- 根因（两处）：
+  1. `client.js` · `usePolling` 只负责定时器，展开动作未接入刷新链；`Pill` 的 `open` 状态只驱动尺寸测量。
+  2. `BoardPage` 的 10s 轮询只调 `loadSummary()`，而看板的费用与明细来自 `/usage`，`loadUsage` 只在 `refresh()` 里执行 → 明细区不会随轮询更新。
 - 修复后路径：`open: true` → `load()`（5s 内去重）→ 立即出数；可见期 10s 轮询 → 对话进行中也在跟。
 - 不变路径：`visibilitychange`、手动刷新按钮、`/providers/refresh` 逻辑不动。
 - 遗留：宿主 `addRecord` 后主动推送（SSE / 轻量 `rev` 探测）不做，见 9.5。
@@ -884,7 +888,8 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 #### 9.4 修复实施
 
 - `client.js` · `Pill`：`lastLoadAt` 记录上次拉取时间；`open` 变 true 且距上次 > 2s 时 `load()`（2s 窗口挡开合抖动与 `refreshMs` 回填导致的重跑）；轮询周期 `open ? 10s : refreshMs`。
-- `client.js` · `BoardPage`：常驻轮询周期取 `min(10s, refreshMs)`，进入页面仍是首帧 `refresh()`。
+- `client.js` · `BoardPage`：常驻轮询周期取 `min(10s, refreshMs)`，并**同时刷新 `summary` 与 `usage`**；进入页面仍是首帧 `refresh()`。
+- `index.js` · `/summary`、`/usage`：日志补 `probeMs`（provider 探测耗时）与 `durationMs`（整次请求耗时），供 9.5 的首屏问题取证。
 - 首屏 30s 阻塞（`/summary` 等 `refreshProviderCache`）本轮不改，转入 9.5 遗留，避免一次改动跨前后端。
 
 #### 9.5 不改的位置与理由
@@ -894,11 +899,11 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 
 #### 9.6 验收
 
-- 环境与方式：`npm test` + `npm run e2e`（Playwright 统计 `/summary` 请求数，新增断言「展开面板应触发一次新的 `/summary`」）。
+- 环境与方式：`npm test` + `npm run e2e`（统计 `/summary` 与 `/usage` 请求数，两条断言）。
 - 结果：
   - `npm test`：99 pass / 1 skipped（local 版本跳过 release-notes）。
-  - `npm run e2e`：通过；`summaryBeforeOpen → openPanel()` 后计数增加，A 项成立。
-  - B 项（可见期 10s 轮询）未做时长断言（会额外等 10s 拖慢 e2e），留待装包后现场观察：面板保持打开 30s，`[TD:vm] build` 应出现 ≥3 条。
+  - `npm run e2e`：通过。A 项：`openPanel()` 后 `/summary` 计数增加。B 项：看板停留 11s 后 `/usage` 计数增加（费用与明细的数据源确实在轮询）。
+  - 首屏耗时：日志已加 `probeMs` / `durationMs`，装包后按 9.5 的取证步骤确认探测耗时。
 - 剩余风险：10s 轮询在长开面板时把请求量提到约 6 倍（单次为本地内存读，开销可忽略）。
 
 ### 反馈流水

@@ -152,6 +152,7 @@ const usageFor = (range) => ({
 let failSummary = false
 let failUsage = false
 let summaryRequests = 0
+let usageRequests = 0
 let updateAvailable = false
 let updateRequests = 0
 let usageDelay = 0
@@ -243,6 +244,7 @@ try {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: currentSummary }) })
   })
   await page.route('**/token-dash/api/usage*', async (route) => {
+    usageRequests += 1
     const range = new URL(route.request().url()).searchParams.get('range') ?? 'today'
     if (usageDelay > 0) await new Promise((resolveDelay) => setTimeout(resolveDelay, usageDelay))
     if (failUsage) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, reason: 'mock-usage' }) })
@@ -506,6 +508,11 @@ try {
   assert.equal(await currencyBadge.count(), 1)
   assert.match(await currencyBadge.innerText(), /按社区表 CNY/)
   assert.equal(await board.getByTestId('token-dash-currency-source-openrouter').count(), 0)
+
+  // Issue #1 B 项：看板常驻时每 10s 应重新拉 /usage（费用与明细的数据源）
+  const usageBeforePoll = usageRequests
+  await page.waitForTimeout(11_000)
+  assert.ok(usageRequests > usageBeforePoll, '看板应每 10s 刷新 /usage（Issue #1）')
   const [repoBox, headRefreshBox] = await Promise.all([
     board.getByTestId('token-dash-repo').boundingBox(),
     board.getByTestId('token-dash-board-head-refresh').boundingBox(),

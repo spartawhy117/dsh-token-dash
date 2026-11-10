@@ -4,6 +4,24 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0-local.4] - 2026-11-10
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- P3 看板的 10 秒轮询改为同时刷新 `/summary` 与 `/usage`：费用、模型明细不再需要手动刷新。
+- `/summary`、`/usage` 日志新增 `probeMs`（供应商探测耗时）与 `durationMs`（整次请求耗时），用于定位首屏延迟。
+
+### English
+
+#### Changes
+
+- The P3 board's 10s poll now refreshes both `/summary` and `/usage`, so cost and model details update without a manual refresh.
+- `/summary` and `/usage` logs now carry `probeMs` (provider probing time) and `durationMs` (total request time) to diagnose first-paint latency.
+
 ## [2.1.0-local.3] - 2026-11-10
 
 > 本地构建，未发布

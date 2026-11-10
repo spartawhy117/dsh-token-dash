@@ -1774,8 +1774,8 @@ window.__ModuleLoader__.load({
       }, [loadSummary, loadPrefs, loadUsage])
 
       useEffect(() => { void refresh() }, [refresh])
-      // 看板常驻，轮询周期取 min(10s, refreshMs)，对话进行中也能跟上
-      usePolling(() => { void loadSummary() }, { refreshMs: Math.min(10_000, Number(summary?.refreshMs) || 60000) })
+      // 看板常驻，轮询周期取 min(10s, refreshMs)；费用与明细来自 /usage，必须一起刷
+      usePolling(() => { void loadSummary(); void loadUsage() }, { refreshMs: Math.min(10_000, Number(summary?.refreshMs) || 60000) })
 
       const savePrefs = useCallback(async (patch) => {
         if (prefsRef.current === null) return { ok: false, reason: 'not-ready' }
