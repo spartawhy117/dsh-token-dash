@@ -1,9 +1,8 @@
 # 第三方 Provider 自适应识别与模型名计价
 
-> 状态：已对齐<br>
-> 创建时间：2026-11-09<br>
-> 更新时间：2026-11-10（按 `design.md` v3.9 重写：边界收敛为 L2「估算 + 纠偏」，形态四档判定，币种可声明，未定价闭环；不做厂商识别；§5.1 分层验收 L1–L3 自动 + L4 真实调用采样（opt-in、限额））<br>
-> 关联逻辑根：`dsh-token-dash`（`src/catalog.js` / `src/match.js` / `src/pricing.js` / `src/core.js` / `src/store.js` / `src/providers.js` / `index.js` / `client.js`）<br>
+> 状态：已实施<br>
+> 完成时间：2026-11-10<br>
+> 关联逻辑根：`dsh-token-dash`（`src/catalog.js` / `src/match.js` / `src/pricing.js` / `src/core.js` / `src/store.js` / `src/collect.js` / `index.js` / `client.js`）<br>
 > 关联资料：[`design.md`](../../design.md) §设计目标 / §两条独立链路 / §第三方接入与扩展边界、[`ui-design.md`](../../ui-design.md) §5.5 范围与明细 / §5.7 设置与数据管理 / §7 文案与空态
 
 ## 〇、前置依赖 / 代码探查事实
@@ -25,38 +24,7 @@
 | 本机真实账本（2026-11-10） | 2 行：`tencent :: deepseek-v4.1-flash-ioa` 118,959,865 tokens / 686 请求 / `cost=0` / `priced=false`；`unknown :: deepseek-flash` 12,544 tokens / 1 请求 / `cost=0.0131` | `$DSH_HOME/dsh-token-dash/daily.json` + `months/` |
 | 用户视角覆盖率 = 单行覆盖率 | `tencent` 行占全部 token 的 99.99%，第一验收对象是「这一行能否出价」 | 同上 |
 
-### 根因链（已复现）
-
-```text
-[session/event] ──► ingest ──► addRecord
-                                  └─► priceFor(provider='tencent', model='deepseek-v4.1-flash-ioa')
-                                        ├─ exactEntry  : entry.provider === 'tencent'  ✗ 目录无此行
-                                        ├─ aliasEntry  : entry.provider === 'tencent'  ✗
-                                        ├─ familyEntry : entry.provider === 'tencent'  ✗
-                                        └─ null ──► priced=false ──► cost += 0
-```
-
-模型名改成与官方一致的 `deepseek-v4.1-flash`，在 `tencent` 下仍为 `null`——第一关断在 provider，模型名从未参与比较。按社区表价折算，该行应为 **¥4.76（全闲时）/ ¥9.52（全高峰）**。
-
-### 代码复核发现的结构性问题
-
-| # | 缺陷 | 代码证据 | 后果 |
-|---|---|---|---|
-| P-1 | 实时 ingest 未等价格表就绪 | `index.js` `session/event` 直接调 `ingest`；backfill 有 `race(pricingReady, 5s)` | 冷启动前几秒用内置表计价，与 backfill 口径不一致 |
-| P-2 | 成本入账即固化 | `core.js` `addRecord` 内 `row.cost += …`；`repriceState` 仅 `costVersion !== 3` 时运行（当前已是 3） | 价目修好后历史行仍显示 ¥0 |
-| P-3 | 币种写死在模型行 | `normalizeEntry` 用 `providerCurrency()` 兜底；VM 按 `row.currency` 分桶 | 未知 provider 一律 CNY，USD 中转低估约 7 倍 |
-| P-4 | 零消耗行误标 `priced=true` | `addRecord` 初始化 `priced: true`；VM 默认行硬编码 `priced: true` | 空行与真实缺价行无法区分 |
-| P-5 | 入账不判形态，VM 读 `meta.kind` 且兜底 `'api'` | `core.js` `addRecord` 无 kind 分支；`toSnapshot` 把非订阅一律规整为 `api` | 订阅 provider 被套模型价，卡片又按「API 用量」展示 |
-
-### 本次探查推翻的旧结论
-
-| 旧结论 | 纠正 |
-|---|---|
-| 「禁止跨 provider 兜底」 | 禁令针对粗粒 `family` 前缀兜底。改按模型名结构化匹配后，可命中 `deepseek-v4.1-flash` 而不误配 `deepseek-chat`，禁令撤销 |
-| 「匹配需以 provider 为前提」 | 社区表无 provider 维度、`modelId` 全局唯一；provider 前置既无数据依据，又把第三方 provider 全部挡在门外 |
-| 「社区表 176 行不可用」 | 是插件自行丢弃，非数据缺陷；纯模型名匹配后全部可用 |
-| 「`familyEntry` 可作兜底」 | `family` 是宽泛族名，`startsWith` 几乎必然误配，应**移除**而非保留 |
-| 「可以靠 `baseURL` / 域名识别厂商」 | 事件与本地配置都拿不到 `baseURL`；且 key 不能向未知域名探测。**不做厂商识别**（`design.md` §设计目标） |
+> 归因链与五项结构性缺陷（P-1~P-5）属过程证据，已在实施中闭环：现状分支见 §2.1，结论见 §3.0 与 §六。
 
 ## 一、需求
 
@@ -383,9 +351,9 @@ structuredFuzzy(modelId):
 
 日志事件与含义以 §七 日志速查 为唯一来源，本节不重复。本方案相对现状只新增三项：`pricing.kind` / `pricing.currency` 两条判定来源、`pricing.reprice.reasons` 的跳过原因分桶，以及 `pricing.fuzzy.confidence` 字段。
 
-## 三、实现要点
+## 三、最终实现
 
-### 3.0 开发改动总览（计划）
+### 3.0 最终改动总览
 
 | ID | 类型 | 文件 | 开发改动说明 |
 |---|---|---|---|
@@ -405,298 +373,6 @@ structuredFuzzy(modelId):
 
 > `src/backup.js` 无需改动：`prefs` 整体导出，两个新键随之进出；导入走 `normalizePrefs` 白名单，与 `budgets` 同语义。
 
-### 3.1 改动清单（待实施）
-
-#### CHG-01 · `src/catalog.js`（新增文件）
-
-```js
-/** 社区 / 内置表统一入口：纯模型维度，provider 不参与归一与过滤；路由价由 pricing 侧单独加载。 */
-export function loadCatalog(raw, source = 'community') {
-  const entries = []
-  const seen = new Map()
-  for (const item of Array.isArray(raw?.models) ? raw.models : []) {
-    const entry = toEntry(item, source)
-    if (entry === null) continue
-    if (seen.has(entry.modelId)) {
-      logger?.warn('pricing', 'catalog.duplicate', { modelId: entry.modelId, source })
-      continue
-    }
-    seen.set(entry.modelId, entry)
-    entries.push(entry)
-  }
-  return { entries, currency: raw?.currency === 'USD' ? 'USD' : 'CNY', updatedAt: raw?.updatedAt ?? null, source }
-}
-
-function toEntry(raw, source) {
-  const modelId = normalizeModel(raw?.modelId ?? raw?.model)
-  if (modelId === 'unknown') return null            // 仅模型名缺失才丢弃
-  const tier = tieredPrices(raw)                    // dailySlots → peak/offPeak
-  const prices = communityPrices(raw)
-  const hasFlat = prices.input !== null && prices.output !== null
-  if (!hasFlat && tier === null) return null
-  return {
-    modelId,
-    displayName: String(raw?.displayName ?? raw?.modelId ?? modelId),
-    family: String(raw?.family ?? ''),
-    aliases: (Array.isArray(raw?.aliases) ? raw.aliases : []).map(normalizeModel),
-    regexps: (Array.isArray(raw?.aliasPatterns) ? raw.aliasPatterns : [])
-      .filter((p) => typeof p === 'string')
-      .flatMap((p) => {
-        try {
-          return [new RegExp(p, 'i')]
-        } catch {
-          logger?.warn('pricing', 'catalog.pattern', { modelId, pattern: p, source })
-          return []
-        }
-      }),
-    parsed: null,
-    source,
-    prices: tier === null ? prices : null,
-    peak: tier?.peak ?? null,
-    offPeak: tier?.offPeak ?? null,
-    currency: raw?.currency === 'USD' ? 'USD' : 'CNY',
-  }
-}
-```
-
-#### CHG-02 · `src/match.js`（新增文件）
-
-```js
-const SIGNIFICANT = new Set(['flash', 'pro', 'max', 'mini', 'air', 'plus', 'turbo', 'lite', 'coder', 'code', 'reasoner', 'chat', 'vision'])
-const NOISE = new Set(['ioa', 'exp', 'experimental', 'preview', 'beta', 'alpha', 'rc', 'dev', 'test', 'latest', 'stable', 'prod', 'production', 'free', 'ga'])
-
-/** 非首个数字段的三位以上纯数字片按噪声处理，不得进入 family。 */
-function isNumericNoise(part, index) {
-  return index > 0 && /^\d{3,}$/.test(part)
-}
-
-export function parseModelId(raw) {
-  const s = normalizeModel(raw)
-  if (s === 'unknown') return null
-  const version = s.match(/\d+(?:\.\d+)*/)?.[0] ?? null
-  const parts = (version === null ? s : s.replace(version, '|')).split(/[-_|]/).filter(Boolean)
-  return {
-    version,
-    family: parts.filter((p, i) => !SIGNIFICANT.has(p) && !NOISE.has(p) && !isNumericNoise(p, i)).join('-'),
-    tags: new Set(parts.filter((p, i) => SIGNIFICANT.has(p) || NOISE.has(p) || isNumericNoise(p, i))),
-  }
-}
-
-/** 四级短路解析：任一级命中即返回；不认识 provider，也不认识 override。 */
-export function resolveMatch(model, entries) {
-  const modelId = normalizeModel(model)
-  if (modelId === 'unknown') return null
-
-  const exact = entries.find((entry) => entry.modelId === modelId)
-  if (exact !== undefined) return { entry: exact, confidence: 'exact', deltaTags: [] }
-
-  const alias = entries.find((entry) => entry.aliases.includes(modelId))
-  if (alias !== undefined) return { entry: alias, confidence: 'alias', deltaTags: [] }
-
-  const pattern = patternByModel(modelId, entries)
-  if (pattern !== null) return { entry: pattern, confidence: 'pattern', deltaTags: [] }
-
-  const req = parseModelId(modelId)
-  const fuzzy = req === null ? null : structuredFuzzy(req, entries)
-  if (fuzzy === null) return null
-  const fuzzyTags = parseModelId(fuzzy.modelId)?.tags ?? new Set()
-  return { entry: fuzzy, confidence: 'fuzzy', deltaTags: [...req.tags].filter((tag) => !fuzzyTags.has(tag)) }
-}
-
-/** 表内正则已在 catalog 加载时预编译。 */
-function patternByModel(modelId, entries) {
-  for (const entry of entries) {
-    for (const regexp of entry.regexps) {
-      if (regexp.test(modelId)) return entry
-    }
-  }
-  return null
-}
-
-/** 版本段 + 族名 + 档位覆盖 + 噪声白名单；多候选一律不猜。 */
-function structuredFuzzy(req, entries) {
-  const cand = entries.filter((entry) => {
-    const p = parseModelId(entry.modelId)
-    if (p === null || p.version !== req.version || p.family !== req.family) return false
-    for (const t of p.tags) if (!req.tags.has(t)) return false
-    for (const t of req.tags) if (!p.tags.has(t) && !NOISE.has(t)) return false
-    return true
-  })
-  return cand.length === 1 ? cand[0] : null
-}
-```
-
-#### CHG-03 · `src/pricing.js`
-
-```diff
-- export function priceFor(provider, model, ts = Date.now()) {
--   const providerId = normalizeProvider(provider)
--   const modelId = normalizeModel(model)
--   const exact = exactEntry(providerId, modelId)
--   if (exact !== null) { /* ... */ }
--   const alias = aliasEntry(providerId, modelId)
--   if (alias !== null) { /* ... */ }
--   const family = familyEntry(providerId, modelId)
--   if (family !== null) { /* ... */ }
--   return null
-- }
-+ export function resolvePrice(model, provider, ts = Date.now()) {
-+   const modelId = normalizeModel(model)
-+   if (modelId === 'unknown') return null
-+   // override 优先且短路选表：价格与币种必须同源
-+   const override = overrideEntry(modelId, normalizeProvider(provider), overrides)
-+   if (override !== null) return quoteOf(override, 'override', override.currency, 'override')
-+   const matched = resolveMatch(modelId, catalog.entries)
-+   if (matched === null) return null
-+   const table = selectTable(matched.entry, provider, currencyOf(provider))
-+   return quoteOf(effectivePrices(table.entry, ts), matched.confidence, table.currency, table.name)
-+ }
-```
-
-```js
-/** 币种判定：prefs 声明 > 快照 > registry；USD 且路由表有该模型才用路由价。 */
-function selectTable(matched, provider, currency) {
-  const routed = currency === 'USD' ? routerEntry(matched.modelId) : null
-  return routed === null
-    ? { name: 'community', entry: matched, currency: matched.currency }
-    : { name: 'router', entry: routed, currency: 'USD' }
-}
-```
-
-> **调用契约**：`resolvePrice` 只负责「能算多少钱、什么币种」，**不判断形态**。`kind` 分流必须在调用前完成（`addRecord` / `repriceUnpriced`）。override 属计价层而非匹配层，因为 `provider:model` 双级键需要 provider。
-
-#### CHG-04 · `src/core.js`
-
-```diff
-  export function costOf(record) {
--   const price = priceFor(record.provider ?? 'unknown', record.model, record.ts)
-+   const price = resolvePrice(record.model, record.provider ?? 'unknown', record.ts)
-    if (price === null) return 0
-```
-
-```diff
-+ import { providerKind } from './providers.js'
-- export function addRecord(state, record) {
-+ export function addRecord(state, record, kindOf = (id) => providerKind(id)) {
-```
-
-```diff
--   const price = priceFor(provider, model, record.ts)
--   const priceMissing = price === null || price.input === null || price.output === null
--   if (priceMissing) row.priced = false
--   row.cost += priceMissing ? 0 : costOf({ ...record, provider })
-+   const kind = kindOf(provider)
-+   if (kind === 'subscription') {
-+     row.priced = 'subscription'                 // 套餐不计价（REQ-12）
-+   } else {
-+     const price = resolvePrice(model, provider, record.ts)
-+     const priceMissing = price === null || price.input === null || price.output === null
-+     row.priced = priceMissing ? false : true
-+     row.cost += priceMissing ? 0 : costOf({ ...record, provider })
-+   }
-+   const hasTokens = row.input + row.cacheRead + row.cacheWrite + row.output > 0
-+   if (!hasTokens) row.priced = 'empty'          // 零消耗最后覆盖
-```
-
-> `kindOf` 由 `index.js` 注入；默认值只查 registry，因此 `backfill` 在快照到位前也能把 `tencent` 判成 `api`。
-
-```diff
--   return meta?.kind === 'subscription' ? 'subscription' : 'api'
-+   // meta.kind 是 adapter 规整后的回声值，不能当作「探测到了 api」的证据
-+   return providerKind(id)                 // registry 未收录 → 'api'
-```
-
-#### CHG-05 · `src/store.js`
-
-```diff
-  export const DEFAULT_PREFS = {
-    version: 1,
-    budgets: {},
-    billingModes: {},
-    refreshMs: 60000,
-    showBalance: true,
-+   priceOverrides: {},
-+   providerCurrency: {},
-  }
-```
-
-#### CHG-06 · `index.js`
-
-```diff
-  ctx.on(
-    'session/event',
-    (session, event) => {
-      if (state === undefined) return
--     const sessionId = session?.id ?? session?.header?.id ?? 'live'
--     const record = ingest(state, sessionId, event, num(session?.header?.seedLength))
--     if (record !== undefined) flushReady?.schedule?.()
-+     void pricingGate().then(() => {
-+       const sessionId = session?.id ?? session?.header?.id ?? 'live'
-+       const record = ingest(state, sessionId, event, num(session?.header?.seedLength))
-+       if (record !== undefined) flushReady?.schedule?.()
-+     })
-    },
-    { global: true },
-  )
-```
-
-```js
-/** 价格表就绪门：有界等待，超时降级用当前表。 */
-function pricingGate() {
-  if (pricingSettled) return Promise.resolve()
-  return Promise.race([
-    pricingReady.finally(() => { pricingSettled = true }),
-    new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        pricingSettled = true
-        logger.warn('pricing', 'ready', { waitedMs: 5000, source: 'timeout-degraded' })
-        resolve()
-      }, 5000)
-      timer.unref?.()
-    }),
-  ]).catch(() => { pricingSettled = true })
-}
-
-// 启动补算：就绪门放行前跑一次，只补 priced=false
-function repriceAtBoot() {
-  if (state === undefined) return
-  const result = repriceUnpriced(state, { scope: 'all' }, kindOf)
-  if (result.rows > 0) {
-    logger.info('pricing', 'reprice', result)
-    flusher.schedule()
-  }
-}
-
-// prefs 白名单：两个新键随 GET / PUT /prefs 与导入一起透传
-function normalizePrefs(input, base) {
-  // ...budgets / billingModes / refreshMs / showBalance 逻辑不变
-  prefs.priceOverrides = normalizeOverrides(input?.priceOverrides ?? base.priceOverrides)
-  prefs.providerCurrency = normalizeCurrencyMap(input?.providerCurrency ?? base.providerCurrency)
-  return prefs
-}
-
-// 排障路由（无 UI）
-if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST') {
-  const result = repriceUnpriced(state, { scope: url.searchParams.get('scope') ?? 'all' }, kindOf)
-  await flusher.flush()
-  logger.info('pricing', 'reprice', result)
-  json(res, 200, { ok: true, data: result })
-  return
-}
-```
-
-#### CHG-07 · `client.js`
-
-- 明细费用列：`row.priced === false` → 「未定价」+ `reason` tooltip；`'empty'` → `—`；其余按 `row.approximate` 前缀 `≈`。**注意现状只判 `=== false`**（`client.js` 现行 `row.kind !== 'api' ? '—' : row.priced === false ? '未定价' : 金额`），字符串态 `'empty'` 会落进金额分支渲染成 `¥0.00`，必须显式补一支。
-- 币种标注：`currencySource === 'community'` 且 provider 未声明时，卡片补「按社区表 CNY」。
-- 订阅行费用位保持 `—`（现有 `row.kind !== 'api'` 分支）。
-- **不新增任何设置项**，P3 设置胶囊仍三行。
-
-#### CHG-08 · 词条（`client.js` 内联词典 + `locale/*.json`）
-
-- 运行时词典是 `client.js` 内的 `EN` 常量（`ZH` 由 key 恒等映射），`locale/zh.json` / `locale/en.json` 是随包副本，两处必须同步。
-- 新增 key：置信度标记、未定价三种 `reason`、按社区表 CNY、零消耗 `—`、按 provider 声明币种。
-
 ## 四、不改动 / 边界（已确认）
 
 - `BND-01`：provider 不作为计价准入条件，只参与选表与 `kind` 判定。
@@ -713,106 +389,72 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 - `BND-12`：**不做厂商识别**——不读 `baseURL`、不做域名指纹、不做网络探测、不读宿主配置与本机登录态、不做通用 custom 源。
 - `BND-13`：**不承诺价格等于渠道账单**；本次不新增 provider 源表行；第三方订阅按独立 feature 接入。
 
-## 五、验收要点（待验证）
+## 五、最终验收
 
 | 项 | 来源 | 验证方式 | 结果 |
 |---|---|---|---|
-| **本机真实行出价**：`tencent :: deepseek-v4.1-flash-ioa` 由 `priced=false` 变为 `priced=true`，cost ≈ ¥4.76（闲时）/ ¥9.52（高峰） | REQ-01 / REQ-03 / 全局质量门槛 | 装插件后读 `daily.json` 与该行明细 | 待验证 |
-| 任意 registry 未收录 provider（无 adapter / 无快照）下模型可计价 | REQ-01 / BND-01 / RSK-07 | 单测：`kindOf` 默认值 + `tencent` 场景 | 待验证 |
-| 表内 `aliases` / `aliasPatterns` 生效 | REQ-02 | 单测：`deepseek-flash` / `deepseek-v41-flash-1017` | 待验证 |
-| `deepseek-v4.1-flash-ioa` → `deepseek-v4.1-flash` | REQ-03 | 单测 | 待验证 |
-| 全量入表且自匹配 0 失败（规模断言用 `entries.length`） | REQ-04 | 单测遍历全表 | 待验证 |
-| 模糊显示 `≈`，精确无标记 | REQ-05 | e2e 断言 | 待验证 |
-| 未新增价目 UI、设置胶囊仍三行 | REQ-06 / BND-09 | e2e 断言设置区行数 | 待验证 |
-| 实时 ingest 与 backfill 口径一致 | REQ-07 / RSK-05 | 单测：gate 超时降级不阻塞；日志 `pricing.ready` | 待验证 |
-| 未定价进日志与 VM，`reason` 正确 | REQ-08 | 检查 `pricing.miss` 与 `cost.unpriced` | 待验证 |
-| 启动自动补算：重启后 `priced=false` 转 `true`，已计价行数值不变 | REQ-09 / RSK-04 / RSK-08 | 单测混合行 + 现场重启核对 | 待验证 |
-| 零消耗行标 `'empty'` 且 UI 显示 `—` | REQ-10 | 单测 + e2e | 待验证 |
-| 币种来源可见；声明后卡片币种随之变化 | REQ-11 / REQ-14 / RSK-03 | 单测 + e2e | 待验证 |
-| `v4-pro` / `chat` / `glm-5.3-flash` 不误配 | RSK-01 / BND-02 / BND-03 | 单测反例集 | 待验证 |
-| 多候选返回 `null` | BND-04 | 单测构造双候选 | 待验证 |
-| 路由价与社区表不撞车；override 命中不选表 | CHG-03 / BND-10 | 单测：USD provider 取路由价；override 走 override 币种 | 待验证 |
-| `familyEntry` 移除后无回归 | BND-05 | 单测：`deepseek-xxx` 不再命中 `chat` 档 | 待验证 |
-| **订阅 provider 不计价** | REQ-12 / RSK-06 | 单测：`kind='subscription'` 时 `priced='subscription'`、`cost=0`，不调用 `resolvePrice` | 待验证 |
-| **OpenCode / Command Code 币种仍为 USD** | REQ-12 | e2e：两卡片余额币种显示 `$`，费用行不出现 `¥` | 待验证 |
-| **无 Key 的订阅 provider 不计价，且自填 provider 仍计价** | REQ-13 / RSK-06 / RSK-07 | 单测：`meta` 为 `undefined` 时 `zhipu` → `subscription`、`tencent` → `api` | 待验证 |
-| **`meta.kind` 不再作为形态证据** | REQ-13 / BND-05 | 单测：`meta.kind='api'` + `meta.mode='unknown'` 时按 registry 判定 | 待验证 |
-| **任意 provider 要么出价、要么明确未定价** | REQ-15 / BND-12 / BND-13 | 单测：`tencent` 出价、`ollama` 兜底 `api` 带 reason、未知模型落 `no-model-price` | 待验证 |
-| **adapter 声明零改动** | BND-05 | `git diff src/quota-sources.js src/adapters.js` 为空 | 待验证 |
-| 全量测试 | 质量门槛 | `npm test` + `npm run e2e` | 待验证 |
+| **本机真实行出价**：`tencent :: deepseek-v4.1-flash-ioa` 由 `priced=false` 变为 `priced=true`，cost ≈ ¥4.76（闲时）/ ¥9.52（高峰） | REQ-01 / REQ-03 / 全局质量门槛 | 装插件后读 `daily.json` 与该行明细 | 通过 |
+| 任意 registry 未收录 provider（无 adapter / 无快照）下模型可计价 | REQ-01 / BND-01 / RSK-07 | 单测：`kindOf` 默认值 + `tencent` 场景 | 通过 |
+| 表内 `aliases` / `aliasPatterns` 生效 | REQ-02 | 单测：`deepseek-flash` / `deepseek-v41-flash-1017` | 通过 |
+| `deepseek-v4.1-flash-ioa` → `deepseek-v4.1-flash` | REQ-03 | 单测 | 通过 |
+| 全量入表且自匹配 0 失败（规模断言用 `entries.length`） | REQ-04 | 单测遍历全表 | 通过 |
+| 模糊显示 `≈`，精确无标记 | REQ-05 | e2e 断言 | 通过 |
+| 未新增价目 UI、设置胶囊仍三行 | REQ-06 / BND-09 | e2e 断言设置区行数 | 通过 |
+| 实时 ingest 与 backfill 口径一致 | REQ-07 / RSK-05 | 单测：gate 超时降级不阻塞；日志 `pricing.ready` | 通过 |
+| 未定价进日志与 VM，`reason` 正确 | REQ-08 | 检查 `pricing.miss` 与 `cost.unpriced` | 通过 |
+| 启动自动补算：重启后 `priced=false` 转 `true`，已计价行数值不变 | REQ-09 / RSK-04 / RSK-08 | 单测混合行 + 现场重启核对 | 通过 |
+| 零消耗行标 `'empty'` 且 UI 显示 `—` | REQ-10 | 单测 + e2e | 通过 |
+| 币种来源可见；声明后卡片币种随之变化 | REQ-11 / REQ-14 / RSK-03 | 单测 + e2e | 通过 |
+| `v4-pro` / `chat` / `glm-5.3-flash` 不误配 | RSK-01 / BND-02 / BND-03 | 单测反例集 | 通过 |
+| 多候选返回 `null` | BND-04 | 单测构造双候选 | 通过 |
+| 路由价与社区表不撞车；override 命中不选表 | CHG-03 / BND-10 | 单测：USD provider 取路由价；override 走 override 币种 | 通过 |
+| `familyEntry` 移除后无回归 | BND-05 | 单测：`deepseek-xxx` 不再命中 `chat` 档 | 通过 |
+| **订阅 provider 不计价** | REQ-12 / RSK-06 | 单测：`kind='subscription'` 时 `priced='subscription'`、`cost=0`，不调用 `resolvePrice` | 通过 |
+| **OpenCode / Command Code 币种仍为 USD** | REQ-12 | e2e：两卡片余额币种显示 `$`，费用行不出现 `¥` | 通过 |
+| **无 Key 的订阅 provider 不计价，且自填 provider 仍计价** | REQ-13 / RSK-06 / RSK-07 | 单测：`meta` 为 `undefined` 时 `zhipu` → `subscription`、`tencent` → `api` | 通过 |
+| **`meta.kind` 不再作为形态证据** | REQ-13 / BND-05 | 单测：`meta.kind='api'` + `meta.mode='unknown'` 时按 registry 判定 | 通过 |
+| **任意 provider 要么出价、要么明确未定价** | REQ-15 / BND-12 / BND-13 | 单测：`tencent` 出价、`ollama` 兜底 `api` 带 reason、未知模型落 `no-model-price` | 通过 |
+| **adapter 声明零改动** | BND-05 | `git diff src/quota-sources.js src/adapters.js` 为空 | 通过 |
+| 全量测试 | 质量门槛 | `npm test` + `npm run e2e` | 通过 |
 
-### 5.1 E2E 分层验收与自主执行守则
+### 5.1 验收分层
 
-| 层 | 内容 | 方式 | 资源消耗 | 无人值守 |
-|---|---|---|---|---|
-| L1 单测 | `catalog` / `match` / `pricing` / `core` / `store` 的纯函数与入账口径 | `npm test` | 无（进程内） | **自动** |
-| L2 API 契约 | 临时 `DSH_HOME` + `web` profile：`/summary`、`/usage`、`/prefs`、`POST /pricing/reprice` 的真实 HTTP 断言 | `node scripts/e2e.mjs`（API 段） | 本地进程；价目表拉取失败时降级内置表 | **自动** |
-| L3 UI 状态 | Playwright 拦截 `/summary`、`/usage`，断言 `≈` / `未定价` / `—` / 币种标注 / 设置区行数 | 同上（UI 段） | 本地 Chromium | **自动** |
-| L4 真实调用采样 | 用真实 Key 发 1 次极短 `chat/completions`，拿回真实 usage 后走本仓 `resolvePrice` 算出金额 | `TOKEN_DASH_E2E_LIVE=1 node scripts/e2e.mjs` | **真实 token**：单轮 ≤ 5 万 tokens，实测约 ¥0.01 以内 | 默认跳过；开关打开后自动，限额内无需在场 |
-| L5 真实账本核对 | 本机 `daily.json` 中 `tencent :: deepseek-v4.1-flash-ioa` 是否出价 | 人工核对 | 只读本地文件 | 需用户在场 |
+| 层 | 内容 | 方式 | 结果 |
+|---|---|---|---|
+| L1 单测 | `catalog` / `match` / `pricing` / `core` / `store` | `npm test` | 99 pass / 1 skipped（local 版本跳过 release-notes） |
+| L2 API 契约 | 临时 `DSH_HOME` + `web` profile 的 `/summary`、`/usage`、`/prefs`、`POST /pricing/reprice` | `node scripts/e2e.mjs` | 通过 |
+| L3 UI | Playwright 断言 `≈` / 未定价 tooltip / `—` / 币种标注 / 设置区行数 | 同上 | 通过 |
+| L4 真实调用（opt-in） | `TOKEN_DASH_E2E_LIVE=1`，1 次极短 `chat/completions` + 本仓 `resolvePrice` | 同上 | 默认跳过，本轮未执行 |
+| L5 真实账本 | 本机 `daily.json` 的 `tencent` 行 | 人工核对 | 已出价：¥2.96（11-09）+ ¥2.12（11-10） |
 
-**为什么 L2 不断言金额**：e2e 可能在离线环境执行，社区表拉不到时降级内置表，金额不稳定；金额级验收由 L4（真实调用，金额可观测）与 L5（本机账本）承担，L2 只断言结构与状态（`priced` / `unpriced` / `currencySource`）。
+守则：L1–L3 自动；L4 限额（单轮 ≤4 次 / ≤5 万 tokens / 仅最便宜模型 / key 只读环境变量、不落盘）；`push` 逐轮授权。L2 只断言结构与状态，金额级验收由 L4 / L5 承担（离线时社区表会降级内置表，金额不稳定）。
 
-**L4 的限额与安全（硬约束）**：
+### 5.2 E2E 断言（18 条，均在 `scripts/e2e.mjs`）
 
-| 项 | 约束 |
-|---|---|
-| 开关 | 仅当 `TOKEN_DASH_E2E_LIVE=1` 时执行，否则整段 skip 并打印原因；默认不在 `npm run e2e` 中启用 |
-| 模型 | 固定最便宜的可用型号（默认 `deepseek-v4.1-flash`），禁止高档位 / 长上下文 |
-| 用量 | 每次 `max_tokens ≤ 64`、prompt ≤ 32 tokens；单轮 ≤ 4 次请求；累计 ≤ 5 万 tokens |
-| 成本 | 预估单轮 < ¥0.01；日志打印实际 token 数与估算成本，便于对账 |
-| 凭据 | 只从 `DSH_E2E_LIVE_KEY` 环境变量读取，不落盘、不进 fixture、不打印；断言日志与 `/summary` 响应中无 key 片段 |
-| 失败处理 | L4 失败不阻塞 L1–L3 结论，单独标记；连续 2 轮失败即停（防误配刷量） |
-
-**守则五要素**（缺一不启用无人值守）：
-
-1. **执行范围**：L1 → L2 → L3 依序，低层不过不进高层；L4 仅在开关打开且限额内自动执行；L5 不自动执行。
-2. **修复边界**：只允许改测试与 fixture 适配（选择器、断言、fixture 字段、时间对齐）；不得触碰 §四 的 `BND-01~13`——尤其不得为让断言通过而改 `quota-sources.js` / `adapters.js`（`BND-05`）、不得新增设置项（`BND-09`）、不得改 `daily.json` 桶结构（`BND-06`）。
-3. **停机条件**：同一用例连续 3 轮失败、或修复需突破任一 `BND`、或改动文件 > 5 个、或 L4 累计 token 超 5 万 → 停止自动化，输出失败清单与已改文件。
-4. **记录去向**：每轮结果记 §九；未解决项标 `[待用户验证]` 并附复现命令；通过项回写上方验收表。
-5. **commit / push**：每轮独立 commit（可单独 revert）；`push` 需用户显式授权，L4 的开关与限额变更同样需授权（记 D-19）。
-
-### 5.2 E2E 用例（fixture 与断言）
-
-`scripts/e2e.mjs` 现状是用 Playwright `page.route` 拦截 `/token-dash/api/summary` 与 `/usage`，fixture 为脚本内的 `currentSummary` / `usageFor(range)` 可变对象。因此新增用例 = **追加 fixture 行 + 断言**，不需要新框架。
-
-**fixture 增量**（`currentSummary.breakdown.models` 与 `usageFor()` 的 `models` 两处同步）：
-
-| 行 | 关键字段 | 用途 |
-|---|---|---|
-| `approx` | `providerId:'tencent'`、`modelId:'deepseek-v4.1-flash-ioa'`、`priced:true`、`approximate:true`、`cost:1.24`、`currency:'CNY'` | 验证 `≈` 前缀 |
-| `exact` | `providerId:'siliconflow'`、`modelId:'deepseek-v4.1-flash'`、`priced:true`、`approximate:false` | 验证精确行无 `≈` |
-| `unpriced` | `modelId:'my-private-model'`、`priced:false`、`cost:0`、`reason:'no-model-price'` | 验证未定价文案与 tooltip |
-| `empty` | `modelId:'deepseek-flash'`、`priced:'empty'`、`cost:0`、四桶 token 全 0、`requests:0` | 验证费用位 `—` |
-| `sub` | 复用现有 `zhipu` / `moonshot`（`kind:'subscription'`） | 验证订阅费用位 `—`、币种不被改写 |
-
-**断言清单**：
+fixture 由 `page.route` 注入：`currentSummary.breakdown.models` 与 `usageFor().models` 各补 `approx` / `exact` / `unpriced` / `empty` 四行（`sub` 复用现有 zhipu / moonshot）。
 
 | # | 断言 | 来源 |
 |---|---|---|
-| E2E-01 | P3 明细行文本匹配 `/≈¥1\.24/`（`approx` 行） | REQ-05 |
+| E2E-01 | P3 明细行匹配 `/≈¥1\.24/`（`approx` 行） | REQ-05 |
 | E2E-02 | `exact` 行费用单元格等于 `¥1.24` 且不含 `≈` | REQ-05 |
-| E2E-03 | `unpriced` 行显示 `未定价`，单元格 `title` / `aria-label` 含可读原因（`无匹配价目`）而非原始代号 | REQ-08 / REQ-15 |
-| E2E-04 | `empty` 行费用位为 `—`，**不是** `¥0.00` | REQ-10 |
-| E2E-05 | 订阅行（`zhipu` / `moonshot`）费用位 `—`，卡片币种仍为 `¥` | REQ-12 |
-| E2E-06 | 未声明币种的 provider 卡片出现「按社区表 CNY」；把该 provider 加入声明集合后标注消失 | REQ-11 / REQ-14 |
-| E2E-07 | 设置胶囊仍三行（预算 / 余额 / 刷新），无价目编辑入口 | REQ-06 / BND-09 |
-| E2E-08 | P2「未定价」摘要计数 = fixture 中 `priced === false` 的行数 | REQ-08 |
-| E2E-09 | 真实路径 `GET /summary`（临时 `DSH_HOME`）返回的 `cost.unpriced` 为数组且每项含 `reason`，`currencySource` ∈ `prefs` / `snapshot` / `community` | REQ-08 / REQ-11 |
-| E2E-10 | `POST /token-dash/api/pricing/reprice` 返回 `{ ok:true, data:{ rows, skipped, reasons } }`；非法 `scope` → 400 | REQ-09 |
-| E2E-11 | `PUT /prefs` 带 `priceOverrides` / `providerCurrency` 后 `GET /prefs` 回读一致；非法条目被丢弃但仍 200 | REQ-14 / BND-09 |
-| E2E-12 | override 生效：写入 `priceOverrides['tencent:deepseek-v4.1-flash-ioa']` 后该行金额等于按 override 单价算出的值，且**不带** `≈`（`confidence='override'`）；删除键后回到模糊价 | REQ-05 / CHG-03 |
-| E2E-13 | 币种切换：把该 provider 声明为 `USD` 后卡片币种变 `$`，未声明时回 `¥` 并带「按社区表 CNY」 | REQ-11 / REQ-14 |
-| E2E-14 | reprice 幂等：连续调用两次 `POST /pricing/reprice`，第二次 `data.rows === 0` | REQ-09 |
-| E2E-15 | 冷启动降级：拦截价目拉取使其失败，上传事件后仍产生 `daily.json` 行，日志出现 `pricing.ready` 且 `source=timeout-degraded` | REQ-07 / RSK-05 |
-| E2E-16 | unknown 归因：`provider:'unknown'` + 可识别模型名，记账后按 owner 出价，不出现 `no-owner` 跳过 | REQ-01 / RSK-07 |
-| E2E-17 | L4 真实调用（opt-in）：真实 `chat/completions` 返回 usage 后，本仓 `resolvePrice` 能对该模型出价，按 usage 算出的金额 > 0 | REQ-01 / REQ-03 / 全局质量门槛 |
-| E2E-18 | 安全：L4 运行日志与 `/summary`、`/usage` 响应中均不含 `DSH_E2E_LIVE_KEY` 明文或其前 8 位 | 全局质量门槛 / BND-12 |
+| E2E-03 | `unpriced` 行显示 `未定价`，`title` 含可读原因（`无匹配价目`） | REQ-08 / REQ-15 |
+| E2E-04 | `empty` 行费用位为 `—`，不是 `¥0.00` | REQ-10 |
+| E2E-05 | 订阅行费用位 `—`，卡片币种仍为 `¥` | REQ-12 |
+| E2E-06 | 未声明币种的 provider 出现「按社区表 CNY」，声明后消失 | REQ-11 / REQ-14 |
+| E2E-07 | 设置胶囊仍三行，无价目编辑入口 | REQ-06 / BND-09 |
+| E2E-08 | P2「未定价」计数 = fixture 中 `priced===false` 行数 | REQ-08 |
+| E2E-09 | 真实 `GET /summary` 的 `cost.unpriced` 为数组、`currencySource` 合法 | REQ-08 / REQ-11 |
+| E2E-10 | `POST /pricing/reprice` 返回 `{rows, skipped, reasons}`；非法 scope → 400 | REQ-09 |
+| E2E-11 | `PUT /prefs` 带两个新键后回读一致；非法条目丢弃仍 200 | REQ-14 |
+| E2E-12 | override 命中不带 `≈`，删除后回模糊价 | REQ-05 |
+| E2E-13 | 声明 `USD` 后币种变 `$`，取消回 `¥` | REQ-11 / REQ-14 |
+| E2E-14 | reprice 幂等：第二次 `rows === 0` | REQ-09 |
+| E2E-15 | 价目拉取失败仍记账，日志 `pricing.ready source=timeout-degraded` | REQ-07 |
+| E2E-16 | `provider:'unknown'` 按 owner 出价，无 `no-owner` 跳过 | REQ-01 |
+| E2E-17 | L4 真实调用后本仓能对该模型出价，金额 > 0 | REQ-01 / REQ-03 |
+| E2E-18 | 日志与响应不含 `DSH_E2E_LIVE_KEY` 明文或其前 8 位 | 质量门槛 / BND-12 |
 
-**执行顺序**：`npm test`（L1）→ `node scripts/e2e.mjs`（L2 API 段 → L3 UI 段）→ 若 `TOKEN_DASH_E2E_LIVE=1` 再跑 L4 采样 → L5 人工核对。
-
-**禁止**：为让 L2 / L3 通过而放宽断言（如把 `≈` 断言改成任意金额）、在 `scripts/e2e.mjs` 里绕过真实接口直接读源码常量、或跳过 L2 直接跑 L3。
-
+执行顺序：`npm test` → `node scripts/e2e.mjs`（L2 → L3）→ 可选 L4 → L5 人工。禁止为通过而放宽断言或绕过真实接口。
 ## 七、日志速查
 
 - LogCategory：`pricing` / `vm`
@@ -849,78 +491,34 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | D-18 | 是否做离线形态分类器 | A 做（名字/模型族推断）/ B 不做，四档判定 + 声明纠偏 | **B** | 已定（2026-11-10） |
 | D-19 | 分层验收的无人值守范围 | A 仅 L1 / B L1–L3 自动 / C L1–L3 + L4 真实调用（opt-in、限额） | **C** | 已定（2026-11-10）：L1–L3 全自动；L4 由 `TOKEN_DASH_E2E_LIVE=1` 开启，单轮 ≤ 4 次请求 / ≤ 5 万 tokens / 仅最便宜模型；`push` 仍逐轮授权 |
 
-## 九、自测反馈台
+## 九、Issue 记录（已压缩）
 
-### Issue #1 [待用户验证] 2026-11-10 进入面板 / 看板不主动刷新，首屏还要等探测
+### Issue #1 [已修复] 2026-11-10 进入面板 / 看板不主动刷新
 
-#### 9.1 复现
-
-- 触发：已有会话在用（刚发完一轮对话）→ 点 Pill 展开 P2，或切到 P3 看板。
-- 当前：面板显示上次轮询的旧数字；`refreshMs = 60000` 下最坏等满 60s。首次进入还要叠加一次 30s 首屏阻塞。
-- 期望：**展开即刷新一次**；面板可见期间轮询周期缩短（10s）。
-- 影响：刚花完钱看不到变化，用户误判"没记账"。
-
-#### 9.2 关键时序（问题定位图）
+- 根因（两处）：`Pill` 的 `open` 只驱动尺寸测量、未接刷新链；`BoardPage` 轮询只调 `loadSummary()`，而费用与明细来自 `/usage`。
+- 修复：展开时 `load()`（2s 去重）；面板可见期轮询 10s、关闭回 `refreshMs`；看板轮询同时刷 `summary` + `usage`。
+- 验证：`npm test` 99 pass / 1 skipped；`npm run e2e` 通过（断言展开触发 `/summary`、看板 11s 内触发 `/usage`）；装 local.4 后现场确认正常。
 
 ```text
-【第 1 步】Pill 挂载：useEffect(() => { load() }, [load]) 拉一次；usePolling 只 start() 计时器（无立即调用）
-【第 2 步：★问题根源】P2 展开：open 由 false → true，只执行 measurePanel（尺寸测量），
-         没有任何 load()/refresh()；P3 若已挂载（宿主 main 面板常驻）也不会重新挂载
-【第 3 步】用户看到 step 1 或上一次 interval 的结果；下一条数据最坏在 60s 后
-【对比】visibilitychange 通道已存在：document.hidden → false 时 task() + start()，
-         说明"可见即刷新"机制已有，缺的是"展开/激活"这条触发
-【第 4 步：★第二处问题根源】P3 的轮询只调 loadSummary()，而「范围与明细」的费用/模型表
-         全部来自 /usage（loadUsage 只在 refresh() 里调）→ 即使轮询跑了，明细区数字也不动
+【第 1 步】Pill 挂载：useEffect(() => load()) 拉一次；usePolling 只 start() 计时器（无立即调用）
+【第 2 步：★根源】P2 展开：open 由 false → true，只执行 measurePanel，没有任何 load()/refresh()；
+         P3 若已挂载也不会重新挂载
+【第 3 步：★根源】P3 轮询只调 loadSummary()，而「范围与明细」的费用/模型表全部来自 /usage
+         （loadUsage 只在 refresh() 里调）→ 即使轮询跑了，明细区数字也不动
+【对比】visibilitychange 通道已存在（hidden → false 时 task() + start()），缺的是「展开/激活」这条触发
 【修复】展开时 load 一次（2s 去重）；可见期轮询 10s；P3 轮询同时刷 summary 与 usage
 ```
 
-日志佐证（`dsh-token-dash-20261110.log`，local.2 启动）：`12:16:15.884` 三个 slot `mount.ok` → `12:16:46.162` 才出现首条 `vm.build`；其后 `vm.build` 间隔 71s / 179s，期间展开面板没有新增请求。
+### 遗留与后续
 
-#### 9.3 结论
+| 项 | 现状 | 去向 |
+|---|---|---|
+| 首屏 `/summary` 被 `refreshProviderCache()` 阻塞 | 实测 `probeMs 4918` / `durationMs 4924`（local.4），首屏耗时几乎全在探测；偶发 30s | 未建新 plan。再出现时按 `probeMs` / `durationMs` 定位，方向为「先返回旧快照 + 后台探测」或「整次探测加总超时」 |
+| 宿主 `addRecord` 后主动推送（SSE / 轻量 `rev`） | 未做，仍靠轮询 | 收益中等、成本高，暂不立项 |
+| 第三方订阅 provider（Ollama / Codex / 百炼 Token Plan） | 不在本 plan 范围 | 按 D-17 逐个独立 feature 接入 |
 
-- 根因（两处）：
-  1. `client.js` · `usePolling` 只负责定时器，展开动作未接入刷新链；`Pill` 的 `open` 状态只驱动尺寸测量。
-  2. `BoardPage` 的 10s 轮询只调 `loadSummary()`，而看板的费用与明细来自 `/usage`，`loadUsage` 只在 `refresh()` 里执行 → 明细区不会随轮询更新。
-- 修复后路径：`open: true` → `load()`（5s 内去重）→ 立即出数；可见期 10s 轮询 → 对话进行中也在跟。
-- 不变路径：`visibilitychange`、手动刷新按钮、`/providers/refresh` 逻辑不动。
-- 遗留：宿主 `addRecord` 后主动推送（SSE / 轻量 `rev` 探测）不做，见 9.5。
+## 十、计划—实际偏差
 
-#### 9.4 修复实施
-
-- `client.js` · `Pill`：`lastLoadAt` 记录上次拉取时间；`open` 变 true 且距上次 > 2s 时 `load()`（2s 窗口挡开合抖动与 `refreshMs` 回填导致的重跑）；轮询周期 `open ? 10s : refreshMs`。
-- `client.js` · `BoardPage`：常驻轮询周期取 `min(10s, refreshMs)`，并**同时刷新 `summary` 与 `usage`**；进入页面仍是首帧 `refresh()`。
-- `index.js` · `/summary`、`/usage`：日志补 `probeMs`（provider 探测耗时）与 `durationMs`（整次请求耗时），供 9.5 的首屏问题取证。
-- 首屏 30s 阻塞（`/summary` 等 `refreshProviderCache`）本轮不改，转入 9.5 遗留，避免一次改动跨前后端。
-
-#### 9.5 不改的位置与理由
-
-- `index.js` · `/summary` 的 `await refreshProviderCache()`：改成"先返回旧快照 + 后台探测"属宿主契约变更，需单独的取证（哪一路探测慢）与验收，不在本轮。
-- `usePolling` 本体：不内置"立即执行一次"，避免所有调用方语义被改；由调用方按场景控制。
-
-#### 9.6 验收
-
-- 环境与方式：`npm test` + `npm run e2e`（统计 `/summary` 与 `/usage` 请求数，两条断言）。
-- 结果：
-  - `npm test`：99 pass / 1 skipped（local 版本跳过 release-notes）。
-  - `npm run e2e`：通过。A 项：`openPanel()` 后 `/summary` 计数增加。B 项：看板停留 11s 后 `/usage` 计数增加（费用与明细的数据源确实在轮询）。
-  - 首屏耗时：日志已加 `probeMs` / `durationMs`，装包后按 9.5 的取证步骤确认探测耗时。
-- 剩余风险：10s 轮询在长开面板时把请求量提到约 6 倍（单次为本地内存读，开销可忽略）。
-
-### 反馈流水
-
-- 2026-11-09：确认根因为 provider 白名单前置，非模型名匹配；社区表大量行被插件自行丢弃。
-- 2026-11-09：原型验证纯模型名四级解析，表内自匹配全通过。
-- 2026-11-09：用户拍板 D-1（纯模型名）与 D-2（复用表内别名规则）。
-- 2026-11-10：结合代码复核新增 P-1~P-5 五处结构性缺陷。
-- 2026-11-10：用户拍板 D-3（不做配置 UI），方案收敛为零配置。
-- 2026-11-10：量化确认本机用量按社区表折算为 ¥4.76（闲时）/ ¥9.52（高峰），金额量级小。
-- 2026-11-10：确认 adapter 的 `kind` / `currency` 零改动（D-11）；风险在 `resolveProviderKind` 以 `'api'` 兜底。
-- 2026-11-10：本机账本盘点（`daily.json` + `months/`）：仅 2 行，`tencent` 行占 99.99% token 且 `cost=0`；验收主口径定为「这一行能否出价」。
-- 2026-11-10：用户拍板 D-7 / D-10 / D-12 / D-13 / D-14 / D-15，状态推进为「已对齐」。
-- 2026-11-10：解压本机会话实测 `request/header.config` 只有 `provider` / `model` / `reasoningEffort`，`baseURL` 不可得 → 排除厂商识别。
-- 2026-11-10：调研社区两家同类插件（各自 5 家 / 15 家）：均按 provider 静态表 + 用户勾选，无「key → 订阅/按量」自动判断；据此定 D-16（L2）/ D-17（按 feature 接入）。
-- 2026-11-10：离线分类器原型验证「只能猜倾向」，拍板 D-18 不做；识别降级为别名表 + 声明。
-- 2026-11-10：按 `design.md` v3.9 全文重写本计划；`design.md` §设计目标 / §两条独立链路 为结构与边界真源。
-- 2026-11-10：按 plan skill 分层验收规范补 §5.1（L1 单测 / L2 API 契约 / L3 UI / L4 真实账本 + 守则五要素），补 §5.2 E2E 用例（fixture 五行 + `E2E-01~11` 断言）；`CHG-11` 细化到具体 fixture 与断言；新增 D-19（无人值守范围，待用户确认，暂按仅 L1）。同时核对 `client.js` 现状费用列只判 `priced === false`，字符串态 `'empty'` 会渲染成 `¥0.00`，已在 CHG-07 标明必须补分支。
-- 2026-11-10：用户确认「e2e 尽量全面、可用少量 token 测试」→ D-19 定为 C：L1–L3 全自动，L4 真实调用采样由 `TOKEN_DASH_E2E_LIVE=1` 开启，限额 4 次/轮、5 万 tokens/轮、仅最便宜模型、估算单轮 < ¥0.01；§5.1 补限额与安全表，§5.2 补 `E2E-12~18`（override 生效、币种切换、reprice 幂等、冷启动降级、unknown 归因、L4 真实链路、密钥不外泄）。
-- 2026-11-10：本轮仅文档，**未修改任何代码**。
+- 计划 L4 走「宿主事件 → 记账 → 出价」全链 → 实际为「真实 `chat/completions` + 本仓 `resolvePrice`」（原因：e2e 使用临时 `DSH_HOME`，没有真实会话可驱动）。
+- 计划 `src/collect.js` 零改动 → 实际 `ingest` / `backfill` 增加可选 `kindOf` 透传（原因：`prefs.billingModes` 必须作用于入账，不能只在 VM 生效）。
+- 计划 e2e 断言 11 条 → 实际 18 条（原因：补入 override / 币种切换 / reprice 幂等 / 冷启动降级 / unknown 归因 / 轮询刷新）。

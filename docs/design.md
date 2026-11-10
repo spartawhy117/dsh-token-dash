@@ -425,7 +425,7 @@ dsh-token-dash/
 5. **只读本地数据**：不统计标题生成、不发起计费请求、凭据经宿主解析不落盘
 6. **Provider 边界收口**：现有七家（含 OpenCode Go / Command Code）；adapter 输出 `ProviderSnapshot`，VM 输出 `SummaryVM`，UI 只消费 VM；provider 差异留在 descriptor/adapter，不扩散到 VM/UI
 7. **不做 provider 插件系统**：不拆 per-provider 文件、不引入 DI；七家规模用单文件源表 + 三个可选钩子，避免过度抽象
-8. **配置面收口**：`prefs` 只保留 `budgets` / `billingModes` / `refreshMs` / `showBalance`（+ `version`）；legacy `budget`、`showMonthTokens`、`logLevel` 只做读取兼容，不参与计算，保存时自然消失；预算未配置时默认 100（provider 币种，不写盘）。计价改造将新增 `priceOverrides` / `providerCurrency`（仅认文件、无 UI，见 [active plan](plan/active/feature_third_party_provider_pricing.md)），落地前不写入
+8. **配置面收口**：`prefs` 收口为 `budgets` / `billingModes` / `refreshMs` / `showBalance` / `priceOverrides` / `providerCurrency`（+ `version`）；legacy `budget`、`showMonthTokens`、`logLevel` 只做读取兼容，不参与计算，保存时自然消失；预算未配置时默认 100（provider 币种，不写盘）。后两个键仅认文件、无 UI（v3.10 落地，见 [计价改造计划（已归档）](plan/archived/feature_third_party_provider_pricing.md)）
 9. **整页入口走宿主全局面板**：P3 不再塞进浮层，改用 `main` + `sidebar.panellist` 同 key 注册；浮层只保留当前模型，避免同一套用量组件两处维护（v3.0）
 10. **仓库入口是静态链接**：`REPO_URL` 直接新窗口打开，不请求 `/repo`、不展示 star 计数；与用量/预算无关
 11. **取数收敛成源表**：provider 元数据、凭据形态与归一化集中到 `quota-sources.js`，`readProviders` 按表迭代；新增家只加表行与解析钩子，`adapters.js` 不再新增 provider if 分支
