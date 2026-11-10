@@ -1,6 +1,6 @@
 {
   "name": "dsh-token-dash",
-  "version": "2.0.2-local.1",
+  "version": "2.1.0-local.1",
   "description": "DeepSeek Harness Token 看板：月度预算与订阅配额、账户余额、时间范围费用与真实 Tokens 明细，支持本地 JSON 导出 / 导入备份。",
   "type": "module",
   "main": "./index.js",

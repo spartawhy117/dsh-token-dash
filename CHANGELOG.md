@@ -4,7 +4,7 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [2.0.2-local.1] - 2026-11-10
+## [2.1.0-local.1] - 2026-11-10
 
 > 本地构建，未发布
 
