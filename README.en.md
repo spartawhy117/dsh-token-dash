@@ -30,24 +30,28 @@
 
 **Three entry points, one local ledger**: the composer-footer-right Pill shows the current model; the floating panel shows budget, balance and the usage table; the full dashboard shows every provider card and model breakdown. No duplicated accounting between pages.
 
-## Provider matrix
+## Supported API scope
 
-| Provider | Billing | Credential | What you get |
-|---|---|---|---|
-| DeepSeek | API usage | DS account wallet / `DEEPSEEK_API_KEY` | Balance, month-to-date spend, budget |
-| Zhipu GLM Coding | Subscription / API usage | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + weekly windows |
-| Kimi Coding | Subscription / API usage | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`, optional `MOONSHOT_API_KEY` | 5h + weekly/monthly windows; falls back to balance |
-| OpenRouter | API usage | `OPENROUTER_API_KEY` | Credits (USD) |
-| Qwen | API usage | `DASHSCOPE_API_KEY` (CNY) / `DASHSCOPE_INTL_API_KEY` (USD) | Usage only; balance unsupported |
-| OpenCode Go | Subscription | `OPENCODE_GO_API_KEY` | 5h / weekly / monthly windows (USD) |
-| Command Code | Subscription | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + weekly windows, credits (CNY) |
-| Ollama Cloud | API usage | `OLLAMA_API_KEY` | Plan + purchased credits (USD), plan usage, 30-day channel usage |
+Only the official endpoints listed below are called. Any other provider is still recorded (priced by model name) but gets no balance or quota card.
+
+| Provider | Credential | Official endpoints called | Billing | What you get |
+|---|---|---|---|---|
+| DeepSeek | DS account wallet / `DEEPSEEK_API_KEY` | `GET api.deepseek.com/user/balance` | API usage | Balance, month-to-date spend, budget |
+| Zhipu GLM Coding | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | `GET bigmodel.cn/api/monitor/usage/quota/limit` | Subscription / API usage | 5h + weekly windows |
+| Kimi Coding | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`, optional `MOONSHOT_API_KEY` | `GET api.kimi.com/coding/v1/usages`; falls back to `GET api.moonshot.cn/v1/users/me/balance` | Subscription / API usage | 5h + weekly/monthly windows; falls back to balance |
+| OpenRouter | `OPENROUTER_API_KEY` | `GET openrouter.ai/api/v1/credits` | API usage | Credits (USD) |
+| Qwen | `DASHSCOPE_API_KEY` (CNY) / `DASHSCOPE_INTL_API_KEY` (USD) | No balance endpoint | API usage | Local usage only; balance unsupported |
+| OpenCode Go | `OPENCODE_GO_API_KEY` | `GET opencode.ai/zen/go/v1/usage`, falls back to `GET opencode.ai/api/v1/usage` | Subscription | 5h / weekly / monthly windows (USD) |
+| Command Code | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | `GET api.commandcode.ai/alpha/billing/credits` (with `orgId`) | Subscription | 5h + weekly windows, credits (CNY) |
+| Ollama Cloud | `OLLAMA_API_KEY` | `GET ollama.com/api/balance`; `GET ollama.com/api/usage?range=30d` | API usage | Plan + purchased credits (USD), plan usage, cycle, 30-day channel usage |
+| Any other provider (self-hosted, relay, local Ollama) | None | No endpoint | API usage | Priced by model name only; unpriced rows can be backfilled |
 
 - Save keys under the names above in DSH's credential settings; the plugin reads them through the host `credentials` service, not environment variables or local login files.
 - Ollama is added through DSH's custom OpenAI-compatible provider: the route id must be `ollama` (the key reference is derived as `<ROUTE>_API_KEY` → `OLLAMA_API_KEY`). Any other id will not resolve the key and the balance card will not appear.
 - Keys are detected automatically; GLM / Kimi / OpenCode Go / Command Code can be re-detected from the dashboard footer.
 - Subscription models count toward Tokens but not cost; billing mode is pinned per key instead of following quota flakiness.
 - Balance, quota and usage are separate; a balance failure never resets today's Token ledger to zero.
+- **Not covered**: no cookies, no provider console scraping, no host config or local login state; balances come from official endpoints only, never through a relay; prices come from the community catalog and OpenRouter's public prices, not from provider bills, so every amount is a local estimate.
 
 ## Interface
 

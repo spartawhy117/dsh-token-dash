@@ -30,24 +30,28 @@
 
 **三个入口，一份数据**：输入框底栏右侧 Pill 看当前模型；浮层看预算、余额与用量表；整页看 8 家供应商的全量卡片与模型明细。所有页面共用同一份本地账本，不重复计算。
 
-## 支持矩阵
+## 支持的 API 范围
 
-| 供应商 | 计费形态 | 凭据 | 能看到什么 |
-|---|---|---|---|
-| DeepSeek | API 用量 | DS 账号钱包 / `DEEPSEEK_API_KEY` | 账户余额、本月已花、预算 |
-| Zhipu GLM Coding | 订阅 / API 用量 | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | 5h + 周窗口 |
-| Kimi Coding | 订阅 / API 用量 | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | 5h + 周/月窗口；订阅查询失败可回落余额 |
-| OpenRouter | API 用量 | `OPENROUTER_API_KEY` | Credits（USD） |
-| Qwen | API 用量 | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 仅用量；余额不支持 |
-| OpenCode Go | 订阅 | `OPENCODE_GO_API_KEY` | 5h / 周 / 月窗口（USD） |
-| Command Code | 订阅 | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | 5h + 周窗口、Credits（CNY） |
-| Ollama Cloud | API 用量 | `OLLAMA_API_KEY` | 套餐剩余 + 购买余额（USD）、套餐已用、渠道 30 天用量 |
+只读取下表列出的官方接口；未列出的供应商仍可记账（按模型名计价），但没有余额/配额卡片。
+
+| 供应商 | 支持的凭据 | 调用的官方接口 | 计费形态 | 展示内容 |
+|---|---|---|---|---|
+| DeepSeek | DS 账号钱包 / `DEEPSEEK_API_KEY` | `GET api.deepseek.com/user/balance` | API 用量 | 账户余额、本月已花、预算 |
+| Zhipu GLM Coding | `ZHIPU_API_KEY` / `GLM_API_KEY` / `ZAI_API_KEY` | `GET bigmodel.cn/api/monitor/usage/quota/limit` | 订阅 / API 用量 | 5h + 周窗口 |
+| Kimi Coding | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | `GET api.kimi.com/coding/v1/usages`；回落 `GET api.moonshot.cn/v1/users/me/balance` | 订阅 / API 用量 | 5h + 周/月窗口；订阅查询失败可回落余额 |
+| OpenRouter | `OPENROUTER_API_KEY` | `GET openrouter.ai/api/v1/credits` | API 用量 | Credits（USD） |
+| Qwen | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 不请求余额接口 | API 用量 | 仅本地用量；余额不支持 |
+| OpenCode Go | `OPENCODE_GO_API_KEY` | `GET opencode.ai/zen/go/v1/usage`，回落 `GET opencode.ai/api/v1/usage` | 订阅 | 5h / 周 / 月窗口（USD） |
+| Command Code | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | `GET api.commandcode.ai/alpha/billing/credits`（带 `orgId`） | 订阅 | 5h + 周窗口、Credits（CNY） |
+| Ollama Cloud | `OLLAMA_API_KEY` | `GET ollama.com/api/balance`；`GET ollama.com/api/usage?range=30d` | API 用量 | 套餐剩余 + 购买余额（USD）、套餐已用、周期、渠道 30 天用量 |
+| 其他任意 provider（自建、中转、Ollama 本地） | 无需凭据 | 不请求任何接口 | API 用量 | 只按模型名计价；未定价可补算 |
 
 - 在 DSH 的凭据设置中按上表名称保存 Key；插件只通过宿主 `credentials` 读取，不读环境变量或本机登录文件。
 - Ollama 在 DSH 里需要用「自定义 OpenAI 兼容供应商」接入：route id 必须填 `ollama`（凭据按 `<ROUTE>_API_KEY` 派生成 `OLLAMA_API_KEY`），自定义名填别的会取不到 Key，余额卡也不会出现。
 - 填 Key 后自动探测；GLM / Kimi / OpenCode Go / Command Code 可在「全量看板」底部重新检测订阅。
 - 订阅模型计入 Tokens，但不计费用；计费形态按 Key 固化，不随配额接口抖动。
 - 余额、配额、用量分开展示；余额失败不会把当天的 Token 记账清零。
+- **不覆盖**：不读 Cookie、不抓供应商控制台页面、不读宿主配置文件或本机登录态；余额只查官方接口，不经第三方中转；价格来自社区价目表与 OpenRouter 公开价，不来自供应商账单，金额均为本地估算。
 
 ## 界面
 
