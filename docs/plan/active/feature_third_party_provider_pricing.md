@@ -2,7 +2,7 @@
 
 > 状态：已对齐<br>
 > 创建时间：2026-11-09<br>
-> 更新时间：2026-11-10（按 `design.md` v3.9 重写：边界收敛为 L2「估算 + 纠偏」，形态四档判定，币种可声明，未定价闭环；不做厂商识别）<br>
+> 更新时间：2026-11-10（按 `design.md` v3.9 重写：边界收敛为 L2「估算 + 纠偏」，形态四档判定，币种可声明，未定价闭环；不做厂商识别；补 §5.1 分层验收与 §5.2 E2E 用例）<br>
 > 关联逻辑根：`dsh-token-dash`（`src/catalog.js` / `src/match.js` / `src/pricing.js` / `src/core.js` / `src/store.js` / `src/providers.js` / `index.js` / `client.js`）<br>
 > 关联资料：[`design.md`](../../design.md) §设计目标 / §两条独立链路 / §第三方接入与扩展边界、[`ui-design.md`](../../ui-design.md) §5.5 范围与明细 / §5.7 设置与数据管理 / §7 文案与空态
 
@@ -399,7 +399,7 @@ structuredFuzzy(modelId):
 | CHG-08 | 修改 | `client.js` 内联词典 + `locale/zh.json` / `locale/en.json` | 新增词条：置信度、未定价原因、按社区表 CNY、零消耗、按 provider 声明币种。运行时词典在 `client.js`，`locale/` 是随包副本，两处同步 |
 | CHG-09 | 测试 | `test/unit/pricing.test.mjs`、`catalog.test.mjs`（新增） | 四级优先级 + override 前置、全量自匹配 0 失败、版本段隔离、档位保护、多候选拒绝、override 短路选表、路由价不撞车、`modelId` 去重、非法正则隔离 |
 | CHG-10 | 测试 | `test/unit/core.test.mjs`、`store.test.mjs` | `priced` 四态、`kind` 四档顺序（含 registry 兜底与 `tencent` 场景）、`repriceUnpriced` 范围与 unknown 归因、prefs 两个新键 |
-| CHG-11 | 测试 | `scripts/e2e.mjs` | `≈` 出现与消失、未定价 tooltip、币种标注、零消耗 `—`；**设置区行数不变** |
+| CHG-11 | 测试 | `scripts/e2e.mjs` | 按 §5.2 追加 fixture 行（`approx` / `exact` / `unpriced` / `empty` / `sub`，`currentSummary.breakdown.models` 与 `usageFor()` 两处同步）与 `E2E-01~11` 断言：`≈` 出现与消失、未定价 tooltip 文案、零消耗 `—`、订阅费用位 `—`、币种标注增删、设置区行数不变、真实路径 `cost.unpriced` / `currencySource` 契约、`POST /pricing/reprice` 与 prefs 回读 |
 | CHG-12 | 文档 | `docs/design.md` / `docs/ui-design.md` / `CHANGELOG.md` | 落地事实回填 design 的 §设计目标 与 §两条独立链路；UI 补标记形态；CHANGELOG 写可见变化（订阅行费用归零） |
 
 > `src/backup.js` 无需改动：`prefs` 整体导出，两个新键随之进出；导入走 `normalizePrefs` 白名单，与 `budgets` 同语义。
@@ -686,7 +686,7 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 
 #### CHG-07 · `client.js`
 
-- 明细费用列：`row.priced === false` → 「未定价」+ `reason` tooltip；`'empty'` → `—`；其余按 `row.approximate` 前缀 `≈`。
+- 明细费用列：`row.priced === false` → 「未定价」+ `reason` tooltip；`'empty'` → `—`；其余按 `row.approximate` 前缀 `≈`。**注意现状只判 `=== false`**（`client.js` 现行 `row.kind !== 'api' ? '—' : row.priced === false ? '未定价' : 金额`），字符串态 `'empty'` 会落进金额分支渲染成 `¥0.00`，必须显式补一支。
 - 币种标注：`currencySource === 'community'` 且 provider 未声明时，卡片补「按社区表 CNY」。
 - 订阅行费用位保持 `—`（现有 `row.kind !== 'api'` 分支）。
 - **不新增任何设置项**，P3 设置胶囊仍三行。
@@ -740,6 +740,59 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | **adapter 声明零改动** | BND-05 | `git diff src/quota-sources.js src/adapters.js` 为空 | 待验证 |
 | 全量测试 | 质量门槛 | `npm test` + `npm run e2e` | 待验证 |
 
+### 5.1 E2E 分层验收与自主执行守则
+
+| 层 | 内容 | 方式 | 资源消耗 | 无人值守 |
+|---|---|---|---|---|
+| L1 单测 | `catalog` / `match` / `pricing` / `core` / `store` 的纯函数与入账口径 | `npm test` | 无（进程内） | 待授权（见 D-19） |
+| L2 API 契约 | 临时 `DSH_HOME` + `web` profile：`/summary`、`/usage`、`/prefs`、`POST /pricing/reprice` 的真实 HTTP 断言 | `node scripts/e2e.mjs`（API 段） | 本地进程；价目表拉取失败时降级内置表 | 待授权 |
+| L3 UI 状态 | Playwright 拦截 `/summary`、`/usage`，断言 `≈` / `未定价` / `—` / 币种标注 / 设置区行数 | 同上（UI 段） | 本地 Chromium | 待授权 |
+| L4 真实账本 | 本机 `daily.json` 中 `tencent :: deepseek-v4.1-flash-ioa` 是否出价 | 人工核对 | 只读本地文件 | 需用户在场 |
+
+**为什么 L2 不断言金额**：e2e 可能在离线环境执行，社区表拉不到时降级内置表，金额不稳定；金额级验收放 L4，L2 只断言结构与状态（`priced` / `unpriced` / `currencySource`）。
+
+**守则五要素**（缺一不启用无人值守）：
+
+1. **执行范围**：L1 → L2 → L3 依序，低层不过不进高层；L4 不自动执行。
+2. **修复边界**：只允许改测试与 fixture 适配（选择器、断言、fixture 字段、时间对齐）；不得触碰 §四 的 `BND-01~13`——尤其不得为让断言通过而改 `quota-sources.js` / `adapters.js`（`BND-05`）、不得新增设置项（`BND-09`）、不得改 `daily.json` 桶结构（`BND-06`）。
+3. **停机条件**：同一用例连续 3 轮失败、或修复需突破任一 `BND`、或改动文件 > 5 个 → 停止自动修复，输出失败清单与已改文件。
+4. **记录去向**：每轮结果记 §九；未解决项标 `[待用户验证]` 并附复现命令；通过项回写上方验收表。
+5. **commit / push**：每轮独立 commit（可单独 revert）；`push` 与 L4 均需用户显式授权。
+
+### 5.2 E2E 用例（fixture 与断言）
+
+`scripts/e2e.mjs` 现状是用 Playwright `page.route` 拦截 `/token-dash/api/summary` 与 `/usage`，fixture 为脚本内的 `currentSummary` / `usageFor(range)` 可变对象。因此新增用例 = **追加 fixture 行 + 断言**，不需要新框架。
+
+**fixture 增量**（`currentSummary.breakdown.models` 与 `usageFor()` 的 `models` 两处同步）：
+
+| 行 | 关键字段 | 用途 |
+|---|---|---|
+| `approx` | `providerId:'tencent'`、`modelId:'deepseek-v4.1-flash-ioa'`、`priced:true`、`approximate:true`、`cost:1.24`、`currency:'CNY'` | 验证 `≈` 前缀 |
+| `exact` | `providerId:'siliconflow'`、`modelId:'deepseek-v4.1-flash'`、`priced:true`、`approximate:false` | 验证精确行无 `≈` |
+| `unpriced` | `modelId:'my-private-model'`、`priced:false`、`cost:0`、`reason:'no-model-price'` | 验证未定价文案与 tooltip |
+| `empty` | `modelId:'deepseek-flash'`、`priced:'empty'`、`cost:0`、四桶 token 全 0、`requests:0` | 验证费用位 `—` |
+| `sub` | 复用现有 `zhipu` / `moonshot`（`kind:'subscription'`） | 验证订阅费用位 `—`、币种不被改写 |
+
+**断言清单**：
+
+| # | 断言 | 来源 |
+|---|---|---|
+| E2E-01 | P3 明细行文本匹配 `/≈¥1\.24/`（`approx` 行） | REQ-05 |
+| E2E-02 | `exact` 行费用单元格等于 `¥1.24` 且不含 `≈` | REQ-05 |
+| E2E-03 | `unpriced` 行显示 `未定价`，单元格 `title` / `aria-label` 含可读原因（`无匹配价目`）而非原始代号 | REQ-08 / REQ-15 |
+| E2E-04 | `empty` 行费用位为 `—`，**不是** `¥0.00` | REQ-10 |
+| E2E-05 | 订阅行（`zhipu` / `moonshot`）费用位 `—`，卡片币种仍为 `¥` | REQ-12 |
+| E2E-06 | 未声明币种的 provider 卡片出现「按社区表 CNY」；把该 provider 加入声明集合后标注消失 | REQ-11 / REQ-14 |
+| E2E-07 | 设置胶囊仍三行（预算 / 余额 / 刷新），无价目编辑入口 | REQ-06 / BND-09 |
+| E2E-08 | P2「未定价」摘要计数 = fixture 中 `priced === false` 的行数 | REQ-08 |
+| E2E-09 | 真实路径 `GET /summary`（临时 `DSH_HOME`）返回的 `cost.unpriced` 为数组且每项含 `reason`，`currencySource` ∈ `prefs` / `snapshot` / `community` | REQ-08 / REQ-11 |
+| E2E-10 | `POST /token-dash/api/pricing/reprice` 返回 `{ ok:true, data:{ rows, skipped, reasons } }`；非法 `scope` → 400 | REQ-09 |
+| E2E-11 | `PUT /prefs` 带 `priceOverrides` / `providerCurrency` 后 `GET /prefs` 回读一致；非法条目被丢弃但仍 200 | REQ-14 / BND-09 |
+
+**执行顺序**：`npm test`（L1）→ `node scripts/e2e.mjs`（先 L2 API 段，后 L3 UI 段）→ L4 人工核对。
+
+**禁止**：为让 L2 / L3 通过而放宽断言（如把 `≈` 断言改成任意金额）、在 `scripts/e2e.mjs` 里绕过真实接口直接读源码常量、或跳过 L2 直接跑 L3。
+
 ## 七、日志速查
 
 - LogCategory：`pricing` / `vm`
@@ -774,6 +827,7 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | D-16 | 第三方拓展做到哪一层 | A 厂商级精确 / B 估算 + 纠偏（L2）/ C 仅记录 | **B** | 已定（2026-11-10） |
 | D-17 | 第三方订阅如何接入 | A 本轮一并做 / B 按独立 feature 逐个接入 | **B** | 已定（2026-11-10） |
 | D-18 | 是否做离线形态分类器 | A 做（名字/模型族推断）/ B 不做，四档判定 + 声明纠偏 | **B** | 已定（2026-11-10） |
+| D-19 | 分层验收的无人值守范围 | A L1–L3 全自动 / B 仅 L1 自动，L2/L3 需用户在场 / C 全部手动 | 暂按 **B** 执行 | **待用户确认**：确认后 L2/L3 可进无人值守；`push` 与 L4 始终需显式授权 |
 
 ## 九、自测反馈台
 
@@ -790,4 +844,5 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 - 2026-11-10：调研社区两家同类插件（各自 5 家 / 15 家）：均按 provider 静态表 + 用户勾选，无「key → 订阅/按量」自动判断；据此定 D-16（L2）/ D-17（按 feature 接入）。
 - 2026-11-10：离线分类器原型验证「只能猜倾向」，拍板 D-18 不做；识别降级为别名表 + 声明。
 - 2026-11-10：按 `design.md` v3.9 全文重写本计划；`design.md` §设计目标 / §两条独立链路 为结构与边界真源。
+- 2026-11-10：按 plan skill 分层验收规范补 §5.1（L1 单测 / L2 API 契约 / L3 UI / L4 真实账本 + 守则五要素），补 §5.2 E2E 用例（fixture 五行 + `E2E-01~11` 断言）；`CHG-11` 细化到具体 fixture 与断言；新增 D-19（无人值守范围，待用户确认，暂按仅 L1）。同时核对 `client.js` 现状费用列只判 `priced === false`，字符串态 `'empty'` 会渲染成 `¥0.00`，已在 CHG-07 标明必须补分支。
 - 2026-11-10：本轮仅文档，**未修改任何代码**。
