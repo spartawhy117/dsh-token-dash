@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { emptyState, num } from './core.js'
+import { normalizeModel, normalizeProvider } from './providers.js'
 
 /** 计价模型版本：3 = 内置价对齐官方、社区峰谷识别与工作日/周末规则。 */
 export const COST_MODEL_VERSION = 3
@@ -12,6 +13,56 @@ export const DEFAULT_PREFS = {
   billingModes: {},
   refreshMs: 60000,
   showBalance: true,
+  /** 价目逃生阀：仅认文件，无 UI；键为 `provider:model` 或 `model`。 */
+  priceOverrides: {},
+  /** 币种声明：仅认文件，无 UI；`{ [providerId]: 'CNY' | 'USD' }`。 */
+  providerCurrency: {},
+}
+
+function quoteOf(raw) {
+  const input = Number(raw?.input)
+  const output = Number(raw?.output)
+  if (!Number.isFinite(input) || input < 0 || !Number.isFinite(output) || output < 0) return null
+  const optional = (value) => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+  }
+  return {
+    input,
+    cacheRead: optional(raw?.cacheRead),
+    cacheWrite: optional(raw?.cacheWrite),
+    output,
+    currency: raw?.currency === 'USD' ? 'USD' : 'CNY',
+  }
+}
+
+/** 键两侧归一（provider 走别名表），非法条目直接丢弃，不阻塞启动。 */
+export function normalizeOverrides(raw) {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const quote = quoteOf(value)
+    if (quote === null) continue
+    const [left, right] = String(key).split(':')
+    const normalized = right === undefined
+      ? normalizeModel(left)
+      : `${normalizeProvider(left)}:${normalizeModel(right)}`
+    if (normalized === 'unknown' || normalized.endsWith(':unknown')) continue
+    out[normalized] = quote
+  }
+  return out
+}
+
+/** 币种声明只接受 CNY / USD；其余值丢弃（不做启发式猜测）。 */
+export function normalizeCurrencyMap(raw) {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const id = normalizeProvider(key)
+    if (id === 'unknown') continue
+    if (value === 'CNY' || value === 'USD') out[id] = value
+  }
+  return out
 }
 
 /** 刷新间隔唯一枚举：loadPrefs 归一与 normalizePrefs 校验共用。 */
@@ -240,6 +291,8 @@ export async function loadPrefs(dir, logger) {
     billingModes: { ...(prefs?.billingModes ?? {}) },
     refreshMs,
     showBalance: prefs?.showBalance !== false,
+    priceOverrides: normalizeOverrides(prefs?.priceOverrides),
+    providerCurrency: normalizeCurrencyMap(prefs?.providerCurrency),
   }
 }
 

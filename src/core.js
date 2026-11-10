@@ -2,7 +2,7 @@
  * Pure aggregation: day/month keys, provider/model buckets, budgets, currencies.
  * No file or clock reads; `now` is injected.
  */
-import { priceFor } from './pricing.js'
+import { explainPriceMiss, resolvePrice } from './pricing.js'
 import {
   canBeSubscription,
   defaultModelFor,
@@ -12,6 +12,7 @@ import {
   pricingLinks,
   providerCurrency,
   providerFromModel,
+  providerKind,
   providerLabel,
 } from './providers.js'
 
@@ -40,16 +41,16 @@ export function isPeak(ts) {
   return (hour >= 9 && hour < 12) || (hour >= 14 && hour < 18)
 }
 
-export { normalizeProvider, providerLabel, normalizeModel, priceFor }
+export { normalizeProvider, providerLabel, normalizeModel, resolvePrice }
 export const displayModel = modelLabel
 
-export function priceForRecord(provider, model, ts) {
-  return priceFor(provider, model, ts)
+export function priceForRecord(model, provider, ts) {
+  return resolvePrice(model, provider, ts)
 }
 
 /** Undefined price returns 0; the caller marks `priced=false`. */
 export function costOf(record) {
-  const price = priceFor(record.provider ?? 'unknown', record.model, record.ts)
+  const price = resolvePrice(record.model, record.provider ?? 'unknown', record.ts)
   if (price === null) return 0
   return (
     (num(record.input) * price.input +
@@ -92,7 +93,7 @@ export function repriceState(state) {
       for (const [model, row] of Object.entries(providerBucket?.models ?? {})) {
         // unknown 行只影响计价归属；展示层仍按模型前缀归因
         const owner = providerId === 'unknown' ? providerFromModel(model) : providerId
-        const price = owner === null ? null : priceFor(owner, model, ts)
+        const price = owner === null ? null : resolvePrice(model, owner, ts)
         const missing = price === null || price.input === null || price.output === null
         row.cost = missing
           ? 0
@@ -140,7 +141,7 @@ export function reattributeUnknown(state, providerByModel) {
   }
 }
 
-export function addRecord(state, record) {
+export function addRecord(state, record, kindOf = (id) => providerKind(id)) {
   const day = localDayKey(record.ts)
   const bucket = dayBucket(state, day)
   if (bucket.providers === undefined) {
@@ -164,11 +165,73 @@ export function addRecord(state, record) {
   row.cacheWrite += num(record.cacheWrite)
   row.output += num(record.output)
   row.requests += 1
-  const price = priceFor(provider, model, record.ts)
-  const priceMissing = price === null || price.input === null || price.output === null
-  if (priceMissing) row.priced = false
-  row.cost += priceMissing ? 0 : costOf({ ...record, provider })
+  // 形态先于计价：订阅套餐按套餐结算，套模型价会把 USD 订阅算成 RMB 用量费（REQ-12）。
+  if (kindOf(provider) === 'subscription') {
+    row.priced = 'subscription'
+    delete row.reason
+  } else {
+    const price = resolvePrice(model, provider, record.ts)
+    if (price === null) {
+      row.priced = false
+      row.reason = explainPriceMiss(model)
+    } else {
+      row.priced = true
+      delete row.reason
+      row.cost += (
+        num(record.input) * price.input +
+        num(record.cacheRead) * price.cacheRead +
+        num(record.cacheWrite) * price.cacheWrite +
+        num(record.output) * price.output
+      ) / 1e6
+    }
+  }
+  // 零消耗行与"真缺价"必须可区分：最后写，覆盖上面两种结果（REQ-10）。
+  if (row.input + row.cacheRead + row.cacheWrite + row.output === 0) row.priced = 'empty'
   state.currentProvider = provider
+}
+
+/**
+ * 只补 `priced === false` 的行；`true` / `'subscription'` / `'empty'` 一律不动。
+ * `unknown` 桶按模型前缀归因，避免"展示有归属、补算却跳过"。
+ */
+export function repriceUnpriced(state, scope, kindOf = (id) => providerKind(id)) {
+  const month = typeof scope?.month === 'string' && /^\d{4}-\d{2}$/.test(scope.month) ? scope.month : null
+  const result = { scope: scope?.month ?? 'all', rows: 0, skipped: { 'no-owner': 0, kind: 0, 'no-price': 0 } }
+  for (const [dayKey, bucket] of Object.entries(state.days ?? {})) {
+    if (month !== null && !dayKey.startsWith(`${month}-`)) continue
+    const ts = dayStartTs(dayKey)
+    if (ts === null) continue
+    for (const [providerId, providerBucket] of Object.entries(bucket?.providers ?? {})) {
+      for (const [rawModel, row] of Object.entries(providerBucket?.models ?? {})) {
+        if (row?.priced !== false) continue
+        const model = normalizeModel(rawModel)
+        const owner = providerId === 'unknown' ? providerFromModel(model) : providerId
+        if (owner === null) {
+          result.skipped['no-owner'] += 1
+          continue
+        }
+        if (kindOf(owner) !== 'api') {
+          result.skipped.kind += 1
+          continue
+        }
+        const price = resolvePrice(model, owner, ts)
+        if (price === null) {
+          result.skipped['no-price'] += 1
+          continue
+        }
+        row.cost = (
+          num(row.input) * price.input +
+          num(row.cacheRead) * price.cacheRead +
+          num(row.cacheWrite) * price.cacheWrite +
+          num(row.output) * price.output
+        ) / 1e6
+        row.priced = true
+        delete row.reason
+        result.rows += 1
+      }
+    }
+  }
+  return result
 }
 
 /** 未填写时的默认预算，按 provider 币种；只在 VM 内生效，不写盘。 */
@@ -193,11 +256,11 @@ function budgetFor(prefs, providerId, currency) {
   }
 }
 
-function providerEmpty(providerId) {
+function providerEmpty(providerId, kind = 'api') {
   return {
     id: providerId,
     name: providerLabel(providerId),
-    kind: 'api',
+    kind,
     canSubscribe: canBeSubscription(providerId),
     currency: providerCurrency(providerId),
     usage: { todayTokens: 0, monthTokens: 0, todayCost: 0, monthCost: 0, requests: 0 },
@@ -218,14 +281,27 @@ function emptyTotals() {
   return { cost: 0, requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, hitRate: null }
 }
 
-/** 行内与 0 桶共用：快照币种优先，缺失回退 registry，不写死 CNY。 */
-function usageCurrency(providerId, meta) {
+/** 行内与 0 桶共用：声明 > 快照 > registry，不写死 CNY。 */
+function usageCurrency(providerId, meta, prefs) {
+  const declared = prefs?.providerCurrency?.[providerId]
+  if (declared === 'USD' || declared === 'CNY') return declared
   if (meta?.currency === 'USD') return 'USD'
   if (meta?.currency === 'CNY') return 'CNY'
   return providerCurrency(providerId)
 }
 
-/** prefs 显式覆盖 > 快照确定的 mode > 历史固化值 > 快照 kind > api。 */
+/** 币种来源只影响展示文案，不参与计算（BND-10）。 */
+function currencySourceOf(prefs, providerId, meta) {
+  const declared = prefs?.providerCurrency?.[providerId]
+  if (declared === 'USD' || declared === 'CNY') return 'prefs'
+  if (meta?.currency === 'USD' || meta?.currency === 'CNY') return 'snapshot'
+  return 'community'
+}
+
+/**
+ * prefs 显式覆盖 > 快照确定的 mode > 历史固化值 > registry 静态声明 > api。
+ * `meta.kind` 是 adapter 规整后的回声值（非订阅一律 `api`），不能当作"探测到了 api"的证据。
+ */
 export function resolveProviderKind(state, prefs, providerId, meta) {
   const id = normalizeProvider(providerId)
   const explicit = prefs?.billingModes?.[id]
@@ -233,7 +309,7 @@ export function resolveProviderKind(state, prefs, providerId, meta) {
   if (BILLING_MODES.has(meta?.mode)) return meta.mode
   const stamped = state?.providerKinds?.[id]
   if (BILLING_MODES.has(stamped)) return stamped
-  return meta?.kind === 'subscription' ? 'subscription' : 'api'
+  return providerKind(id)
 }
 
 /** 只固化"探测确定"的形态；unknown 不覆盖历史，返回是否有变化。 */
@@ -280,7 +356,7 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     const meta = info.get(providerId)
     const kind = resolveProviderKind(state, prefs, providerId, meta)
     const billable = kind === 'api'
-    const currency = usageCurrency(providerId, meta)
+    const currency = usageCurrency(providerId, meta, prefs)
     const key = `${providerId}:${modelId}`
     const entry = models.get(key) ?? {
       providerId,
@@ -307,8 +383,11 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     // 订阅模型按目录价算出的 cost 不是真实支出，VM 内归零，保证费用框与 Tokens 框同一集合
     entry.cost += billable ? num(row.cost) : 0
     if (row.priced === false) entry.priced = false
+    if (row.priced === 'empty') entry.emptyRows = (entry.emptyRows ?? 0) + 1
+    entry.rows = (entry.rows ?? 0) + 1
     entry.kind = kind
     entry.currency = currency
+    entry.currencySource = currencySourceOf(prefs, providerId, meta)
     models.set(key, entry)
   }
 
@@ -346,7 +425,12 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
       },
       hitRate: denominator > 0 ? entry.cacheRead / denominator : null,
       cost: round2(entry.cost),
-      approximate: entry.billable && priceFor(entry.providerId, entry.modelId, now)?.approximate === true,
+      approximate: entry.billable && resolvePrice(entry.modelId, entry.providerId, now)?.approximate === true,
+      priced: entry.priced !== false
+        ? (entry.rows > 0 && (entry.emptyRows ?? 0) < entry.rows ? true : 'empty')
+        : false,
+      rows: undefined,
+      emptyRows: undefined,
     }
   })
   rows.sort((a, b) => b.cost - a.cost)
@@ -417,15 +501,18 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
     const { plans: legacyPlans, mode: _mode, ...info } = item
     const id = normalizeProvider(info.id ?? info.provider)
     if (id === 'unknown' || hidden.has(id)) continue
-    const base = providerMap.get(id) ?? providerEmpty(id)
+    const kind = resolveProviderKind(state, prefs, id, item)
+    const currency = usageCurrency(id, item, prefs)
+    const base = providerMap.get(id) ?? providerEmpty(id, kind)
     providerMap.set(id, {
       ...base,
       ...info,
       id,
       name: info.name ?? providerLabel(id),
-      kind: resolveProviderKind(state, prefs, id, item),
+      kind,
       canSubscribe: canBeSubscription(id),
-      currency: info.currency === 'USD' ? 'USD' : (info.currency === 'CNY' ? 'CNY' : providerCurrency(id)),
+      currency,
+      currencySource: currencySourceOf(prefs, id, item),
       usage: { ...base.usage, ...(info.usage ?? {}) },
       balance: info.balance ?? base.balance,
       windows: info.windows ?? legacyPlans ?? base.windows ?? [],
@@ -433,8 +520,11 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
   }
 
   // #41/#42：unknown 行按模型名前缀视图层归因（不改 daily.json）；models 与 provider.usage 均为当月口径（#42 回退跨月累计）
+  const unpriced = []
   const accumulate = (providerId, modelId, row, isToday) => {
-    const provider = providerMap.get(providerId) ?? providerEmpty(providerId)
+    const meta = providerInfo.find((item) => normalizeProvider(item.id ?? item.provider) === providerId)
+    const kind = resolveProviderKind(state, prefs, providerId, meta)
+    const provider = providerMap.get(providerId) ?? providerEmpty(providerId, kind)
     providerMap.set(providerId, provider)
     const key = `${providerId}:${modelId}`
     const entry = modelsMap.get(key) ?? {
@@ -443,34 +533,53 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
       providerId,
       providerName: providerLabel(providerId),
       displayName: modelLabel(modelId),
-      kind: provider.kind,
+      kind,
       currency: provider.currency,
+      currencySource: provider.currencySource,
       priced: true,
       approximate: false,
+      reason: null,
       requests: 0,
       input: 0,
       cacheRead: 0,
       cacheWrite: 0,
       output: 0,
       cost: 0,
+      rows: 0,
     }
     entry.requests += num(row.requests)
     entry.input += num(row.input)
     entry.cacheRead += num(row.cacheRead)
     entry.cacheWrite += num(row.cacheWrite)
     entry.output += num(row.output)
-    entry.cost += num(row.cost)
-    if (row.priced === false) entry.priced = false
-    const price = priceFor(providerId, modelId, now)
+    entry.rows += 1
+    // 订阅行按套餐结算：历史里存下的目录价不算支出（REQ-12）
+    const billable = kind === 'api'
+    entry.cost += billable ? num(row.cost) : 0
+    if (row.priced === false) {
+      entry.priced = false
+      entry.reason ??= row.reason ?? 'no-model-price'
+    }
+    if (row.priced === 'empty') entry.emptyRows = (entry.emptyRows ?? 0) + 1
+    if (billable && row.priced === false) {
+      unpriced.push({
+        modelId,
+        providerId,
+        tokens: num(row.input) + num(row.cacheRead) + num(row.cacheWrite) + num(row.output),
+        requests: num(row.requests),
+        reason: row.reason ?? 'no-model-price',
+      })
+    }
+    const price = resolvePrice(modelId, providerId, now)
     if (price?.approximate === true) entry.approximate = true
     modelsMap.set(key, entry)
     const tokens = num(row.input) + num(row.cacheRead) + num(row.cacheWrite) + num(row.output)
     provider.usage.monthTokens += tokens
-    provider.usage.monthCost += num(row.cost)
+    provider.usage.monthCost += billable ? num(row.cost) : 0
     provider.usage.requests += num(row.requests)
     if (isToday) {
       provider.usage.todayTokens += tokens
-      provider.usage.todayCost += num(row.cost)
+      provider.usage.todayCost += billable ? num(row.cost) : 0
     }
     provider.models.push(entry.modelId)
   }
@@ -516,14 +625,17 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
       displayName: modelLabel(fallbackModel),
       kind: provider?.kind === 'subscription' ? 'subscription' : 'api',
       currency: provider?.currency ?? providerCurrency(id),
-      priced: true,
+      currencySource: provider?.currencySource ?? 'community',
+      priced: 'empty',
       approximate: false,
+      reason: null,
       requests: 0,
       input: 0,
       cacheRead: 0,
       cacheWrite: 0,
       output: 0,
       cost: 0,
+      rows: 0,
     })
   }
 
@@ -535,6 +647,13 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
       : null
     entry.cost = round2(entry.cost)
     entry.share = 0
+    // 四态收敛：任一行真缺价 → false；全是零消耗行 → 'empty'；其余 true
+    if (entry.priced !== false) {
+      entry.priced = entry.rows > 0 && (entry.emptyRows ?? 0) < entry.rows ? true : 'empty'
+    }
+    if (entry.priced !== false) entry.reason = null
+    delete entry.rows
+    delete entry.emptyRows
     return entry
   })
   models.sort((a, b) => b.cost - a.cost)
@@ -618,7 +737,7 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
       total: totalTokens,
       hitRate,
     },
-    cost: { estimated: totalCost, currency: 'CNY', unpricedModels },
+    cost: { estimated: totalCost, currency: 'CNY', unpricedModels, unpriced },
     today: { tokens: today.tokens, cost: round2(today.cost), requests: today.requests },
     requests: { month: totals.requests, today: today.requests },
     providers,

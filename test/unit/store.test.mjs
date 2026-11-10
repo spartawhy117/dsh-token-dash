@@ -123,6 +123,32 @@ test('loadPrefs 归一非法 refreshMs 并记 warn', async () => {
   }
 })
 
+test('loadPrefs 收编 priceOverrides / providerCurrency 并归一非法条目', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'td-store-'))
+  try {
+    await saveJson(dir, 'prefs.json', {
+      version: 1,
+      budgets: {},
+      billingModes: {},
+      refreshMs: 60000,
+      showBalance: true,
+      priceOverrides: {
+        'tencent:DeepSeek-V4.1-Flash-IOA': { input: 2, output: 8, currency: 'USD' },
+        'my-private-model': { input: 'x', output: 1 },
+        'no-output': { input: 1 },
+      },
+      providerCurrency: { GLM: 'USD', tencent: 'CNY', broken: 'EUR' },
+    })
+    const prefs = await loadPrefs(dir)
+    assert.deepEqual(Object.keys(prefs.priceOverrides), ['tencent:deepseek-v4.1-flash-ioa'])
+    assert.equal(prefs.priceOverrides['tencent:deepseek-v4.1-flash-ioa'].input, 2)
+    assert.equal(prefs.priceOverrides['tencent:deepseek-v4.1-flash-ioa'].currency, 'USD')
+    assert.deepEqual(prefs.providerCurrency, { zhipu: 'USD', tencent: 'CNY' })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('loadState 为旧 daily.json 补齐 providerKinds', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'td-store-'))
   try {

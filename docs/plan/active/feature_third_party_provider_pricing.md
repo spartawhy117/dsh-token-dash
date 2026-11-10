@@ -394,7 +394,8 @@ structuredFuzzy(modelId):
 | CHG-03 | 修改 | `src/pricing.js` | 删除 `exactEntry` / `aliasEntry` / `familyEntry` / `inferProvider`；`priceFor` → `resolvePrice`（override 前置、短路选表）；新增 `selectTable`；保留 `effectivePrices` / `catalogInfo` |
 | CHG-04 | 修改 | `src/core.js` | `addRecord(state, record, kindOf)`；`resolveProviderKind` 改四档且不读 `meta.kind`；`providerEmpty` 走同一判定；`priced` 四态；`buildSummary` / `buildUsage` 输出 `unpriced` 与 `currencySource`；新增 `repriceUnpriced` |
 | CHG-05 | 修改 | `src/store.js` | `DEFAULT_PREFS` 增 `priceOverrides` / `providerCurrency`；`loadPrefs` 白名单收编 + 键归一 + 非法丢弃 |
-| CHG-06 | 修改 | `index.js` | `session/event` 加就绪门（≤5s 降级）；`normalizePrefs` 透传两个新键；就绪门放行前自动 `repriceUnpriced`；新增 `POST /pricing/reprice`；kind / currency 日志 |
+| CHG-06 | 修改 | `index.js` | `session/event` 加就绪门（≤5s 降级）；`normalizePrefs` 透传两个新键；`configurePricing` 注入 override 与币种解析；启动 backfill 后自动 `repriceUnpriced`；新增 `POST /pricing/reprice`；kind / currency / reprice 日志 |
+| CHG-06b | 修改 | `src/collect.js` | `ingest` / `backfill` 增加可选 `kindOf` 透传给 `addRecord`（缺省仍走 registry），使 prefs 形态声明能作用于入账 |
 | CHG-07 | 修改 | `client.js` | 明细按 `confidence` 渲染 `≈`；未定价行 `reason` tooltip；未声明币种标「按社区表 CNY」；零消耗行 `—`。**不新增价目编辑 UI** |
 | CHG-08 | 修改 | `client.js` 内联词典 + `locale/zh.json` / `locale/en.json` | 新增词条：置信度、未定价原因、按社区表 CNY、零消耗、按 provider 声明币种。运行时词典在 `client.js`，`locale/` 是随包副本，两处同步 |
 | CHG-09 | 测试 | `test/unit/pricing.test.mjs`、`catalog.test.mjs`（新增） | 四级优先级 + override 前置、全量自匹配 0 失败、版本段隔离、档位保护、多候选拒绝、override 短路选表、路由价不撞车、`modelId` 去重、非法正则隔离 |
@@ -747,7 +748,7 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | L1 单测 | `catalog` / `match` / `pricing` / `core` / `store` 的纯函数与入账口径 | `npm test` | 无（进程内） | **自动** |
 | L2 API 契约 | 临时 `DSH_HOME` + `web` profile：`/summary`、`/usage`、`/prefs`、`POST /pricing/reprice` 的真实 HTTP 断言 | `node scripts/e2e.mjs`（API 段） | 本地进程；价目表拉取失败时降级内置表 | **自动** |
 | L3 UI 状态 | Playwright 拦截 `/summary`、`/usage`，断言 `≈` / `未定价` / `—` / 币种标注 / 设置区行数 | 同上（UI 段） | 本地 Chromium | **自动** |
-| L4 真实调用采样 | 用真实 Key 发 1~4 次极短请求，跑通「宿主事件 → 记账 → 出价 → VM」全链路 | `TOKEN_DASH_E2E_LIVE=1 node scripts/e2e.mjs` | **真实 token**：单轮 ≤ 5 万 tokens，实测约 ¥0.01 以内 | 默认跳过；开关打开后自动，限额内无需在场 |
+| L4 真实调用采样 | 用真实 Key 发 1 次极短 `chat/completions`，拿回真实 usage 后走本仓 `resolvePrice` 算出金额 | `TOKEN_DASH_E2E_LIVE=1 node scripts/e2e.mjs` | **真实 token**：单轮 ≤ 5 万 tokens，实测约 ¥0.01 以内 | 默认跳过；开关打开后自动，限额内无需在场 |
 | L5 真实账本核对 | 本机 `daily.json` 中 `tencent :: deepseek-v4.1-flash-ioa` 是否出价 | 人工核对 | 只读本地文件 | 需用户在场 |
 
 **为什么 L2 不断言金额**：e2e 可能在离线环境执行，社区表拉不到时降级内置表，金额不稳定；金额级验收由 L4（真实调用，金额可观测）与 L5（本机账本）承担，L2 只断言结构与状态（`priced` / `unpriced` / `currencySource`）。
@@ -805,7 +806,7 @@ if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST')
 | E2E-14 | reprice 幂等：连续调用两次 `POST /pricing/reprice`，第二次 `data.rows === 0` | REQ-09 |
 | E2E-15 | 冷启动降级：拦截价目拉取使其失败，上传事件后仍产生 `daily.json` 行，日志出现 `pricing.ready` 且 `source=timeout-degraded` | REQ-07 / RSK-05 |
 | E2E-16 | unknown 归因：`provider:'unknown'` + 可识别模型名，记账后按 owner 出价，不出现 `no-owner` 跳过 | REQ-01 / RSK-07 |
-| E2E-17 | L4 真实调用（opt-in）：真实请求落地后 `/summary` 出现该请求，`priced === true`、`cost > 0`、`confidence` 非空 | REQ-01 / REQ-03 / 全局质量门槛 |
+| E2E-17 | L4 真实调用（opt-in）：真实 `chat/completions` 返回 usage 后，本仓 `resolvePrice` 能对该模型出价，按 usage 算出的金额 > 0 | REQ-01 / REQ-03 / 全局质量门槛 |
 | E2E-18 | 安全：L4 运行日志与 `/summary`、`/usage` 响应中均不含 `DSH_E2E_LIVE_KEY` 明文或其前 8 位 | 全局质量门槛 / BND-12 |
 
 **执行顺序**：`npm test`（L1）→ `node scripts/e2e.mjs`（L2 API 段 → L3 UI 段）→ 若 `TOKEN_DASH_E2E_LIVE=1` 再跑 L4 采样 → L5 人工核对。

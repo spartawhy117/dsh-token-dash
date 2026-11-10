@@ -30,8 +30,8 @@ export function headerFromEvent(event) {
   return { provider, model }
 }
 
-/** 入账一条事件；返回记录或 undefined。 */
-export function ingest(state, sessionId, event, seedFloor = 0) {
+/** 入账一条事件；返回记录或 undefined。`kindOf` 缺省时 `addRecord` 走 registry 兜底。 */
+export function ingest(state, sessionId, event, seedFloor = 0, kindOf) {
   const seq = num(event?.seq)
   const mark = num(state.watermarks[sessionId])
   if (seq > 0 && seq <= mark) return undefined
@@ -55,12 +55,12 @@ export function ingest(state, sessionId, event, seedFloor = 0) {
       if (record.model === '' && fallback.model !== undefined) record.model = fallback.model
     }
   }
-  addRecord(state, record)
+  addRecord(state, record, kindOf)
   if (seq > 0) state.watermarks[sessionId] = seq
   return record
 }
 
-export async function backfill(ctx, state) {
+export async function backfill(ctx, state, kindOf) {
   const persistence = ctx.get?.('sessionPersistence')
   if (persistence === undefined || typeof persistence.list !== 'function') {
     return { sessions: 0, records: 0, degraded: 'no-session-persistence' }
@@ -86,7 +86,7 @@ export async function backfill(ctx, state) {
           providers.add(source.provider)
           providerByModel.set(model, providers)
         }
-        if (ingest(state, id, event, seed) !== undefined) records += 1
+        if (ingest(state, id, event, seed, kindOf) !== undefined) records += 1
       }
     } catch {
       // 单个会话失败不影响其余会话

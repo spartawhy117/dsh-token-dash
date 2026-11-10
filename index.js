@@ -5,13 +5,14 @@ import { readFileSync } from 'node:fs'
 import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
-import { buildSummary, buildUsage, emptyState, localMonthKey, num, repriceState, stampProviderKinds } from './src/core.js'
+import { buildSummary, buildUsage, emptyState, localMonthKey, num, repriceState, repriceUnpriced, resolveProviderKind, stampProviderKinds } from './src/core.js'
 import { ingest, backfill } from './src/collect.js'
-import { REFRESH_OPTIONS, createFlusher, dataDir, loadPrefs, loadState, logsDir, recoverState, resolveHome, saveJson, saveMonths } from './src/store.js'
+import { REFRESH_OPTIONS, createFlusher, dataDir, loadPrefs, loadState, logsDir, normalizeCurrencyMap, normalizeOverrides, recoverState, resolveHome, saveJson, saveMonths } from './src/store.js'
 import { buildExport, mergeImportDays, validateBundle } from './src/backup.js'
 import { logAdapterEvents, logAdapterFailures, readProviders, readSubscriptions } from './src/adapters.js'
 import { PROVIDER_SOURCES } from './src/quota-sources.js'
-import { catalogInfo, loadCommunityPricing, loadRouterPricing } from './src/pricing.js'
+import { catalogInfo, configurePricing, loadCommunityPricing, loadRouterPricing } from './src/pricing.js'
+import { providerCurrency } from './src/providers.js'
 import { clearLog, createLogger, exportLog } from './src/diagnostics.js'
 import { isNewer } from './src/version.js'
 
@@ -149,6 +150,8 @@ function normalizePrefs(input, base) {
     billingModes: { ...(base.billingModes ?? {}) },
     refreshMs: base.refreshMs,
     showBalance: base.showBalance,
+    priceOverrides: normalizeOverrides(base.priceOverrides),
+    providerCurrency: normalizeCurrencyMap(base.providerCurrency),
   }
   if (input?.budgets !== undefined) {
     if (input.budgets === null || typeof input.budgets !== 'object') throw new Error('invalid-budgets')
@@ -173,6 +176,13 @@ function normalizePrefs(input, base) {
     prefs.refreshMs = refresh
   }
   if (input?.showBalance !== undefined) prefs.showBalance = input.showBalance === true
+  // 两个"仅认文件"的键：随 PUT /prefs 与导入一起透传，非法条目静默丢弃（不阻塞保存）
+  prefs.priceOverrides = input?.priceOverrides !== undefined
+    ? normalizeOverrides(input.priceOverrides)
+    : normalizeOverrides(base.priceOverrides)
+  prefs.providerCurrency = input?.providerCurrency !== undefined
+    ? normalizeCurrencyMap(input.providerCurrency)
+    : normalizeCurrencyMap(base.providerCurrency)
   return prefs
 }
 
@@ -203,6 +213,18 @@ export function apply(ctx) {
   const clearProviderCache = () => {
     providerCache.clear()
     providerCacheMeta = { at: 0, hadProviders: false, degraded: false }
+  }
+  const metaOf = (id) => cacheData().find((item) => item.id === id)
+  /** 形态判定：把当前快照交给 core，prefs / registry 的优先级由 core 决定。 */
+  const kindOf = (id) => resolveProviderKind(state, prefs, id, metaOf(id))
+  /** 币种判定：声明 > 快照 > registry（BND-10，不做换算）。 */
+  const currencyOf = (id) => prefs?.providerCurrency?.[id] ?? metaOf(id)?.currency ?? providerCurrency(id)
+  const applyPricingConfig = () => {
+    configurePricing({ overrides: prefs?.priceOverrides ?? {}, currencyOf })
+    logger.info('pricing', 'config', {
+      overrides: Object.keys(prefs?.priceOverrides ?? {}).length,
+      currencies: Object.keys(prefs?.providerCurrency ?? {}).length,
+    })
   }
   const ready = Promise.all([loadState(dir, logger), loadPrefs(dir, logger)]).then(([loadedState, loadedPrefs]) => {
     state = loadedState ?? emptyState()
@@ -247,7 +269,25 @@ export function apply(ctx) {
         .then((ok) => logger.info('pricing', 'router.loaded', { ok }))
         .catch((error) => logger.warn('pricing', 'router.fail', { message: String(error?.message ?? error) })),
     ])
+    applyPricingConfig()
   })
+
+  /** 有界就绪门：超时降级用当前表，绝不无限阻塞记账（RSK-05）。 */
+  let pricingSettled = false
+  function pricingGate() {
+    if (pricingSettled) return Promise.resolve()
+    return Promise.race([
+      pricingReady.finally(() => { pricingSettled = true }),
+      new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          pricingSettled = true
+          logger.warn('pricing', 'ready', { waitedMs: 5000, source: 'timeout-degraded' })
+          resolve()
+        }, 5000)
+        timer.unref?.()
+      }),
+    ]).catch(() => { pricingSettled = true })
+  }
 
   ctx.inject(['sessionPersistence'], (scoped) => {
     ready
@@ -261,10 +301,17 @@ export function apply(ctx) {
           }),
         ])
         // 不丢聚合：先并回 1.0.3 迁移备份，再按日级 token 重算旧计价成本
+        applyPricingConfig()
         const recovery = await recoverState(dir, state, logger)
+        // 旧计价模型（costVersion < 3）一次性重算，保留给 v2 历史数据
         const repriced = repriceState(state)
         if (repriced.repriced) logger.info('boot', 'state.reprice', { rows: repriced.rows, recovered: recovery.recovered })
-        const result = await backfill(scoped, state)
+        const result = await backfill(scoped, state, kindOf)
+        // 启动补算：只补 priced=false，已计价 / 订阅 / 零消耗一律不动（REQ-09）
+        const unpriced = repriceUnpriced(state, {}, kindOf)
+        if (unpriced.rows > 0 || Object.values(unpriced.skipped).some((count) => count > 0)) {
+          logger.info('pricing', 'reprice', unpriced)
+        }
         if (flushReady === undefined) {
           await saveJson(dir, 'daily.json', state)
           await saveMonths(dir, state)
@@ -280,9 +327,12 @@ export function apply(ctx) {
     'session/event',
     (session, event) => {
       if (state === undefined) return
-      const sessionId = session?.id ?? session?.header?.id ?? 'live'
-      const record = ingest(state, sessionId, event, num(session?.header?.seedLength))
-      if (record !== undefined) flushReady?.schedule?.()
+      void pricingGate().then(() => {
+        if (state === undefined) return
+        const sessionId = session?.id ?? session?.header?.id ?? 'live'
+        const record = ingest(state, sessionId, event, num(session?.header?.seedLength), kindOf)
+        if (record !== undefined) flushReady?.schedule?.()
+      })
     },
     { global: true },
   )
@@ -386,6 +436,19 @@ export function apply(ctx) {
             json(res, 200, { ok: true, data: { refreshed: subs.map((item) => item.id) } })
             return
           }
+          if (url.pathname === `${ROUTE_PREFIX}/pricing/reprice` && req.method === 'POST') {
+            // 排障入口（无 UI）：只补 priced=false，scope 缺省 = 全部
+            const scope = url.searchParams.get('scope')
+            if (scope !== null && scope !== 'all' && /^\d{4}-\d{2}$/.test(scope) === false) {
+              json(res, 400, { ok: false, reason: 'invalid-scope' })
+              return
+            }
+            const result = repriceUnpriced(state, scope === null || scope === 'all' ? {} : { month: scope }, kindOf)
+            await flusher.flush()
+            logger.info('pricing', 'reprice', result)
+            json(res, 200, { ok: true, data: result })
+            return
+          }
           if (url.pathname === `${ROUTE_PREFIX}/export` && req.method === 'GET') {
             const data = buildExport(state, prefs, Date.now(), cacheData())
             logger.info('data', 'export', { month: data.month, days: Object.keys(data.days).length, models: data.usage.all.models.length })
@@ -486,7 +549,13 @@ export function apply(ctx) {
             prefs = normalizePrefs(body, prefs)
             await saveJson(dir, 'prefs.json', prefs)
             clearProviderCache()
-            logger.info('boot', 'prefs.saved', { budgets: Object.keys(prefs.budgets).length, modes: Object.keys(prefs.billingModes).length })
+            applyPricingConfig()
+            logger.info('boot', 'prefs.saved', {
+              budgets: Object.keys(prefs.budgets).length,
+              modes: Object.keys(prefs.billingModes).length,
+              overrides: Object.keys(prefs.priceOverrides).length,
+              currencies: Object.keys(prefs.providerCurrency).length,
+            })
             json(res, 200, { ok: true, data: prefs })
             return
           }

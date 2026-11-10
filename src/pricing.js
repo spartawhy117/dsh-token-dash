@@ -1,8 +1,11 @@
 /**
- * Price catalog: bundled catalog.json, optional community feed and
- * OpenRouter /models overrides. Pure matching logic is separated from I/O.
+ * Pricing: catalog I/O + table selection + peak/off-peak + override short-circuit.
+ * Matching itself lives in `match.js`; shape normalization lives in `catalog.js`.
+ * This module never sees credentials and never asks who the provider is.
  */
 import { readFileSync } from 'node:fs'
+import { loadCatalog, routerModels } from './catalog.js'
+import { explainMiss, resolveMatch } from './match.js'
 import { normalizeModel, normalizeProvider, providerCurrency } from './providers.js'
 
 const BUNDLED = JSON.parse(readFileSync(new URL('./catalog.json', import.meta.url), 'utf8'))
@@ -12,84 +15,19 @@ const GITEE_PAGE = 'https://gitee.com/oyw125/model-price-table'
 const GITHUB_PAGE = 'https://github.com/LaoYueHanNi/model-price-table'
 const ROUTER = 'https://openrouter.ai/api/v1/models'
 
-let catalog = normalizeCatalog(BUNDLED)
-let catalogUpdatedAt = BUNDLED.updatedAt ?? null
-let catalogSource = 'bundled'
+let catalog = loadCatalog(BUNDLED, 'bundled')
+let routerCatalog = { entries: [], currency: 'USD', source: 'router', updatedAt: null }
 let catalogUrl = null
-let routerPrices = null
 let communityCache = { at: 0, value: null }
+/** `provider:model` / `model` → normalized override quote (set by `configurePricing`). */
+let overrides = new Map()
+/** `(providerId) => 'CNY' | 'USD'`; declared prefs first, registry as fallback. */
+let currencyOf = (providerId) => providerCurrency(providerId)
 
-function finite(value) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
-}
-
-function pricesOf(raw) {
-  return {
-    input: finite(raw?.input),
-    cacheRead: finite(raw?.cacheRead) ?? 0,
-    cacheWrite: finite(raw?.cacheWrite) ?? 0,
-    output: finite(raw?.output),
-  }
-}
-
-function normalizeEntry(raw) {
-  const provider = normalizeProvider(raw?.provider)
-  const model = normalizeModel(raw?.model)
-  if (provider === 'unknown' || model === 'unknown') return null
-  const currency = raw?.currency === 'USD' ? 'USD' : (raw?.currency === 'CNY' || raw?.currency === 'RMB' ? 'CNY' : providerCurrency(provider))
-  const prices = raw?.prices !== undefined ? pricesOf(raw.prices) : pricesOf(raw)
-  // 二次归一化会显式传 null：null 必须等同于"没有峰谷价目"
-  const peakRaw = raw?.peak != null ? pricesOf(raw.peak) : null
-  const offPeakRaw = raw?.offPeak != null ? pricesOf(raw.offPeak) : null
-  const hasFlat = prices.input !== null && prices.output !== null
-  const hasTiers = peakRaw !== null && offPeakRaw !== null && peakRaw.input !== null && peakRaw.output !== null && offPeakRaw.input !== null && offPeakRaw.output !== null
-  if (!hasFlat && !hasTiers) return null
-  const peak = hasTiers ? peakRaw : null
-  const offPeak = hasTiers ? offPeakRaw : null
-  return {
-    provider,
-    model,
-    displayName: String(raw?.displayName ?? model),
-    family: String(raw?.family ?? model),
-    releasedAt: String(raw?.releasedAt ?? raw?.updatedAt ?? ''),
-    currency,
-    aliases: Array.isArray(raw?.aliases) ? raw.aliases.map((alias) => normalizeModel(alias)) : [],
-    prices: hasTiers ? null : prices,
-    peak,
-    offPeak,
-  }
-}
-
-function normalizeCatalog(raw) {
-  const models = []
-  for (const item of Array.isArray(raw?.models) ? raw.models : []) {
-    const entry = normalizeEntry(item)
-    if (entry !== null) models.push(entry)
-  }
-  return { models }
-}
-
-function allEntries() {
-  return [...catalog.models, ...(routerPrices?.models ?? [])]
-}
-
-function exactEntry(provider, model) {
-  return allEntries().find((entry) => entry.provider === provider && entry.model === model) ?? null
-}
-
-function aliasEntry(provider, model) {
-  return allEntries().find((entry) => entry.provider === provider && entry.aliases.includes(model)) ?? null
-}
-
-function familyEntry(provider, model) {
-  const candidates = allEntries().filter((entry) => entry.provider === provider && entry.family !== '' && model.startsWith(entry.family))
-  if (candidates.length === 0) return null
-  return candidates.sort((left, right) => String(right.releasedAt).localeCompare(String(left.releasedAt)))[0]
-}
-
+/** Prices are per million tokens in both the community feed and the bundled catalog. */
 function effectivePrices(entry, ts) {
   if (entry.peak !== null && entry.offPeak !== null) {
-    // 北京时间工作日 09:00-12:00 / 14:00-18:00 为高峰，周末全天闲时
+    // Beijing workdays 09:00-12:00 / 14:00-18:00 are peak; weekends are off-peak.
     const date = new Date(ts + 8 * 60 * 60 * 1000)
     const hour = date.getUTCHours()
     const weekday = date.getUTCDay()
@@ -100,180 +38,180 @@ function effectivePrices(entry, ts) {
   return entry.prices
 }
 
-function communityPrices(raw) {
-  return {
-    input: finite(raw?.inputCostPerMillion),
-    cacheRead: finite(raw?.cacheReadCostPerMillion) ?? 0,
-    cacheWrite: finite(raw?.cacheCreationCostPerMillion) ?? 0,
-    output: finite(raw?.outputCostPerMillion),
-  }
-}
-
-/** 社区表用 timeRules/dailySlots 表达峰谷；仅识别标准工作日两段窗口，其余保持平坦价。 */
-function tieredPrices(raw) {
-  const slots = Array.isArray(raw?.dailySlots) ? raw.dailySlots : []
-  const slot = slots.find((item) => Array.isArray(item?.windows) && item.windows.length === 2)
-  if (slot === undefined) return null
-  const windows = slot.windows.map((item) => [Number(item?.startMinute), Number(item?.endMinute)])
-  const standard = windows[0][0] === 540 && windows[0][1] === 720 && windows[1][0] === 840 && windows[1][1] === 1080
-  const days = Array.isArray(slot.daysOfWeek) ? slot.daysOfWeek.map(Number) : [1, 2, 3, 4, 5]
-  const weekdays = days.length === 5 && [1, 2, 3, 4, 5].every((day) => days.includes(day))
-  if (!standard || !weekdays) return null
-  const peak = communityPrices(slot)
-  const offPeak = communityPrices(raw)
-  if (peak.input === null || peak.output === null || offPeak.input === null || offPeak.output === null) return null
-  return { peak, offPeak }
+function overrideQuote(modelId, providerId) {
+  if (overrides.size === 0) return null
+  const byProvider = overrides.get(`${providerId}:${modelId}`)
+  if (byProvider !== undefined) return byProvider
+  return overrides.get(modelId) ?? null
 }
 
 /**
- * Resolve one price. Returns null when no exact, alias or same-family entry.
- * `approximate` is true only for same-family fallback.
+ * Only `USD` providers may use router prices; everything else stays on the
+ * community table so a CNY number never wears a `$`.
  */
-export function priceFor(provider, model, ts = Date.now()) {
-  const providerId = normalizeProvider(provider)
+function selectTable(entry, currency) {
+  if (currency === 'USD') {
+    const routed = routerCatalog.entries.find((item) => item.modelId === entry.modelId)
+    if (routed !== undefined) {
+      return { name: 'router', entry: routed, currency: 'USD' }
+    }
+  }
+  return { name: entry.source === 'bundled' ? 'bundled' : 'community', entry, currency: entry.currency }
+}
+
+/**
+ * Resolve one line item. Override wins and short-circuits table selection: the
+ * price and the currency must come from the same place.
+ */
+export function resolvePrice(model, provider, ts = Date.now()) {
   const modelId = normalizeModel(model)
-  const exact = exactEntry(providerId, modelId)
-  if (exact !== null) {
-    const prices = effectivePrices(exact, ts)
-    return { ...prices, currency: exact.currency, approximate: false, source: catalogSource, catalogModel: exact.model }
+  if (modelId === 'unknown') return null
+  const providerId = normalizeProvider(provider)
+
+  const override = overrideQuote(modelId, providerId)
+  if (override !== null) {
+    return {
+      input: override.input,
+      cacheRead: override.cacheRead,
+      cacheWrite: override.cacheWrite,
+      output: override.output,
+      currency: override.currency,
+      confidence: 'override',
+      approximate: false,
+      catalogModel: modelId,
+      table: 'override',
+      source: 'override',
+    }
   }
-  const alias = aliasEntry(providerId, modelId)
-  if (alias !== null) {
-    const prices = effectivePrices(alias, ts)
-    return { ...prices, currency: alias.currency, approximate: false, source: catalogSource, catalogModel: alias.model }
+
+  const matched = resolveMatch(modelId, catalog.entries)
+  if (matched === null) return null
+  const table = selectTable(matched.entry, currencyOf(providerId))
+  const prices = effectivePrices(table.entry, ts)
+  if (prices === null || prices.input === null || prices.output === null) return null
+  return {
+    input: prices.input,
+    cacheRead: prices.cacheRead,
+    cacheWrite: prices.cacheWrite,
+    output: prices.output,
+    currency: table.currency,
+    confidence: matched.confidence,
+    approximate: matched.confidence === 'fuzzy',
+    catalogModel: table.entry.modelId,
+    table: table.name,
+    source: catalog.source,
   }
-  const family = familyEntry(providerId, modelId)
-  if (family !== null) {
-    const prices = effectivePrices(family, ts)
-    return { ...prices, currency: family.currency, approximate: true, source: catalogSource, catalogModel: family.model }
+}
+
+/** Same failure taxonomy as the plan's `reason` field, for unpriced rows. */
+export function explainPriceMiss(model) {
+  return explainMiss(model, catalog.entries)
+}
+
+/**
+ * Inject prefs-derived inputs. `overrides` keys may be `provider:model` or
+ * `model`; both sides are normalized here so callers stay dumb.
+ */
+export function configurePricing(input = {}) {
+  const next = new Map()
+  for (const [key, value] of Object.entries(input.overrides ?? {})) {
+    const quote = normalizeOverride(value)
+    if (quote === null) continue
+    const [left, right] = String(key).split(':')
+    const normalized = right === undefined
+      ? normalizeModel(left)
+      : `${normalizeProvider(left)}:${normalizeModel(right)}`
+    if (normalized === 'unknown' || normalized.endsWith(':unknown')) continue
+    next.set(normalized, quote)
   }
-  return null
+  overrides = next
+  if (typeof input.currencyOf === 'function') currencyOf = input.currencyOf
+}
+
+function normalizeOverride(raw) {
+  const input = Number(raw?.input)
+  const output = Number(raw?.output)
+  if (!Number.isFinite(input) || input < 0) return null
+  if (!Number.isFinite(output) || output < 0) return null
+  const optional = (value) => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+  }
+  return {
+    input,
+    cacheRead: optional(raw?.cacheRead),
+    cacheWrite: optional(raw?.cacheWrite),
+    output,
+    currency: raw?.currency === 'USD' ? 'USD' : 'CNY',
+  }
 }
 
 export function catalogInfo() {
-  return { version: catalog.version ?? null, source: catalogSource, updatedAt: catalogUpdatedAt, url: catalogUrl, models: allEntries().length }
+  return {
+    version: catalog.version ?? null,
+    source: catalog.source,
+    updatedAt: catalog.updatedAt,
+    url: catalogUrl,
+    models: catalog.entries.length,
+    routerModels: routerCatalog.entries.length,
+    overrides: overrides.size,
+  }
 }
 
-export function setCatalogForTests(models) {
-  catalog = normalizeCatalog({ models })
-  catalogSource = 'test'
-  catalogUpdatedAt = null
-  routerPrices = null
+/** Tests: replace the community catalog wholesale (provider fields are ignored). */
+export function setCatalogForTests(models, source = 'test') {
+  catalog = loadCatalog({ models }, source)
+  routerCatalog = { entries: [], currency: 'USD', source: 'router', updatedAt: null }
+  catalogUrl = null
   communityCache = { at: 0, value: null }
 }
 
-function remoteEntry(raw) {
-  const tier = tieredPrices(raw)
-  return normalizeEntry({
-    provider: raw.provider ?? raw.family ?? 'unknown',
-    model: raw.modelId ?? raw.model,
-    displayName: raw.displayName ?? raw.modelId ?? raw.model,
-    family: raw.family ?? '',
-    releasedAt: raw.releasedAt ?? raw.updatedAt ?? '',
-    currency: raw.currency === 'RMB' ? 'CNY' : raw.currency,
-    input: raw.input ?? raw.inputCostPerMillion,
-    cacheRead: raw.cacheRead ?? raw.cacheReadCostPerMillion,
-    cacheWrite: raw.cacheWrite ?? raw.cacheCreationCostPerMillion,
-    output: raw.output ?? raw.outputCostPerMillion,
-    aliases: Array.isArray(raw.aliases) ? raw.aliases : [],
-    ...(tier === null ? {} : tier),
+function fetchJson(url, timeoutMs = 6000) {
+  return fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) }).then((response) => {
+    if (!response.ok) throw new Error(`http-${response.status}`)
+    return response.json()
   })
 }
 
-async function fetchJson(url, timeoutMs = 6000) {
-  const response = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) })
-  if (!response.ok) throw new Error(`http-${response.status}`)
-  return response.json()
-}
-
-/** Load community catalog; Gitee first, GitHub second. Never throws. */
+/** Community catalog: Gitee first, GitHub second, bundled as last resort. Never throws. */
 export async function loadCommunityPricing({ force = false } = {}) {
   if (!force && communityCache.value !== null && Date.now() - communityCache.at < 24 * 3600 * 1000) return communityCache.value
-  for (const url of [GITEE, GITHUB]) {
+  for (const [url, source, page] of [[GITEE, 'community-gitee', GITEE_PAGE], [GITHUB, 'community-github', GITHUB_PAGE]]) {
     try {
       const raw = await fetchJson(url)
-      const parsed = normalizeCatalog({
-        models: (Array.isArray(raw?.models) ? raw.models : []).map((item) => {
-          const normalized = remoteEntry({ ...item, provider: item.provider ?? inferProvider(item.modelId) })
-          return normalized === null ? null : {
-            provider: normalized.provider,
-            model: normalized.model,
-            displayName: normalized.displayName,
-            family: normalized.family,
-            releasedAt: normalized.releasedAt,
-            currency: normalized.currency,
-            aliases: normalized.aliases,
-            prices: normalized.prices,
-            peak: normalized.peak,
-            offPeak: normalized.offPeak,
-          }
-        }).filter(Boolean),
-      })
-      if (parsed.models.length === 0) throw new Error('empty-catalog')
+      const parsed = loadCatalog(raw, source)
+      if (parsed.entries.length === 0) throw new Error('empty-catalog')
       catalog = parsed
-      catalogSource = url === GITEE ? 'community-gitee' : 'community-github'
-      catalogUrl = url === GITEE ? GITEE_PAGE : GITHUB_PAGE
-      catalogUpdatedAt = raw?.updatedAt === undefined ? null : String(raw.updatedAt)
+      catalogUrl = page
       communityCache = { at: Date.now(), value: catalogInfo() }
       return catalogInfo()
     } catch {
-      // try next mirror, then bundled
+      // try next mirror, then keep the bundled catalog
     }
   }
   return catalogInfo()
 }
 
-function inferProvider(modelId) {
-  const id = String(modelId ?? '').toLowerCase()
-  if (id.includes('glm')) return 'zhipu'
-  if (id.includes('kimi')) return 'moonshot'
-  if (id.includes('qwen')) return 'qwen'
-  if (id.includes('deepseek')) return 'deepseek-official'
-  return 'unknown'
-}
-
-/** OpenRouter public model prices; used only for provider=openrouter. */
+/** OpenRouter public prices; only consulted for providers declared as USD. */
 export async function loadRouterPricing() {
   try {
     const raw = await fetchJson(ROUTER)
-    const models = []
-    for (const item of Array.isArray(raw?.data) ? raw.data : []) {
-      const prices = item?.pricing
-      const input = Number(prices?.prompt)
-      const output = Number(prices?.completion)
-      if (!Number.isFinite(input) || !Number.isFinite(output)) continue
-      models.push({
-        provider: 'openrouter',
-        model: normalizeModel(item.id),
-        displayName: String(item.name ?? item.id),
-        family: String(item.id).split('/')[0] ?? '',
-        releasedAt: '',
-        currency: 'USD',
-        aliases: [],
-        prices: {
-          input: input * 1_000_000,
-          cacheRead: Number(prices?.input_cache_read ?? 0) * 1_000_000,
-          cacheWrite: Number(prices?.input_cache_write ?? 0) * 1_000_000,
-          output: output * 1_000_000,
-        },
-        peak: null,
-        offPeak: null,
-      })
-    }
-    if (models.length > 0) {
-      routerPrices = { models }
+    const parsed = loadCatalog({ models: routerModels(raw), currency: 'USD' }, 'router')
+    if (parsed.entries.length > 0) {
+      routerCatalog = parsed
       return true
     }
   } catch {
-    // keep bundled/community
+    // keep whatever we had
   }
   return false
 }
 
 export function resetPricingForTests() {
-  catalog = normalizeCatalog(BUNDLED)
-  catalogUpdatedAt = BUNDLED.updatedAt ?? null
-  catalogSource = 'bundled'
-  routerPrices = null
+  catalog = loadCatalog(BUNDLED, 'bundled')
+  routerCatalog = { entries: [], currency: 'USD', source: 'router', updatedAt: null }
+  catalogUrl = null
   communityCache = { at: 0, value: null }
+  overrides = new Map()
+  currencyOf = (providerId) => providerCurrency(providerId)
 }

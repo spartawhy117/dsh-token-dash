@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { join, resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { zstdCompressSync } from 'node:zlib'
+import { resolvePrice } from '../src/pricing.js'
 
 const root = resolve('.')
 const PKG_VERSION = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
@@ -67,8 +68,10 @@ const provider = (id, name, kind, currency, extra = {}) => ({
   ...extra,
 })
 const apiProviders = [
-  provider('deepseek-official', 'DeepSeek', 'api', 'CNY', { budget: budget(100, 'CNY', 12.34, 0.1234), balance: { amount: 49.86, status: 'ok', currency: 'CNY', updatedAt: now } }),
-  provider('openrouter', 'OpenRouter', 'api', 'USD', { budget: budget(50, 'USD', 19, 0.38), balance: { amount: 7.66, status: 'ok', currency: 'USD', updatedAt: now } }),
+  provider('deepseek-official', 'DeepSeek', 'api', 'CNY', { currencySource: 'snapshot', budget: budget(100, 'CNY', 12.34, 0.1234), balance: { amount: 49.86, status: 'ok', currency: 'CNY', updatedAt: now } }),
+  provider('openrouter', 'OpenRouter', 'api', 'USD', { currencySource: 'snapshot', budget: budget(50, 'USD', 19, 0.38), balance: { amount: 7.66, status: 'ok', currency: 'USD', updatedAt: now } }),
+  // 未声明币种的自填 provider：卡片应标「按社区表 CNY」
+  provider('siliconflow', 'siliconflow', 'api', 'CNY', { currencySource: 'community', budget: budget(100, 'CNY', 1.24, 0.0124) }),
 ]
 const subProviders = [
   provider('zhipu', 'GLM Coding', 'subscription', 'CNY', { windows: [{ key: '5h', usedPercent: 42.5, resetAt: now + 3600_000 }, { key: 'week', usedPercent: 18.2, resetAt: now + 26 * 3600_000 }] }),
@@ -89,17 +92,30 @@ const pricingLinks = [
   { id: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/models' },
   { id: 'qwen', label: '通义千问', url: 'https://help.aliyun.com/zh/model-studio/billing-for-alibaba-cloud-model-studio' },
 ]
-const model = (providerId, providerName, modelId, displayName, kind, currency, cost) => ({
+const model = (providerId, providerName, modelId, displayName, kind, currency, cost, extra = {}) => ({
   providerId, providerName, modelId, displayName, kind, currency, cost, priced: true,
   requests: 12, input: 100_000, cacheRead: 200_000, cacheWrite: 0, output: 20_000,
   tokens: { input: 100_000, cacheRead: 200_000, cacheWrite: 0, cache: 200_000, output: 20_000, total: 320_000 },
   hitRate: 200 / 300,
+  ...extra,
 })
+const EMPTY_TOKENS = { input: 0, cacheRead: 0, cacheWrite: 0, cache: 0, output: 0, total: 0 }
 const models = [
   model('deepseek-official', 'DeepSeek', 'deepseek-flash', 'DeepSeek-V4.1-Flash', 'api', 'CNY', 12.34),
   model('openrouter', 'OpenRouter', 'deepseek-flash', 'DeepSeek-V4.1-Flash', 'api', 'USD', 4.68),
   model('zhipu', 'GLM Coding', 'glm-5.3', 'GLM-5.3', 'subscription', 'CNY', 0),
   model('moonshot', 'Kimi Coding', 'kimi-k3', 'Kimi K3', 'subscription', 'CNY', 0),
+  // 模糊命中：带 ≈ 前缀
+  model('tencent', 'tencent', 'deepseek-v4.1-flash-ioa', 'deepseek-v4.1-flash', 'api', 'CNY', 1.24, { approximate: true }),
+  // 精确命中：不带 ≈
+  model('siliconflow', 'siliconflow', 'deepseek-v4.1-flash', 'deepseek-v4.1-flash', 'api', 'CNY', 1.24, { approximate: false }),
+  // 未定价：显示"未定价" + reason tooltip
+  model('my-relay', 'my-relay', 'my-private-model', 'my-private-model', 'api', 'CNY', 0, { priced: false, reason: 'no-model-price', requests: 1 }),
+  // 零消耗：显示 —（不是 ¥0.00）
+  model('tencent', 'tencent', 'deepseek-chat', 'deepseek-chat', 'api', 'CNY', 0, {
+    priced: 'empty', requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0,
+    tokens: EMPTY_TOKENS, hitRate: null,
+  }),
 ]
 let currentSummary = {
   providers: [...apiProviders, ...subProviders],
@@ -180,12 +196,34 @@ try {
   })
   assert.equal(importBad.status, 400)
 
-  // Seed prefs used by P3.
+  // Seed prefs used by P3（含两个“仅认文件”的计价键）。
   const prefsResponse = await fetch(`${base}/token-dash/api/prefs`, {
     method: 'PUT', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ budgets: { 'deepseek-official': { amount: 100, currency: 'CNY' }, openrouter: { amount: 50, currency: 'USD' } }, billingModes: { zhipu: 'subscription', moonshot: 'subscription', 'opencode-go': 'subscription' } }),
+    body: JSON.stringify({
+      budgets: { 'deepseek-official': { amount: 100, currency: 'CNY' }, openrouter: { amount: 50, currency: 'USD' } },
+      billingModes: { zhipu: 'subscription', moonshot: 'subscription', 'opencode-go': 'subscription' },
+      priceOverrides: { 'my-relay:my-private-model': { input: 2, output: 8, currency: 'CNY' }, 'bad-override': { input: 'x' } },
+      providerCurrency: { 'my-relay': 'USD', broken: 'EUR' },
+    }),
   })
   assert.equal(prefsResponse.status, 200)
+  const prefsEcho = (await (await fetch(`${base}/token-dash/api/prefs`)).json()).data
+  assert.deepEqual(prefsEcho.providerCurrency, { 'my-relay': 'USD' })
+  assert.deepEqual(Object.keys(prefsEcho.priceOverrides), ['my-relay:my-private-model'])
+  assert.equal(prefsEcho.priceOverrides['my-relay:my-private-model'].input, 2)
+
+  // L2: pricing contracts on the real host routes.
+  assert.equal((await fetch(`${base}/token-dash/api/pricing/reprice?scope=2026-1`, { method: 'POST' })).status, 400)
+  const repriceBody = await (await fetch(`${base}/token-dash/api/pricing/reprice?scope=all`, { method: 'POST' })).json()
+  assert.equal(repriceBody.ok, true)
+  assert.equal(repriceBody.data.scope, 'all')
+  assert.equal(typeof repriceBody.data.rows, 'number')
+  assert.equal(typeof repriceBody.data.skipped, 'object')
+  const realSummary = (await (await fetch(`${base}/token-dash/api/summary`)).json()).data
+  assert.ok(Array.isArray(realSummary.cost.unpriced), 'summary.cost.unpriced must be an array')
+  for (const provider of realSummary.providers) {
+    assert.ok(['prefs', 'snapshot', 'community'].includes(provider.currencySource), `currencySource=${provider.currencySource}`)
+  }
 
   const executablePath = resolveChromium()
   browser = await chromium.launch({ headless: true, ...(executablePath === undefined ? {} : { executablePath }) })
@@ -447,6 +485,23 @@ try {
   assert.equal(await board.locator('[data-testid^=token-dash-detail-row-]').count(), models.length)
   assert.equal(await board.getByTestId('token-dash-board-head-refresh').count(), 1)
   assert.match(await board.locator('[data-testid^=token-dash-detail-row-]').first().innerText(), /·/)
+
+  // 费用列四态：≈ / 精确 / 未定价 / 零消耗 —
+  const approxRow = board.getByTestId('token-dash-detail-row-tencent-deepseek-v4.1-flash-ioa')
+  assert.match(await approxRow.innerText(), /≈¥1\.24/, 'fuzzy hit should carry ≈')
+  const exactCell = board.getByTestId('token-dash-detail-row-siliconflow-deepseek-v4.1-flash').getByTestId('token-dash-detail-cost')
+  assert.equal((await exactCell.innerText()).trim(), '¥1.24', 'exact hit must not carry ≈')
+  const unpricedCell = board.getByTestId('token-dash-detail-row-my-relay-my-private-model').getByTestId('token-dash-detail-cost')
+  assert.equal((await unpricedCell.innerText()).trim(), '未定价')
+  assert.match(await unpricedCell.getAttribute('title'), /无匹配价目/, 'unpriced cell should explain why')
+  const emptyCell = board.getByTestId('token-dash-detail-row-tencent-deepseek-chat').getByTestId('token-dash-detail-cost')
+  assert.equal((await emptyCell.innerText()).trim(), '—', 'zero-token row must not render ¥0.00')
+
+  // 未声明币种的 provider 标「按社区表 CNY」；已声明的（openrouter=USD）不标
+  const currencyBadge = board.getByTestId('token-dash-currency-source-siliconflow')
+  assert.equal(await currencyBadge.count(), 1)
+  assert.match(await currencyBadge.innerText(), /按社区表 CNY/)
+  assert.equal(await board.getByTestId('token-dash-currency-source-openrouter').count(), 0)
   const [repoBox, headRefreshBox] = await Promise.all([
     board.getByTestId('token-dash-repo').boundingBox(),
     board.getByTestId('token-dash-board-head-refresh').boundingBox(),
@@ -639,6 +694,35 @@ try {
   await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'))
 
   console.log('[e2e] UI assertions passed')
+
+  // L4 真实调用采样（opt-in）：用真实 Key 发一次极短请求，再走本仓计价链验证可出价。
+  // 默认跳过；限额与安全约束见 docs/plan/active/feature_third_party_provider_pricing.md §5.1。
+  if (process.env.TOKEN_DASH_E2E_LIVE === '1') {
+    const key = process.env.DSH_E2E_LIVE_KEY
+    const baseUrl = (process.env.DSH_E2E_LIVE_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
+    const liveModel = process.env.DSH_E2E_LIVE_MODEL ?? 'deepseek-v4.1-flash'
+    assert.ok(typeof key === 'string' && key !== '', 'DSH_E2E_LIVE_KEY is required when TOKEN_DASH_E2E_LIVE=1')
+    const started = Date.now()
+    const live = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: liveModel, messages: [{ role: 'user', content: 'ping' }], max_tokens: 8, stream: false }),
+      signal: AbortSignal.timeout(30000),
+    })
+    assert.equal(live.status, 200, `live call failed: http-${live.status}`)
+    const payload = await live.json()
+    assert.ok(!JSON.stringify(payload).includes(key), 'provider response must not echo the key')
+    const usage = payload?.usage ?? {}
+    const tokens = Number(usage.prompt_tokens ?? 0) + Number(usage.completion_tokens ?? 0)
+    assert.ok(tokens > 0, 'live call should report token usage')
+    const quote = resolvePrice(liveModel, 'live-sample', Date.now())
+    assert.ok(quote !== null, `live model ${liveModel} must be priceable`)
+    assert.ok(quote.input > 0 && quote.output > 0, 'live quote must carry real prices')
+    const cost = (Number(usage.prompt_tokens ?? 0) * quote.input + Number(usage.completion_tokens ?? 0) * quote.output) / 1e6
+    console.log(`[e2e] L4 live ok model=${liveModel} tokens=${tokens} cost=${cost.toFixed(6)} ${quote.currency} table=${quote.table} ms=${Date.now() - started}`)
+  } else {
+    console.log('[e2e] L4 live sampling skipped (set TOKEN_DASH_E2E_LIVE=1 to enable)')
+  }
 } finally {
   await browser?.close().catch(() => {})
   stopTree(server?.child)

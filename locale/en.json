@@ -106,5 +106,11 @@
   "{name} · {action} Token 看板": "{name} · {action} Token dashboard",
   "{name} 月度预算": "{name} monthly budget",
   "{name}，按量 API，{budget}，今日 {today}{balance}": "{name}, pay-as-you-go, {budget}, today {today}{balance}",
-  "{name}，订阅，账户套餐，{value}": "{name}, subscription, account plan, {value}"
+  "{name}，订阅，账户套餐，{value}": "{name}, subscription, account plan, {value}",
+  "按社区表 CNY": "Community table (CNY)",
+  "价格取社区价目表（人民币），与渠道账单可能有差异": "Priced from the community table (CNY); may differ from your provider bill",
+  "无匹配价目": "No matching price",
+  "候选模型不唯一": "Ambiguous model match",
+  "模型名无效": "Invalid model name",
+  "订阅不计价": "Subscription, not billed"
 }

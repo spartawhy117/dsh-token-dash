@@ -1,6 +1,6 @@
 # dsh-token-dash 设计文档
 
-> 更新时间：2026-11-10（v3.9，新增「设计目标」：L0 记录 / L1 估算 / L2 纠偏，明确非目标；接入门槛与顺序收进「第三方接入与扩展边界」）<br>
+> 更新时间：2026-11-10（v3.10，L1/L2 落地：`catalog.js` / `match.js` 拆分、`resolvePrice` 纯模型名计价、override 与币种声明、未定价补算；回填目录与模块职责）<br>
 > 面向贡献者的一页式架构说明。需求背景见 [token-dash 计划（已归档）](plan/archived/feature_token_dash.md)，已归档的 UI 迭代见 [UI 迭代计划](plan/archived/feature_ui_refresh.md)；Provider/VM/UI 边界收口见 [边界计划](plan/archived/feature_provider_boundary.md)；UI 视觉以 [UI 设计](ui-design.md) 为唯一真源。
 
 ## 设计目标
@@ -10,8 +10,8 @@
 | 层 | 目标 | 状态 |
 |---|---|---|
 | L0 记录 | 任意 provider 的 token 都入账，不要求 provider 已知 | 已具备 |
-| L1 估算 | 任意模型名可出价，或明确「未定价」并给出原因 | 目标 |
-| L2 纠偏 | 形态与币种可声明，未定价可见、可补算 | 目标 |
+| L1 估算 | 任意模型名可出价，或明确「未定价」并给出原因 | 已具备（v3.10） |
+| L2 纠偏 | 形态与币种可声明，未定价可见、可补算 | 已具备（v3.10） |
 
 **非目标**（明确不做，避免反复讨论）：
 
@@ -357,7 +357,9 @@ dsh-token-dash/
 │   ├── adapters.js        供应商侦测（7 家 API/订阅）+ toSnapshot 边界 + 事件日志映射
 │   ├── quota-sources.js   声明式 provider 源表、端点与解析（OpenCode / Command Code）
 │   ├── providers.js       provider registry：别名/展示名/币种/默认模型/前缀/展示名/价格页
-│   ├── pricing.js         价格：内置 catalog + 社区价格表 + OpenRouter 路由价
+│   ├── catalog.js         价目归一：社区 / 内置 / 路由价 → 纯模型维度 CatalogEntry（预编译正则、去重）
+│   ├── match.js           模型名四级解析：exact → alias → pattern → fuzzy（纯函数，不认识 provider）
+│   ├── pricing.js         计价：override 前置 + 选表（币种）+ 峰谷 + 置信度；catalog 拉取
 │   ├── catalog.json       内置模型价格目录（官方价，随包发布，pricing.js 消费）
 │   ├── backup.js          导出包构建与导入校验（纯函数，无 IO）
 │   ├── store.js           持久化：DSH_HOME 解析、daily/prefs 读写（原子写）、flusher
@@ -396,8 +398,10 @@ dsh-token-dash/
 | core | VM 聚合、月/日口径、排序、预算计算；入账按 token 累加（`kind` 分流计价属目标态） | 不做 IO、不读时钟（now 注入）、不直接读 provider 数据表、**不接触凭据** |
 | collect | 事件提取与归属、水位去重、历史回填 | 不落盘（交 store）、**不接触凭据** |
 | adapters | 外部接口请求与解析、错误分类、`toSnapshot`、**唯一解析凭据的地方** | 不做 UI、不做价格匹配、不定义 provider 元数据 |
-| providers | descriptor registry、别名/币种/默认模型/前缀/价格页 | 不做 IO、不请求接口、**不接触凭据** |
-| pricing | 价目表加载与模型名匹配、峰谷与币种报价 | **不接触凭据**、不请求 provider 业务接口（只拉公开价目表）、**不识别厂商**（不看 `baseURL` / 域名） |
+| providers | descriptor registry、别名/币种/默认模型/前缀/价格页；`kind` 兜底裁定源 | 不做 IO、不请求接口、**不接触凭据** |
+| catalog | 价目归一：社区 / 内置 / 路由 → 纯模型维度条目（去重、预编译正则） | 不做 IO、不匹配、不认识 provider |
+| match | 模型名四级解析与结构化模糊 | 不做 IO、不认识 provider、不读 override |
+| pricing | override 前置、选表（币种）、峰谷取价、置信度 | **不接触凭据**、不请求 provider 业务接口（只拉公开价目表）、**不识别厂商**（不看 `baseURL` / 域名） |
 | backup | 导出包构建（设置 + 当月使用）、导入包校验与覆盖策略 | 不做 IO、不写盘、不渲染 |
 | store | 文件读写与原子性 | 不做业务逻辑 |
 | client | 渲染与交互 | 不做业务计算（数字全部来自 VM）、不硬编码 provider |

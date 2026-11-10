@@ -106,5 +106,11 @@
   "{name} · {action} Token 看板": "{name} · {action} Token 看板",
   "{name} 月度预算": "{name} 月度预算",
   "{name}，按量 API，{budget}，今日 {today}{balance}": "{name}，按量 API，{budget}，今日 {today}{balance}",
-  "{name}，订阅，账户套餐，{value}": "{name}，订阅，账户套餐，{value}"
+  "{name}，订阅，账户套餐，{value}": "{name}，订阅，账户套餐，{value}",
+  "按社区表 CNY": "按社区表 CNY",
+  "价格取社区价目表（人民币），与渠道账单可能有差异": "价格取社区价目表（人民币），与渠道账单可能有差异",
+  "无匹配价目": "无匹配价目",
+  "候选模型不唯一": "候选模型不唯一",
+  "模型名无效": "模型名无效",
+  "订阅不计价": "订阅不计价"
 }

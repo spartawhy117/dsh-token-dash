@@ -109,8 +109,19 @@ window.__ModuleLoader__.load({
       '账户真实余额，不受预算影响': 'Account balance; not affected by budget',
       '本月累计消耗，等于已用/预算 的分子': 'Month-to-date spend; numerator of used/budget',
       '提示': 'Note',
+      '按社区表 CNY': 'Community table (CNY)',
+      '价格取社区价目表（人民币），与渠道账单可能有差异': 'Priced from the community table (CNY); may differ from your provider bill',
+      '无匹配价目': 'No matching price', '候选模型不唯一': 'Ambiguous model match',
+      '模型名无效': 'Invalid model name', '订阅不计价': 'Subscription, not billed',
     }
     const ZH = Object.fromEntries(Object.keys(EN).map((key) => [key, key]))
+    /** 未定价原因 → 可读文案；未知 reason 回退「未定价」。 */
+    const REASON_TEXT = {
+      'no-model-price': '无匹配价目',
+      ambiguous: '候选模型不唯一',
+      'invalid-model': '模型名无效',
+      'kind-skip': '订阅不计价',
+    }
     const MESSAGES = { zh: ZH, en: EN }
     let localeService = null
     let ctxRef = null
@@ -841,10 +852,21 @@ window.__ModuleLoader__.load({
           h('span', { role: 'cell', style: { ...styles.cellNum, ...cell, textAlign: 'right' } }, row.requests),
           h('span', { role: 'cell', style: { ...styles.cellNum, ...cell, textAlign: 'right' } },
             row.hitRate === null || row.hitRate === undefined ? '—' : fmtRatio(row.hitRate)),
-          h('span', { role: 'cell', style: { ...styles.cellNum, ...cell, textAlign: 'right' } },
-            row.kind !== 'api' ? '—' : row.priced === false
-              ? tr('未定价')
-              : `${row.approximate === true ? '≈' : ''}${fmtMoney(row.cost, row.currency)}`)))))
+          h('span', {
+            role: 'cell',
+            'data-testid': 'token-dash-detail-cost',
+            title: row.kind !== 'api'
+              ? tr('订阅不计价')
+              : row.priced === false
+                ? tr(REASON_TEXT[row.reason] ?? '未定价')
+                : undefined,
+            style: { ...styles.cellNum, ...cell, textAlign: 'right' },
+          },
+            row.kind !== 'api' || row.priced === 'empty'
+              ? '—'
+              : row.priced === false
+                ? tr('未定价')
+                : `${row.approximate === true ? '≈' : ''}${fmtMoney(row.cost, row.currency)}`)))))
     }
 
     /** P3 两格卡：总费用（多币种同行）与真实 Tokens。 */
@@ -1601,8 +1623,18 @@ window.__ModuleLoader__.load({
               h('span', { 'data-testid': `token-dash-budget-balance-${provider.id}`, style: styles.kvValue }, balance ?? '—')),
             h('div', { style: styles.kvRow },
               h('span', { style: styles.kvLabel }, tr('本月已花')),
-              h('span', { 'data-testid': `token-dash-budget-month-${provider.id}`, style: styles.kvValue },
-                fmtMoney(provider.usage?.monthCost, provider.currency))),
+              h('span', {
+                'data-testid': `token-dash-budget-month-${provider.id}`,
+                style: { ...styles.kvValue, display: 'inline-flex', alignItems: 'baseline', gap: 4 },
+              },
+                fmtMoney(provider.usage?.monthCost, provider.currency),
+                provider.currencySource === 'community' && provider.currency === 'CNY'
+                  ? h('span', {
+                    'data-testid': `token-dash-currency-source-${provider.id}`,
+                    title: tr('价格取社区价目表（人民币），与渠道账单可能有差异'),
+                    style: { fontSize: 10, color: T.weak },
+                  }, tr('按社区表 CNY'))
+                  : null)),
             h('div', { style: styles.cardCaption },
               `${hasBudget ? stateOf(percent, API_CRITICAL) : 'unset'} · ${hasBudget ? fmtRatio(budget.percent) : '—'}`))
         }))

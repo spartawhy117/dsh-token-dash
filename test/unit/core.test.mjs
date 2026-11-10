@@ -9,10 +9,11 @@ import {
   localDayKey,
   normalizeModel,
   normalizeProvider,
-  priceFor,
   providerLabel,
   reattributeUnknown,
   repriceState,
+  repriceUnpriced,
+  resolvePrice,
   resolveProviderKind,
   stampProviderKinds,
 } from '../../src/core.js'
@@ -24,7 +25,7 @@ test('normalizeModel 去掉渠道前缀与后缀', () => {
 
 test('峰谷价：Flash 高峰 1M 未命中 + 1M 输出 = 10', () => {
   const ts = Date.UTC(2026, 9, 30, 2, 0, 0) // 北京时间 10:00
-  const price = priceFor('deepseek-account', 'deepseek-v4-flash', ts)
+  const price = resolvePrice('deepseek-v4-flash', 'deepseek-account', ts)
   assert.equal(price.input, 2)
   assert.equal(price.output, 8)
   const cost = costOf({ ts, provider: 'deepseek-account', model: 'deepseek-v4-flash', input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 1_000_000 })
@@ -37,11 +38,14 @@ test('闲时 Flash 1M + 1M = 5', () => {
   assert.ok(Math.abs(cost - 5) < 1e-9)
 })
 
-test('第三方按自己的目录价，未知 provider 不套 DeepSeek 价', () => {
+test('纯模型名计价：第三方 provider 也能出价，币种仍取社区表', () => {
   const ts = Date.UTC(2026, 9, 30, 2, 0, 0)
-  assert.equal(priceFor('zhipu', 'glm-5.3', ts).input, 8)
-  assert.equal(priceFor('openrouter', 'deepseek-flash', ts), null)
-  assert.equal(costOf({ ts, provider: 'openrouter', model: 'deepseek-flash', input: 1_000_000, output: 0 }), 0)
+  assert.equal(resolvePrice('glm-5.3', 'zhipu', ts).input, 8)
+  // provider 不再是准入门槛（REQ-01）：未收录 provider 同样出价，币种按社区表 CNY
+  const relay = resolvePrice('deepseek-flash', 'openrouter', ts)
+  assert.notEqual(relay, null)
+  assert.equal(relay.currency, 'CNY')
+  assert.ok(costOf({ ts, provider: 'openrouter', model: 'deepseek-flash', input: 1_000_000, output: 0 }) > 0)
 })
 
 test('费用占比不超过 100%', () => {
@@ -79,11 +83,11 @@ test('模型展示名映射到宿主标签', () => {
   assert.equal('showMonthTokens' in summary, false)
 })
 
-test('同模型不同 provider 分行，未定价不套官方价', () => {
+test('同模型不同 provider 分行；表里没有的模型标未定价并带 reason', () => {
   const state = emptyState()
   const now = Date.UTC(2026, 9, 30, 2, 0, 0)
   addRecord(state, { ts: now, provider: 'deepseek-account', model: 'deepseek-flash', input: 10_000, output: 1_000 })
-  addRecord(state, { ts: now, provider: 'openrouter', model: 'deepseek-flash', input: 10_000, output: 1_000 })
+  addRecord(state, { ts: now, provider: 'openrouter', model: 'my-private-model', input: 10_000, output: 1_000 })
   const summary = buildSummary(state, { budget: { amount: 0 }, showBalance: false }, now, {
     provider: 'unknown',
     amount: null,
@@ -97,7 +101,15 @@ test('同模型不同 provider 分行，未定价不套官方价', () => {
   assert.equal(official.priced, true)
   assert.equal(relay.priced, false)
   assert.equal(relay.cost, 0)
-  assert.deepEqual(summary.cost.unpricedModels, ['openrouter:deepseek-flash'])
+  assert.equal(relay.reason, 'no-model-price')
+  assert.deepEqual(summary.cost.unpricedModels, ['openrouter:my-private-model'])
+  assert.deepEqual(summary.cost.unpriced, [{
+    modelId: 'my-private-model',
+    providerId: 'openrouter',
+    tokens: 11_000,
+    requests: 1,
+    reason: 'no-model-price',
+  }])
 })
 
 test('旧 unknown 行在 provider 唯一时归因', () => {
@@ -203,8 +215,10 @@ test('月汇总：预算、剩余、按模型请求数', () => {
   assert.ok(deepseek.budget.used > 0)
   assert.ok(deepseek.budget.remaining < 100)
   const zhipu = summary.providers.find((item) => item.id === 'zhipu')
-  // usage-only 的 zhipu（无订阅 info）按量处理：未配置预算时落到默认 100
-  assert.equal(zhipu.budget.amount, 100)
+  // registry 声明为订阅：不计价、不出预算（REQ-12）
+  assert.equal(zhipu.kind, 'subscription')
+  assert.equal(zhipu.budget, undefined)
+  assert.equal(zhipu.usage.monthCost, 0)
   assert.equal(zhipu.canSubscribe, true)
   assert.equal(deepseek.canSubscribe, false)
   assert.equal(summary.tokens.total, 1_268_000)
@@ -309,4 +323,80 @@ test('stampProviderKinds 只固化确定形态，unknown 不覆盖', () => {
   assert.equal(stampProviderKinds(state, [{ id: 'zhipu', mode: 'subscription' }]), true)
   assert.equal(state.providerKinds.zhipu, 'subscription')
   assert.equal(stampProviderKinds(state, [{ id: 'zhipu', mode: 'subscription' }]), false)
+})
+
+test('订阅 provider 不进计价链：cost=0、priced=subscription', () => {
+  const state = emptyState()
+  const now = Date.UTC(2026, 9, 30, 2, 0, 0)
+  addRecord(state, { ts: now, provider: 'zhipu', model: 'glm-5.3', input: 1_000_000, output: 1_000_000 })
+  const row = state.days['2026-10-30'].providers.zhipu.models['glm-5.3']
+  assert.equal(row.priced, 'subscription')
+  assert.equal(row.cost, 0)
+  // 显式声明为按量后再来一条同模型记录：进入计价链（形态判定优先于历史值）
+  addRecord(state, { ts: now + 1000, provider: 'zhipu', model: 'glm-5.3', input: 1_000_000, output: 0 }, () => 'api')
+  assert.equal(row.priced, true)
+  assert.ok(row.cost > 0)
+})
+
+test('零消耗行标 empty，UI 才能显示 —（与真缺价区分）', () => {
+  const state = emptyState()
+  const now = Date.UTC(2026, 9, 30, 2, 0, 0)
+  addRecord(state, { ts: now, provider: 'deepseek-account', model: 'deepseek-flash', input: 0, output: 0 })
+  const row = state.days['2026-10-30'].providers['deepseek-official'].models['deepseek-flash']
+  assert.equal(row.priced, 'empty')
+  const summary = buildSummary(state, { budgets: {} }, now, [])
+  assert.equal(summary.breakdown.models[0].priced, 'empty')
+})
+
+test('kind 兜底走 registry：无快照时 zhipu=subscription、tencent=api', () => {
+  const state = emptyState()
+  const prefs = { billingModes: {} }
+  assert.equal(resolveProviderKind(state, prefs, 'zhipu', undefined), 'subscription')
+  assert.equal(resolveProviderKind(state, prefs, 'tencent', undefined), 'api')
+  assert.equal(resolveProviderKind(state, prefs, 'ollama', undefined), 'api')
+  // meta.kind 不再作为证据；只有 mode 生效
+  assert.equal(resolveProviderKind(state, prefs, 'tencent', { kind: 'subscription', mode: 'unknown' }), 'api')
+  assert.equal(resolveProviderKind(state, prefs, 'tencent', { kind: 'api', mode: 'subscription' }), 'subscription')
+  // prefs 显式覆盖最高优先
+  assert.equal(resolveProviderKind(state, { billingModes: { zhipu: 'api' } }, 'zhipu', { mode: 'subscription' }), 'api')
+})
+
+test('repriceUnpriced 只补 priced=false，unknown 按 owner 归因', () => {
+  const state = emptyState()
+  const buckets = {
+    providers: {
+      tencent: {
+        models: {
+          'deepseek-flash': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 0, priced: false, reason: 'no-model-price' },
+          'my-private-model': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 0, priced: false, reason: 'no-model-price' },
+          'deepseek-v4-pro': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 99, priced: true },
+        },
+      },
+      unknown: {
+        models: {
+          'glm-5.3': { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 0, cost: 0, priced: 'empty' },
+        },
+      },
+      zhipu: {
+        models: {
+          'glm-5.3': { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, requests: 1, cost: 0, priced: false },
+        },
+      },
+    },
+  }
+  state.days['2026-11-02'] = buckets
+  const result = repriceUnpriced(state, {})
+  assert.equal(result.rows, 1)
+  assert.equal(result.skipped['no-price'], 1)
+  assert.equal(result.skipped.kind, 1)
+  const models = state.days['2026-11-02'].providers.tencent.models
+  assert.equal(models['deepseek-flash'].priced, true)
+  assert.equal(models['deepseek-flash'].reason, undefined)
+  assert.ok(models['deepseek-flash'].cost > 0)
+  // 已计价行不被改写
+  assert.equal(models['deepseek-v4-pro'].cost, 99)
+  // 订阅行保持 false（kind 跳过），不会被补成按量费用
+  assert.equal(state.days['2026-11-02'].providers.zhipu.models['glm-5.3'].priced, false)
+  // 幂等：再跑一次没有可补的
+  assert.equal(repriceUnpriced(state, {}).rows, 0)
 })

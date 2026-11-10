@@ -8,7 +8,8 @@ const isLocal = version.includes('-local.')
 
 test('release notes 提取当前版本完整块', { skip: isLocal ? '本地构建不使用 Release notes' : false }, () => {
   const output = execFileSync(process.execPath, ['scripts/release-notes.mjs', version], { encoding: 'utf8' })
-  assert.match(output, /^### (新增|修改)$/m)
+  // 2.0.2 起 CHANGELOG 改为「### 中文 / #### 修改」双语块，小节层级同步放宽
+  assert.match(output, /^#{3,4} (新增|修改)$/m)
   assert.match(output, /^- /m)
   assert.ok(!output.includes('## ['), 'body 不应包含版本标题')
 })
