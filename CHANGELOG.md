@@ -4,6 +4,24 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0-local.3] - 2026-11-10
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 展开 Pill 面板时立即刷新一次数据（2s 内去重），不再等下一次轮询。
+- 面板可见期间轮询缩短到 10 秒，关闭后恢复设置里的刷新间隔；P3 看板常驻时同样按 10 秒跟进。
+
+### English
+
+#### Changes
+
+- Expanding the Pill panel now refreshes immediately (deduped within 2s) instead of waiting for the next poll.
+- While the panel is open the poll interval drops to 10s and returns to the configured interval when closed; the P3 board polls at 10s as well.
+
 ## [2.1.0-local.2] - 2026-11-10
 
 > 本地构建，未发布
