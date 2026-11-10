@@ -10,39 +10,25 @@ This file records the **new features** and **changes** of each release in Chines
 
 #### 新增
 
-- 新增 Ollama 供应商：卡片显示套餐剩余与购买余额的合计、套餐已用进度、额度周期结束时间与渠道 30 天用量；余额接口限流时保留上次数值并标注「限流中」。
-- 纯模型名计价：任意供应商（含第三方部署的 DeepSeek，如 `tencent`）都能按社区价目表出价，未命中时显示「未定价」并可补算。
-- 费用列四态：`≈` 近似价、精确价、「未定价」（带原因提示）、零消耗 `—`。
-- 未声明币种的第三方供应商在卡片标注「按社区表 CNY」；可用 `prefs.json` 的 `providerCurrency` 声明 CNY / USD。
-- `prefs.json` 新增 `priceOverrides` / `providerCurrency`（仅认文件，无设置界面）；新增排障接口 `POST /token-dash/api/pricing/reprice`，启动时自动补算未定价行。
+- 支持 Ollama：显示套餐剩余 + 购买余额、套餐已用、额度周期与渠道 30 天用量；限流时保留上次数值并提示「限流中」。
+- 支持第三方 API：自建、中转、本地模型等任意供应商都能记录并估算费用；没有价目的模型会标「未定价」，不会静默按 0 元计算。
 
 #### 修改
 
-- 计价改为「价目币种必须与供应商一致」：价目表为人民币而供应商按美元结算时，该模型显示「未定价」并说明原因，不再把人民币数值当成美元金额；OpenRouter 与 Qwen 国际站同步修正，历史成本按新规则重算一次（订阅与零消耗记录保持原样）。
-- 计价匹配改为四级短路（精确 → 别名 → 表内正则 → 结构化模糊），不再按供应商白名单丢弃行；订阅类供应商不再套模型价。
-- 展开 Pill 面板时立即刷新（2 秒内去重）；面板可见期间轮询 10 秒，关闭后恢复设置值，整页看板同样按 10 秒跟进，并同时刷新费用与模型明细。
-- 供应商探测日志改为「清单变化才记」：启动首轮与配置 Key / 掉线导致清单变动时输出一次（含已探测家数与未配置清单），不再每轮重复。
-- 启动日志修正：价格表已就绪时不再误报降级，配置日志每次启动只记一条；`/summary`、`/usage` 日志新增供应商探测耗时与整次请求耗时。
-- 设置区结构不变，仍为三行。
+- 币种不再混用：美元结算的供应商遇到人民币价目表时显示「未定价」并说明原因，不再把人民币数字当成美元；OpenRouter 与 Qwen 国际站一起修正，历史金额按新规则重算一次。
+- 刷新更快：展开面板立即刷新，面板与整页看板每 10 秒更新，费用与模型明细同步。
 
 ### English
 
 #### Added
 
-- New Ollama provider: the card shows total remaining credits (plan + purchased), plan usage progress, cycle end, and 30-day channel usage; when the balance endpoint is rate limited the last values stay visible with a "Rate limited" note.
-- Model-name-only pricing: any provider (including third-party DeepSeek deployments such as `tencent`) is priced from the community catalog; misses show as "Unpriced" and can be backfilled.
-- Four cost-cell states: `≈` approximate, exact, "Unpriced" with a reason tooltip, and `—` for zero-token rows.
-- Providers without a declared currency show "Community table (CNY)" on the card; declare `prefs.json` `providerCurrency` to switch between CNY / USD.
-- `prefs.json` gains `priceOverrides` / `providerCurrency` (file-only, no settings UI) plus a troubleshooting route `POST /token-dash/api/pricing/reprice`; unpriced rows are backfilled at startup.
+- Ollama: plan + purchased credits, plan usage, cycle and 30-day channel usage; when rate limited the last values stay with a "Rate limited" note.
+- Third-party APIs: self-hosted, relay and local providers are recorded and priced; models without a price are marked "Unpriced" instead of silently counting as zero.
 
 #### Changes
 
-- Pricing now requires the price-table currency to match the provider currency: when a CNY table meets a USD provider the model is shown as unpriced with a reason instead of rendering CNY numbers as USD. OpenRouter and Qwen international keys are corrected the same way, and historical costs are recalculated once (subscription and zero-usage rows stay untouched).
-- Matching now short-circuits through exact → alias → table regex → structured fuzzy and no longer drops rows by provider whitelist; subscription providers are no longer priced per token.
-- Expanding the Pill panel refreshes immediately (deduped within 2s); while the panel is open the poll interval drops to 10s and returns to the configured value when closed. The full dashboard polls at 10s too and refreshes both cost and model details.
-- Provider probing now logs once when the probe list changes (first run after start, after adding a key, or after a provider drops out) with configured and unconfigured lists, instead of every refresh.
-- Startup logs: no more false degraded-catalog warning when the catalog is already loaded, the pricing config is logged once per startup, and `/summary` / `/usage` logs carry provider-probe and total request durations.
-- The settings area is unchanged (still three rows).
+- No more mixed currencies: a USD provider matched only by the CNY table shows "Unpriced" with a reason instead of showing CNY numbers as USD. OpenRouter and Qwen international keys are fixed too, and historical amounts are recalculated once.
+- Faster refresh: the panel refreshes when opened, and the panel plus the dashboard poll every 10s so cost and model details update together.
 
 ## [2.0.2] - 2026-11-06
 

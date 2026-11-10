@@ -121,7 +121,7 @@ Update: run `update` with the same name, or use the `⤓` button on the right of
 - The UI currently ships Chinese / English only. Other DSH languages (Japanese, German, Russian, etc.) fall back to English.
 - After a DSH upgrade the plugin may disappear from the profile; reinstall the same tarball — the ledger is not deleted.
 - Qwen tracks usage only; its balance endpoint is unsupported. Other balances/quotas follow what each API returns.
-- A USD-billed provider that only matches the CNY price table shows "Unpriced" with a reason instead of rendering CNY numbers as USD; add a `currency: "USD"` entry to `prefs.json` `priceOverrides` for exact amounts.
+- A USD-billed provider that only matches the CNY price table shows "Unpriced" with a reason instead of rendering CNY numbers as USD.
 - Ollama's balance and usage endpoints share a 10 requests/minute limit; when rate limited the card keeps the last values with a "Rate limited" note and recovers automatically.
 - Upstream APIs are rate-limited; successful results are cached for 60s, failures for 10s, and concurrent requests are coalesced.
 
