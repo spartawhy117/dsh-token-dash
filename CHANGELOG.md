@@ -4,6 +4,42 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.2-local.1] - 2026-11-10
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+- 纯模型名计价：任意 provider（含第三方部署的 DeepSeek，如 `tencent`）都能按社区价目表出价，未命中时显示「未定价」并可补算。
+- 费用列四态：`≈` 近似价、精确价、`未定价`（带原因 tooltip）、零消耗 `—`。
+- 未声明币种的第三方 provider 在卡片标注「按社区表 CNY」；可用 `prefs.providerCurrency` 声明 CNY / USD。
+- `POST /token-dash/api/pricing/reprice` 排障路由；启动时自动补算未定价行。
+- `prefs.json` 新增 `priceOverrides` / `providerCurrency`（仅认文件，无 UI）。
+
+#### 修改
+
+- 计价匹配改为四级短路（精确 → 别名 → 表内正则 → 结构化模糊），不再按 provider 白名单丢弃行。
+- 订阅类 provider 不再套模型价：`kind === 'subscription'` 时 `cost = 0`；形态判定改由 registry 兜底，不再读 `meta.kind`。
+- 设置区结构不变，仍为三行。
+
+### English
+
+#### Added
+
+- Model-name-only pricing: any provider (including third-party DeepSeek deployments such as `tencent`) is priced from the community catalog; misses show as “Unpriced” and can be backfilled.
+- Four cost-cell states: `≈` approximate, exact, “Unpriced” with a reason tooltip, and `—` for zero-token rows.
+- Providers without a declared currency show “Community table (CNY)” on the card; declare `prefs.providerCurrency` to switch between CNY / USD.
+- `POST /token-dash/api/pricing/reprice` for troubleshooting, plus automatic backfill of unpriced rows at startup.
+- `prefs.json` gains `priceOverrides` / `providerCurrency` (file-only, no UI).
+
+#### Changes
+
+- Matching now short-circuits through exact → alias → table regex → structured fuzzy, and no longer drops rows by provider whitelist.
+- Subscription providers are no longer priced per token (`cost = 0`); kind falls back to the registry and no longer reads `meta.kind`.
+- Settings area is unchanged (still three rows).
+
 ## [2.0.2] - 2026-11-06
 
 ### 中文
