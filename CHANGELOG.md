@@ -4,6 +4,36 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.0-local.1] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+- 整页看板新增**用量趋势柱状图**：按天展示所选时间段的用量走势，可在「真实 Tokens / 请求 / 费用 / 缓存命中率」四项之间切换，悬停显示当天精确数值。
+- 范围摘要由两格扩展为**四格**：总费用、真实 Tokens、总请求数、缓存命中率四张卡片一屏看全，点击卡片即可切换下方趋势图指标。
+- 长跨度自动换粒度：范围内超过 60 天时趋势图按月汇总，柱子不会挤成一条线。
+
+#### 修改
+
+- 「全部」范围的趋势图刻度随语言切换：中文显示「万 / 亿」，英文显示 K / M / B。
+- 多币种时「费用」指标会提示不可用并引导切换其他指标，不再显示混合币种的柱子。
+
+### English
+
+#### Added
+
+- Usage trend bars on the full dashboard: daily totals for the selected range, switchable between real tokens, requests, cost and cache hit rate, with exact values on hover.
+- The range summary now has four cells: total cost, real tokens, total requests and cache hit rate. Clicking a cell switches the metric below.
+- Long ranges switch to monthly buckets automatically once they exceed 60 days, so bars never collapse into a line.
+
+#### Changes
+
+- Trend axis units follow the language: 万 / 亿 in Chinese, K / M / B in English.
+- With multiple currencies the cost metric is disabled with a hint instead of drawing a mixed-currency chart.
+
 ## [2.1.0] - 2026-11-10
 
 ### 中文

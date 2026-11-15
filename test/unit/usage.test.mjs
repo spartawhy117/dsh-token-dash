@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildUsage } from '../../src/core.js'
+import { buildMonthlySeries, buildUsage, eachDayKey } from '../../src/core.js'
 
 const now = new Date(2026, 10, 2, 12, 0, 0).getTime()
 const providers = [
@@ -74,4 +74,97 @@ test('buildUsage: hidden providers are excluded but keep a zero bucket', () => {
 test('buildUsage: invalid range falls back to today', () => {
   const usage = buildUsage(state, { billingModes: {} }, 'bad', now, providers)
   assert.equal(usage.range, 'today')
+})
+test('eachDayKey: 含两端、跨月跨年、逆序返回空', () => {
+  assert.deepEqual(eachDayKey('2026-11-01', '2026-11-03'), ['2026-11-01', '2026-11-02', '2026-11-03'])
+  assert.deepEqual(eachDayKey('2026-10-30', '2026-11-02'), ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'])
+  assert.deepEqual(eachDayKey('2026-12-30', '2027-01-02'), ['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02'])
+  assert.deepEqual(eachDayKey('2026-11-03', '2026-11-01'), [])
+  assert.deepEqual(eachDayKey('2026-11-02', '2026-11-02'), ['2026-11-02'])
+})
+
+test('buildUsage: series 连续等距且窗口内每个日键都有点', () => {
+  const usage = buildUsage(state, { billingModes: {} }, 'all', now, providers)
+  assert.equal(usage.startKey, '2026-10-20')
+  assert.equal(usage.endKey, '2026-11-02')
+  assert.equal(usage.grain, 'day')
+  assert.equal(usage.series.length, 14)
+  assert.deepEqual(usage.series.map((point) => point.dayKey), eachDayKey('2026-10-20', '2026-11-02'))
+  // 中间没有数据的天补零值点，柱数不减
+  const gap = usage.series.find((point) => point.dayKey === '2026-10-25')
+  assert.equal(gap.tokens, 0)
+  assert.equal(gap.requests, 0)
+  assert.equal(gap.hitRate, null)
+})
+
+test('buildUsage: 日序列与 total / totals 同口径闭合', () => {
+  const usage = buildUsage(state, { billingModes: {} }, 'all', now, providers)
+  const sumTokens = usage.series.reduce((sum, point) => sum + point.tokens, 0)
+  const sumRequests = usage.series.reduce((sum, point) => sum + point.requests, 0)
+  const sumCost = usage.series.reduce((sum, point) => sum + (point.cost.CNY?.cost ?? 0), 0)
+  assert.equal(sumTokens, usage.total.tokens)
+  assert.equal(sumRequests, usage.total.requests)
+  assert.ok(Math.abs(sumCost - usage.totals.CNY.cost) < 1e-6)
+})
+
+test('buildUsage: 订阅行进 tokens 但不进 cost（口径分叉）', () => {
+  const usage = buildUsage(state, { billingModes: {} }, 'today', now, providers)
+  const today = usage.series.find((point) => point.dayKey === '2026-11-02')
+  // deepseek 1000 输入 + 100 输出 = 1100；zhipu 200 + 20 = 220 也计入 tokens，但其成本不进 cost
+  assert.equal(today.tokens, 1100 + 220)
+  assert.equal(today.cost.CNY.cost, 3)
+  assert.equal(today.cost.CNY.requests, 1)
+})
+
+test('buildUsage: hide 的 provider 不进日序列', () => {
+  const visible = buildUsage(state, { billingModes: {} }, 'today', now, providers)
+  const hidden = buildUsage(state, { billingModes: { zhipu: 'hide' } }, 'today', now, providers)
+  const pick = (usage) => usage.series.find((point) => point.dayKey === '2026-11-02')
+  assert.ok(pick(visible).tokens > pick(hidden).tokens)
+  assert.equal(pick(hidden).tokens, 1100)
+})
+
+test('buildUsage: today 只有 1 个点', () => {
+  const usage = buildUsage(state, { billingModes: {} }, 'today', now, providers)
+  assert.equal(usage.series.length, 1)
+  assert.equal(usage.series[0].dayKey, '2026-11-02')
+})
+
+test('buildUsage: 无 token 的行命中率为 null 而不是 0', () => {
+  const empty = {
+    days: {
+      '2026-11-02': {
+        providers: {
+          'deepseek-official': {
+            models: {
+              'deepseek-flash': { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 3, cost: 0, priced: 'empty' },
+            },
+          },
+        },
+      },
+    },
+  }
+  const usage = buildUsage(empty, { billingModes: {} }, 'today', now, providers)
+  assert.equal(usage.series[0].requests, 3)
+  assert.equal(usage.series[0].hitRate, null)
+})
+
+test('buildMonthlySeries: 超过 60 个日点按月合并，未超过原样返回', () => {
+  const day = (dayKey, tokens) => ({
+    dayKey, cost: { CNY: { cost: 1, requests: 1 } }, requests: 1,
+    input: tokens, cacheRead: 0, cacheWrite: 0, output: 0, tokens, hitRate: null,
+  })
+  const sixty = Array.from({ length: 60 }, (_, index) => day('2026-09-' + String((index % 30) + 1).padStart(2, '0'), 1))
+  assert.equal(buildMonthlySeries(sixty).grain, 'day')
+
+  const many = []
+  for (let month = 1; month <= 3; month += 1) {
+    for (let d = 1; d <= 25; d += 1) many.push(day(`2026-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`, 2))
+  }
+  const { grain, series } = buildMonthlySeries(many)
+  assert.equal(grain, 'month')
+  assert.equal(series.length, 3)
+  assert.equal(series[0].dayKey, '2026-01')
+  assert.equal(series[0].tokens, 50)
+  assert.equal(series.reduce((sum, point) => sum + point.cost.CNY.cost, 0), 75)
 })

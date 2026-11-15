@@ -450,6 +450,9 @@ export function apply(ctx) {
               billable: usage.models.filter((item) => item.billable === true).length,
               tokens: usage.total.tokens,
               currencies: Object.keys(usage.totals).length,
+              grain: usage.grain,
+              points: usage.series.length,
+              seriesCurrencies: Object.keys(usage.series.reduce((acc, point) => Object.assign(acc, point.cost), {})).length,
               probeMs,
               durationMs: Date.now() - startedAt,
             })

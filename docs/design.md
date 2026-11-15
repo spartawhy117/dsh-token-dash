@@ -1,6 +1,6 @@
 # dsh-token-dash 设计文档
 
-> 更新时间：2026-11-10（v3.12，新增 Ollama 源与币种不匹配规则：源表 8 家、可选 `usage` 钩子、`session` 窗口、429 保留旧值与 `Retry-After` 退避、`costVersion 4`）<br>
+> 更新时间：2026-11-16（v3.13，P3 四格摘要带与用量趋势柱：`/usage` 新增 `series` / `grain`，摘要带两格 → 四格）<br>
 > 面向贡献者的一页式架构说明。需求背景见 [token-dash 计划（已归档）](plan/archived/feature_token_dash.md)，已归档的 UI 迭代见 [UI 迭代计划](plan/archived/feature_ui_refresh.md)；Provider/VM/UI 边界收口见 [边界计划](plan/archived/feature_provider_boundary.md)；UI 视觉以 [UI 设计](ui-design.md) 为唯一真源。
 
 ## 设计目标
@@ -287,6 +287,7 @@ adapters.readProviders(ctx, prefs, cache)
 | 鉴权 | 回环放行；非回环优先 `connection.requestRejection`，无则校验 `remoteAddress + host + origin`，失败 403 |
 | 脱敏 | 日志已过滤；错误响应只返回 `reason`，不含上游 body / Key |
 | 附加路由 | 无 `/repo`；仓库入口为静态 `REPO_URL` 链接 |
+| `/usage` DTO | `{ range, startAt, endAt, startKey, endKey, totals, total, models, series, grain }`；`series` 为连续日点（`grain='month'` 时按月），导出包**不含**该字段 |
 
 ## 文件目录组织
 

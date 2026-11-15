@@ -159,7 +159,61 @@ const usageFor = (range) => ({
     hitRate: 2 / 3,
   },
   models,
+  // 7 个日点，第 5 天零值、第 6 天命中率缺失；末点承接全量使 Σ 与 total 闭合
+  grain: 'day',
+  series: seriesFor(),
 })
+
+/** 与 total / totals 自洽的逐日点：前 6 天按权重分摊，末点取余量。 */
+function seriesFor() {
+  const days = ['2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']
+  const weights = [0.08, 0.14, 0.11, 0.16, 0, 0.18]
+  const total = { tokens: 1_280_000, input: 400_000, cacheRead: 800_000, cacheWrite: 0, output: 80_000, requests: 48 }
+  const totals = { CNY: 12.34, USD: 4.68 }
+  const used = { tokens: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 0, CNY: 0, USD: 0 }
+  return days.map((dayKey, index) => {
+    if (index === days.length - 1) {
+      return {
+        dayKey,
+        cost: {
+          CNY: { cost: Math.round((totals.CNY - used.CNY) * 100) / 100, requests: 6 },
+          USD: { cost: Math.round((totals.USD - used.USD) * 100) / 100, requests: 6 },
+        },
+        requests: total.requests - used.requests,
+        input: total.input - used.input,
+        cacheRead: total.cacheRead - used.cacheRead,
+        cacheWrite: 0,
+        output: total.output - used.output,
+        tokens: total.tokens - used.tokens,
+        hitRate: 2 / 3,
+      }
+    }
+    const share = weights[index]
+    const point = {
+      dayKey,
+      cost: {
+        CNY: { cost: Math.round(totals.CNY * share * 100) / 100, requests: Math.round(12 * share) },
+        USD: { cost: Math.round(totals.USD * share * 100) / 100, requests: Math.round(12 * share) },
+      },
+      requests: Math.round(total.requests * share),
+      input: Math.round(total.input * share),
+      cacheRead: Math.round(total.cacheRead * share),
+      cacheWrite: 0,
+      output: Math.round(total.output * share),
+      tokens: Math.round(total.tokens * share),
+      hitRate: index === 5 ? null : 2 / 3,
+    }
+    used.tokens += point.tokens
+    used.input += point.input
+    used.cacheRead += point.cacheRead
+    used.output += point.output
+    used.requests += point.requests
+    used.CNY += point.cost.CNY.cost
+    used.USD += point.cost.USD.cost
+    return point
+  })
+}
+
 let failSummary = false
 let failUsage = false
 let summaryRequests = 0
@@ -176,11 +230,27 @@ try {
   const dataDir = join(home, 'dsh-token-dash')
   mkdirSync(dataDir, { recursive: true })
   const fixtureLines = readFileSync(join(root, 'test', 'fixtures', 'e2e-session.jsonl'), 'utf8').split(/\r?\n/).filter(Boolean)
+  // 0.2.2 起会话按工作区分组：fixture 的 cwd 必须真实存在，并在 workspace.json 里登记，否则侧栏列表为空、P1 永远不挂载。
   const fixtureHeader = JSON.parse(fixtureLines[0])
+  const fixtureWorkspace = join(home, 'e2e-workspace')
+  mkdirSync(fixtureWorkspace, { recursive: true })
+  fixtureHeader.cwd = fixtureWorkspace
+  const fixtureBody = [JSON.stringify(fixtureHeader), ...fixtureLines.slice(1)]
   const fixtureKey = `--${fixtureHeader.cwd.replace(':', '').replaceAll('\\', '-')}--`
   const fixtureDir = join(home, 'sessions', fixtureKey, fixtureHeader.id)
   mkdirSync(fixtureDir, { recursive: true })
-  writeFileSync(join(fixtureDir, 'session.v4.jsonl.zstd'), Buffer.concat(fixtureLines.map((line) => zstdCompressSync(Buffer.from(`${line}\n`)))))
+  writeFileSync(join(fixtureDir, 'session.v4.jsonl.zstd'), Buffer.concat(fixtureBody.map((line) => zstdCompressSync(Buffer.from(`${line}\n`)))))
+  const seededAt = new Date().toISOString()
+  mkdirSync(join(home, 'storages'), { recursive: true })
+  writeFileSync(join(home, 'storages', 'workspace.json'), JSON.stringify({
+    unit: { name: 'workspace', version: 2 },
+    global: { initialized: true, workspaceIds: ['ws-e2e'], archivedSessionIds: [], pinnedSessionIds: [] },
+    tables: {
+      workspaces: {
+        'ws-e2e': { path: fixtureWorkspace, title: 'E2E', sessionIds: [fixtureHeader.id], createdAt: seededAt, updatedAt: seededAt },
+      },
+    },
+  }, null, 2))
   server = startWeb(env)
   const { base, token } = await server.ready
   console.log(`[e2e] web ${base}`)
@@ -193,6 +263,13 @@ try {
   assert.ok(usageData.totals !== undefined)
   assert.ok(Array.isArray(usageData.models))
   assert.ok(usageData.total !== undefined)
+  // 趋势序列：连续日点 + 粒度标志
+  assert.ok(Array.isArray(usageData.series), 'usage VM should carry series')
+  assert.equal(usageData.series.length, 7)
+  assert.equal(usageData.grain, 'day')
+  for (const point of usageData.series) {
+    for (const key of ['dayKey', 'cost', 'requests', 'tokens', 'hitRate']) assert.ok(key in point, `series point missing ${key}`)
+  }
   assert.equal((await fetch(`${base}/token-dash/api/usage?range=bad`)).status, 400)
 
   // L2: export / import round-trip on the real host API.
@@ -287,9 +364,20 @@ try {
   const pill = page.locator('[data-testid=token-dash-pill]')
   assert.equal(await pill.count(), 0, 'blank session should not show P1')
   assert.match(await page.locator('body').innerText(), /标准模式/)
+  // 0.2.2 的侧栏条目只监听真实指针事件：evaluate(node.click) 不会触发 React 的 onPointerDown，P1 就不会挂载。
   const fixtureTitle = (await page.getByText('E2E Fixture', { exact: true }).count()) > 0 ? 'E2E Fixture' : '未命名'
-  await page.getByText(fixtureTitle, { exact: true }).first().evaluate((node) => node.click()).catch(() => {})
-  await page.waitForTimeout(800)
+  await page.evaluate((title) => {
+    const nodes = [...document.querySelectorAll('*')].filter((node) => (node.textContent ?? '').trim().startsWith(title))
+    const target = nodes[nodes.length - 1]
+    if (target === undefined) return
+    for (let node = target, depth = 0; node !== null && depth < 6; node = node.parentElement, depth += 1) {
+      node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+      node.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+    }
+  }, fixtureTitle)
+  await page.waitForTimeout(1500)
   await pill.waitFor({ timeout: 20000 })
   assert.ok(await pill.isVisible())
   await page.waitForTimeout(300)
@@ -505,9 +593,37 @@ try {
   assert.ok(tokensBox.x > costBox.x, 'tokens half should sit right of cost half')
   const bandBorder = await board.getByTestId('token-dash-range-cards').evaluate((node) => getComputedStyle(node).borderTopStyle)
   assert.equal(bandBorder, 'solid')
+  // 四格：总请求数与缓存命中率随四格方案新增，且四格都是指标选择器
+  assert.equal(await board.locator('[data-testid^=token-dash-card-]').count(), 4)
+  assert.match(await board.getByTestId('token-dash-card-requests').innerText(), /48/)
+  assert.match(await board.getByTestId('token-dash-card-hitRate').innerText(), /66\.7%|66\.6%|67%/)
+  assert.equal(await board.getByTestId('token-dash-card-tokens').getAttribute('aria-pressed'), 'true')
+  // 趋势柱：位于摘要带与明细表之间，柱数等于序列点数，零值日不画柱
+  const trend = board.getByTestId('token-dash-trend')
+  const [trendBox, bandBox] = await Promise.all([trend.boundingBox(), board.getByTestId('token-dash-range-cards').boundingBox()])
+  assert.ok(trendBox !== null && bandBox !== null)
+  assert.ok(trendBox.y >= bandBox.y + bandBox.height, 'trend should sit below the summary band')
+  assert.equal(await board.locator('[data-testid^=token-dash-trend-bar-]').count(), 7)
+  const zeroBox = await board.getByTestId('token-dash-trend-bar-2026-10-31').boundingBox()
+  assert.equal(zeroBox === null ? 0 : Math.round(zeroBox.height), 0, 'zero-value day should render no bar')
+  assert.match(await board.getByTestId('token-dash-trend-title').innerText(), /使用趋势 · Tokens/)
+  // 点摘要带切指标：标题、选中态、胶囊与图表一起变
+  await jsClick(board.getByTestId('token-dash-card-requests'))
+  await page.waitForTimeout(120)
+  assert.match(await board.getByTestId('token-dash-trend-title').innerText(), /使用趋势 · 请求/)
+  assert.equal(await board.getByTestId('token-dash-card-requests').getAttribute('aria-pressed'), 'true')
+  assert.equal(await board.getByTestId('token-dash-card-tokens').getAttribute('aria-pressed'), 'false')
+  assert.equal(await trend.getAttribute('data-td-trend'), 'requests')
+  // 多币种下费用指标禁用，不静默取首个币种
+  await jsClick(board.getByTestId('token-dash-card-cost'))
+  await page.waitForTimeout(120)
+  assert.equal(await board.getByTestId('token-dash-trend-empty').count(), 1)
+  assert.match(await board.getByTestId('token-dash-trend-empty').innerText(), /多币种下成本柱不可用/)
+  await jsClick(board.getByTestId('token-dash-card-tokens'))
+  await page.waitForTimeout(120)
   const detailTable = board.getByTestId('token-dash-detail-table')
   const detailBox = await detailTable.boundingBox()
-  assert.ok(detailBox !== null && costBox !== null && detailBox.y > costBox.y + costBox.height, 'detail table should be below summary band')
+  assert.ok(detailBox !== null && trendBox !== null && detailBox.y > trendBox.y + trendBox.height, 'detail table should be below the trend chart')
   assert.match(await detailTable.innerText(), /费用/)
   assert.equal(await board.locator('[data-testid^=token-dash-detail-row-]').count(), models.length)
   assert.equal(await board.getByTestId('token-dash-board-head-refresh').count(), 1)

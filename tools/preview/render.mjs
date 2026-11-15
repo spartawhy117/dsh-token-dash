@@ -62,6 +62,15 @@ const css = [
   `--api-stroke: ${SPEC.apiGauge.stroke}px;`,
   `--inline-font: ${SPEC.inlineRing.font}px;`,
   `--inline-gap: ${SPEC.inlineRing.gap}px;`,
+  `--summary-font: ${SPEC.summary.font}px;`,
+  `--summary-sub: ${SPEC.summary.subFont}px;`,
+  `--trend-height: ${SPEC.trend.height}px;`,
+  `--trend-axis-pad: ${SPEC.trend.axisPadLeft}px;`,
+  `--trend-tick-h: ${SPEC.trend.tickHeight}px;`,
+  `--trend-bar-max: ${SPEC.trend.barMax}px;`,
+  `--trend-bar-radius: ${SPEC.trend.barRadius}px;`,
+  `--trend-bar-gap: ${SPEC.trend.barGap}px;`,
+  `--trend-tick-font: ${SPEC.trend.tickFont}px;`,
 ].join('\n    ')
 
 // 支持 `drafts/<name>`：探索稿放 drafts/，定稿移 templates/；输出统一加 draft- 前缀避免撞名

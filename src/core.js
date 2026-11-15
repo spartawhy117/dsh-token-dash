@@ -80,6 +80,25 @@ function dayStartTs(dayKey) {
 }
 
 /**
+ * 枚举 [startKey, endKey] 内的全部本地日键（含两端）。
+ * 用 setDate 逐日推进而不是加 86400000，跨夏令时切换时日期才不会漂。
+ */
+export function eachDayKey(startKey, endKey) {
+  const start = dayStartTs(startKey)
+  if (start === null || String(endKey) < String(startKey)) return []
+  const out = []
+  const cursor = new Date(start)
+  // 账本不可能超过 100 年；非法 key 时也靠这个上限兜底退出，避免死循环
+  for (let guard = 0; guard < 36600; guard += 1) {
+    const key = localDayKey(cursor.getTime())
+    if (key > endKey) break
+    out.push(key)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return out
+}
+
+/**
  * 旧计价模型的成本在入账时写死；定价修复后按日级 token 与当日 00:00 价目重算。
  * 日级聚合没有单条记录时间，峰谷只能按 00:00（闲时）代表，结果属于估算。
  * 重算同样走「形态先于计价 + 币种不匹配不计价」，订阅行与零消耗行保持原状态。
@@ -346,6 +365,54 @@ export function stampProviderKinds(state, snapshots) {
   return changed
 }
 
+/** 日点数超过这个值就切「按月」桶：柱数稳定在 12 上下，避免柱子被压成线。 */
+const MONTHLY_GRAIN_THRESHOLD = 60
+
+/**
+ * 日序列超过阈值时按月合并：柱数稳定在 12 上下，避免柱子被压成线。
+ * 只做加法，口径与日序列完全一致；命中率按当月总量重算，不是日命中率的平均。
+ */
+export function buildMonthlySeries(series) {
+  if (!Array.isArray(series) || series.length <= MONTHLY_GRAIN_THRESHOLD) return { grain: 'day', series }
+  const byMonth = new Map()
+  for (const point of series) {
+    const month = String(point.dayKey).slice(0, 7)
+    let entry = byMonth.get(month)
+    if (entry === undefined) {
+      entry = {
+        dayKey: month,
+        cost: {},
+        requests: 0,
+        input: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        output: 0,
+        tokens: 0,
+        hitRate: null,
+      }
+      byMonth.set(month, entry)
+    }
+    entry.requests += point.requests
+    entry.input += point.input
+    entry.cacheRead += point.cacheRead
+    entry.cacheWrite += point.cacheWrite
+    entry.output += point.output
+    entry.tokens += point.tokens
+    for (const [currency, bucket] of Object.entries(point.cost)) {
+      const target = (entry.cost[currency] ??= { cost: 0, requests: 0 })
+      target.cost += bucket.cost
+      target.requests += bucket.requests
+    }
+  }
+  const merged = [...byMonth.values()]
+  for (const entry of merged) {
+    for (const bucket of Object.values(entry.cost)) bucket.cost = round2(bucket.cost)
+    const denominator = entry.input + entry.cacheRead + entry.cacheWrite
+    entry.hitRate = denominator > 0 ? entry.cacheRead / denominator : null
+  }
+  return { grain: 'month', series: merged }
+}
+
 /**
  * Range-only aggregation for P2. Unlike buildSummary this never adds
  * "configured but unused" default rows, and it does not touch month budgets.
@@ -371,7 +438,26 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
   }
   const models = new Map()
   const totals = {}
-  const add = (providerId, modelId, row) => {
+  // 逐日点：口径与 P3 两格卡一致——cost 只累 billable 行，其余字段累全部行（含订阅）
+  const points = new Map()
+  const pointOf = (dayKey) => {
+    const existing = points.get(dayKey)
+    if (existing !== undefined) return existing
+    const point = {
+      dayKey,
+      cost: {},
+      requests: 0,
+      input: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      output: 0,
+      tokens: 0,
+      hitRate: null,
+    }
+    points.set(dayKey, point)
+    return point
+  }
+  const add = (providerId, modelId, row, point) => {
     if (hidden.has(providerId)) return
     const meta = info.get(providerId)
     const kind = resolveProviderKind(state, prefs, providerId, meta)
@@ -409,10 +495,23 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     entry.currency = currency
     entry.currencySource = currencySourceOf(prefs, providerId, meta)
     models.set(key, entry)
+    const rowTokens = num(row.input) + num(row.cacheRead) + num(row.cacheWrite) + num(row.output)
+    point.requests += num(row.requests)
+    point.input += num(row.input)
+    point.cacheRead += num(row.cacheRead)
+    point.cacheWrite += num(row.cacheWrite)
+    point.output += num(row.output)
+    point.tokens += rowTokens
+    if (billable) {
+      const bucket = (point.cost[currency] ??= { cost: 0, requests: 0 })
+      bucket.cost += num(row.cost)
+      bucket.requests += num(row.requests)
+    }
   }
 
   for (const dayKey of dayKeys) {
     if (dayKey < startKey || dayKey > todayKey) continue
+    const point = pointOf(dayKey)
     const bucket = state.days[dayKey]
     const providers = bucket.providers ?? { unknown: { models: bucket.models ?? {} } }
     for (const [rawProvider, providerBucket] of Object.entries(providers)) {
@@ -420,12 +519,12 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
       if (providerId === 'unknown') {
         for (const [rawModel, row] of Object.entries(providerBucket.models ?? {})) {
           const owner = providerFromModel(rawModel)
-          if (owner !== null) add(owner, normalizeModel(rawModel), row)
+          if (owner !== null) add(owner, normalizeModel(rawModel), row, point)
         }
         continue
       }
       for (const [rawModel, row] of Object.entries(providerBucket.models ?? {})) {
-        add(providerId, normalizeModel(rawModel), row)
+        add(providerId, normalizeModel(rawModel), row, point)
       }
     }
   }
@@ -491,6 +590,16 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     ? total.cacheRead / (total.input + total.cacheRead + total.cacheWrite)
     : null
 
+  // 等距连续：窗口内没有数据的日补零，柱距才不会塌；hitRate 留 null 表示「无数据」而不是 0%
+  const daySeries = eachDayKey(startKey, todayKey).map((dayKey) => {
+    const point = pointOf(dayKey)
+    for (const bucket of Object.values(point.cost)) bucket.cost = round2(bucket.cost)
+    const denominator = point.input + point.cacheRead + point.cacheWrite
+    point.hitRate = denominator > 0 ? point.cacheRead / denominator : null
+    return point
+  })
+  const { grain, series } = buildMonthlySeries(daySeries)
+
   return {
     range: selected,
     startAt: dayStartTs(startKey) ?? now,
@@ -500,6 +609,8 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     totals,
     total,
     models: rows,
+    series,
+    grain,
   }
 }
 

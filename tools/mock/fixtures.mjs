@@ -181,6 +181,65 @@ function aggregate(models) {
   return { totals, total }
 }
 
+/**
+ * 逐日点：末点承接余量使 Σ 与 total / totals 闭合；第 5 天零值、第 6 天命中率缺失。
+ * 与 aggregate 同口径——cost 只算 billable，其余含订阅行。
+ */
+function seriesFor(models) {
+  const days = ['2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']
+  const weights = [0.08, 0.14, 0.11, 0.16, 0, 0.18]
+  const { totals, total } = aggregate(models)
+  const used = { tokens: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 0 }
+  for (const currency of Object.keys(totals)) used[currency] = 0
+  return days.map((dayKey, index) => {
+    if (index === days.length - 1) {
+      const cost = {}
+      for (const [currency, bucket] of Object.entries(totals)) {
+        cost[currency] = { cost: Math.round((bucket.cost - used[currency]) * 100) / 100, requests: bucket.requests - (used[currency + ':req'] ?? 0) }
+      }
+      return {
+        dayKey,
+        cost,
+        requests: total.requests - used.requests,
+        input: total.input - used.input,
+        cacheRead: total.cacheRead - used.cacheRead,
+        cacheWrite: total.cacheWrite - used.cacheWrite,
+        output: total.output - used.output,
+        tokens: total.tokens - used.tokens,
+        hitRate: total.hitRate,
+      }
+    }
+    const share = weights[index]
+    const cost = {}
+    for (const [currency, bucket] of Object.entries(totals)) {
+      cost[currency] = {
+        cost: Math.round(bucket.cost * share * 100) / 100,
+        requests: Math.round(bucket.requests * share),
+      }
+      used[currency] += cost[currency].cost
+      used[currency + ':req'] = (used[currency + ':req'] ?? 0) + cost[currency].requests
+    }
+    const point = {
+      dayKey,
+      cost,
+      requests: Math.round(total.requests * share),
+      input: Math.round(total.input * share),
+      cacheRead: Math.round(total.cacheRead * share),
+      cacheWrite: Math.round(total.cacheWrite * share),
+      output: Math.round(total.output * share),
+      tokens: Math.round(total.tokens * share),
+      hitRate: index === 5 ? null : total.hitRate,
+    }
+    used.tokens += point.tokens
+    used.input += point.input
+    used.cacheRead += point.cacheRead
+    used.cacheWrite += point.cacheWrite
+    used.output += point.output
+    used.requests += point.requests
+    return point
+  })
+}
+
 /** 每个时间范围给出不同量级，模拟"切范围数字变化"。 */
 export function usageFor(range) {
   const models = range === 'today' ? todayModels : monthModels
@@ -194,6 +253,8 @@ export function usageFor(range) {
     totals,
     total,
     models,
+    grain: 'day',
+    series: seriesFor(models),
   }
 }
 

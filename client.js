@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
       '[data-td-pill]:hover{background:color-mix(in srgb,currentColor 8%,transparent)}',
       '[data-td-btn]:hover{background:color-mix(in srgb,var(--td-accent) 24%,transparent);border-color:color-mix(in srgb,var(--td-accent) 48%,transparent)}',
       '[data-td-btn]:active{background:color-mix(in srgb,var(--td-accent) 28%,transparent)}',
-      '@media (max-width:560px){[data-td-cards]{grid-template-columns:minmax(0,1fr)}}',
+      '@media (max-width:560px){[data-td-cards]{grid-template-columns:repeat(2,minmax(0,1fr))}[data-td-cards]>*:nth-child(n+3){border-top:1px solid color-mix(in srgb,currentColor 18%,transparent)}[data-td-cards]>*:nth-child(3){border-left:0}}',
       '[data-td-scroll]{overflow-x:auto}',
       '[data-td-scroll] > *{min-width:560px}',
       '[data-testid=token-dash-board-scroll]::-webkit-scrollbar{width:8px}',
@@ -117,6 +117,16 @@ window.__ModuleLoader__.load({
       '周期至 {time}': 'Cycle ends {time}', '限流中': 'Rate limited',
       '渠道用量 {value}': 'Channel usage {value}',
       '价目表为 CNY，该 provider 按 USD 结算；可用 priceOverrides 补 USD 单价': 'Price table is CNY while this provider bills in USD; add a USD priceOverrides entry',
+      '总请求数': 'Total requests', '缓存命中率': 'Cache hit rate',
+      '{n} 个币种': '{n} currencies', '范围内全部模型': 'All models in range',
+      '创建 {a} · 命中 {b}': 'Created {a} · hit {b}',
+      '趋势指标': 'Trend metric', '使用趋势 · {metric}': 'Trend · {metric}',
+      '按天': 'Daily', '按月': 'Monthly',
+      '与上方卡片同口径': 'Same scope as cards above',
+      '命中率': 'Hit rate', '无数据': 'No data',
+      '多币种下成本柱不可用，请切换其他指标': 'Cost bars unavailable with multiple currencies; switch metric',
+      // 刻度单位：中文用「万 / 亿」，英文用 K / M / B；'万' 同时是语言探针（见 isChinese）
+      '万': 'K',
     }
     const ZH = Object.fromEntries(Object.keys(EN).map((key) => [key, key]))
     /** 未定价原因 → 可读文案；未知 reason 回退「未定价」。 */
@@ -499,12 +509,17 @@ window.__ModuleLoader__.load({
       kvLabel: { color: T.muted, whiteSpace: 'nowrap' },
       kvValue: { color: T.text, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
       summaryBand: {
-        display: 'grid', gridTemplateColumns: '1fr 1fr', border: `1px solid ${T.border}`,
+        display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', border: `1px solid ${T.border}`,
         borderRadius: 8, overflow: 'hidden',
       },
-      summaryHalf: { padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, minWidth: 0 },
+      summaryHalf: {
+        padding: '12px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+        gap: 4, minWidth: 0, border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer',
+        transition: 'background .15s',
+      },
+      summaryHalfOn: { background: `color-mix(in srgb, ${T.accent} 10%, transparent)` },
       summaryK: { color: T.muted, fontSize: 12 },
-      summaryV: { display: 'flex', alignItems: 'baseline', justifyContent: 'center', flexWrap: 'wrap', gap: 8, fontSize: 26, fontWeight: 600, lineHeight: '30px', fontVariantNumeric: 'tabular-nums' },
+      summaryV: { display: 'flex', alignItems: 'baseline', justifyContent: 'center', flexWrap: 'wrap', gap: 8, fontSize: 22, fontWeight: 600, lineHeight: '26px', fontVariantNumeric: 'tabular-nums' },
       summarySub: { color: T.weak, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' },
       rangeBox: {
         border: `1px solid ${T.border}`, borderRadius: 10, background: T.section,
@@ -513,6 +528,19 @@ window.__ModuleLoader__.load({
       rangeHead: { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap', gap: 16 },
       rangeMeta: { color: T.weak, fontSize: 11 },
       detailWrap: { overflowX: 'auto', borderTop: `1px solid ${T.border}`, paddingTop: 12 },
+      trendBox: { display: 'flex', flexDirection: 'column', gap: 8, borderTop: `1px solid ${T.border}`, paddingTop: 12, minWidth: 0 },
+      trendHead: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 },
+      trendTitle: { fontSize: 13, fontWeight: 600 },
+      trendHint: { color: T.weak, fontSize: 11 },
+      trendSpacer: { flex: '1 1 auto' },
+      trendPlot: { position: 'relative', height: 132, minWidth: 0 },
+      trendGrid: { position: 'absolute', left: 0, right: 0, height: 1, background: T.border, pointerEvents: 'none' },
+      trendAxis: { position: 'absolute', left: 0, color: T.weak, fontSize: 11, fontVariantNumeric: 'tabular-nums' },
+      trendBars: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'flex-end', gap: 2, paddingLeft: 34 },
+      trendBar: { flex: '1 1 0', minWidth: 1, maxWidth: 36, borderRadius: '3px 3px 0 0', background: T.accent },
+      trendTicks: { position: 'absolute', left: 34, right: 0, bottom: 0, height: 18, display: 'flex', alignItems: 'center', gap: 2, color: T.weak, fontSize: 11 },
+      trendTick: { flex: '1 1 0', minWidth: 0, textAlign: 'center', whiteSpace: 'nowrap' },
+      trendMsg: { position: 'absolute', inset: '0 0 18px 34px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
       quotaCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
       quotaCard: {
         border: `1px solid ${T.border}`, borderRadius: 8, background: T.section, padding: 16,
@@ -874,28 +902,171 @@ window.__ModuleLoader__.load({
                 : `${row.approximate === true ? '≈' : ''}${fmtMoney(row.cost, row.currency)}`)))))
     }
 
-    /** P3 两格卡：总费用（多币种同行）与真实 Tokens。 */
-    function RangeCards({ usage }) {
+    /** P3 趋势指标：顺序即四格与胶囊的显示顺序。 */
+    const TREND_METRICS = [['tokens', 'Tokens'], ['requests', '请求'], ['cost', '费用'], ['hitRate', '命中率']]
+    const METRIC_LABELS = { tokens: 'Tokens', requests: '请求', cost: '费用', hitRate: '命中率' }
+    /** 词典里 '万' 的英文值是 K：据此判断当前是否中文，不依赖 localeService 暴露语言码。 */
+    const isChinese = () => tr('万') === '万'
+
+    /** 趋势轴刻度：中文「万 / 亿」，英文沿用 fmtTokens 的 K / M / B。 */
+    function fmtTrendTokens(value) {
+      const n = Math.max(0, Number(value) || 0)
+      if (!isChinese()) return fmtTokens(n)
+      if (n >= 1e8) return `${trimZeros((n / 1e8).toFixed(1))}亿`
+      if (n >= 1e4) return `${trimZeros((n / 1e4).toFixed(1))}万`
+      return fmtTokens(n)
+    }
+
+    /** 命中率轴的中间档：留一位小数，避免 96.5% 被压成 96%。 */
+    const fmtHitTick = (value) => `${trimZeros(((Number(value) || 0) * 100).toFixed(1))}%`
+
+    /** 单点取值：命中率缺数据返回 null（不画柱），其余字段缺失按 0。 */
+    function trendValue(point, metric) {
+      if (point === null || point === undefined) return null
+      if (metric === 'hitRate') return point.hitRate === undefined ? null : point.hitRate
+      if (metric === 'cost') return costTotalOf(point)
+      return Number(point[metric]) || 0
+    }
+
+    /** 成本点的标量：多币种时调用方已禁用成本指标，这里只处理单币种；空对象按 0。 */
+    function costTotalOf(point) {
+      const entries = Object.entries(point.cost ?? {})
+      if (entries.length === 0) return 0
+      return Number(entries[0][1]?.cost) || 0
+    }
+
+    function fmtMetric(value, metric, currency = 'CNY') {
+      if (value === null || value === undefined) return tr('无数据')
+      if (metric === 'hitRate') return fmtRatio(value)
+      if (metric === 'cost') return fmtMoney(value, currency)
+      if (metric === 'requests') return String(Math.round(value))
+      return fmtTokens(value)
+    }
+
+    function fmtAxisMetric(value, metric, currency = 'CNY') {
+      if (metric === 'hitRate') return fmtHitTick(value)
+      if (metric === 'cost') return fmtMoney(value, currency)
+      return fmtTrendTokens(value)
+    }
+
+    /** 命中率轴下限：命中率普遍在 90% 以上，从 0 起画柱子几乎等高；最低值往下留余量并取整到 5%。 */
+    function hitRateFloor(values) {
+      const known = values.filter((value) => value !== null)
+      if (known.length === 0) return 0
+      const min = Math.min(...known)
+      const padded = min - Math.max((1 - min) / 2, 0.02)
+      const floor = Math.floor(padded * 20 + 1e-9) / 20
+      return floor < 0.5 ? 0 : floor
+    }
+
+    /** 英文月份短名：用 Intl 而不是手写表，大小写与语言差异交给平台。 */
+    function monthNameOf(dayKey) {
+      const [year, month] = String(dayKey).split('-').map(Number)
+      if (!Number.isFinite(year) || !Number.isFinite(month)) return dayKey
+      try {
+        return new Intl.DateTimeFormat('en', { month: 'short' }).format(new Date(year, month - 1, 1))
+      } catch {
+        return dayKey
+      }
+    }
+
+    /** P3 四格卡：兼作趋势指标选择器；每格 button[role=radio]，选中态由 metric 决定。 */
+    function RangeCards({ usage, metric = 'tokens', onMetricChange }) {
       const pending = usage === null
       const costEntries = Object.entries(usage?.totals ?? {})
       const total = usage?.total ?? null
       const costNodes = costEntries.map(([currency, value]) => h('span', { key: currency }, fmtMoney(value.cost, currency)))
-      return h('div', { 'data-testid': 'token-dash-range-cards', 'data-td-cards': true, style: styles.summaryBand },
-        h('div', { 'data-testid': 'token-dash-card-cost', style: styles.summaryHalf },
-          h('div', { style: styles.summaryK }, tr('总费用')),
-          h('div', { 'data-testid': 'token-dash-cost-values', style: styles.summaryV },
-            pending ? '—' : (costNodes.length === 0 ? '—' : costNodes))),
-        h('div', { 'data-testid': 'token-dash-card-tokens', style: styles.summaryHalf },
-          h('div', { style: styles.summaryK },
-            `${tr('真实 Tokens')} `,
+      const cell = (key, label, valueNode, subNode) => h('button', {
+        type: 'button', role: 'radio', 'aria-pressed': metric === key,
+        'data-testid': `token-dash-card-${key}`,
+        onClick: () => onMetricChange?.(key),
+        style: { ...styles.summaryHalf, ...(metric === key ? styles.summaryHalfOn : null) },
+      },
+        h('span', { style: { ...styles.summaryK, ...(metric === key ? { color: T.accent } : null) } }, label),
+        h('div', { style: styles.summaryV }, valueNode),
+        h('div', { style: styles.summarySub }, subNode))
+      return h('div', {
+        'data-testid': 'token-dash-range-cards', 'data-td-cards': true, role: 'radiogroup',
+        'aria-label': tr('趋势指标'), style: styles.summaryBand,
+      },
+        cell('cost', tr('总费用'),
+          pending ? '—' : (costNodes.length === 0 ? '—' : costNodes),
+          pending ? '—' : tr('{n} 个币种', { n: costEntries.length })),
+        h('button', {
+          type: 'button', role: 'radio', 'aria-pressed': metric === 'tokens',
+          'data-testid': 'token-dash-card-tokens',
+          onClick: () => onMetricChange?.('tokens'),
+          style: { ...styles.summaryHalf, ...(metric === 'tokens' ? styles.summaryHalfOn : null) },
+        },
+          h('span', { style: { ...styles.summaryK, ...(metric === 'tokens' ? { color: T.accent } : null) } },
+            `${tr('真实 Tokens')}`,
             h(InfoTip, {
               label: tr('Tokens 括号说明'),
               text: tr('Tokens 括号顺序：输入 / 缓存（读+写）/ 输出'),
               variant: 'inline',
             }, h(Icon, { name: 'info', size: 11 }))),
-          h('div', { style: styles.summaryV }, pending ? '—' : fmtTokens(total?.tokens ?? 0)),
+          h('div', { 'data-testid': 'token-dash-cost-values', style: styles.summaryV }, pending ? '—' : fmtTokens(total?.tokens ?? 0)),
           h('div', { style: styles.summarySub },
-            pending ? '—' : `${fmtTokens(total?.input ?? 0)} · ${fmtTokens(total?.cache ?? 0)} · ${fmtTokens(total?.output ?? 0)}`)))
+            pending ? '—' : `${fmtTokens(total?.input ?? 0)} · ${fmtTokens(total?.cache ?? 0)} · ${fmtTokens(total?.output ?? 0)}`)),
+        cell('requests', tr('总请求数'),
+          pending ? '—' : String(total?.requests ?? 0), tr('范围内全部模型')),
+        cell('hitRate', tr('缓存命中率'),
+          pending ? '—' : (total?.hitRate === null || total?.hitRate === undefined ? '—' : fmtRatio(total.hitRate)),
+          pending ? '—' : tr('创建 {a} · 命中 {b}', { a: fmtTokens(total?.cacheWrite ?? 0), b: fmtTokens(total?.cacheRead ?? 0) })))
+    }
+
+    /** P3 趋势柱：连续日/月序列 → flex 柱 + 绝对定位网格线；悬停走原生 title，无交互状态。 */
+    function TrendChart({ series, metric, grain = 'day', onMetricChange }) {
+      const points = Array.isArray(series) ? series : []
+      const values = points.map((point) => trendValue(point, metric))
+      const known = values.filter((value) => value !== null && value > 0)
+      const max = known.length > 0 ? Math.max(...known) : 0
+      const floor = metric === 'hitRate' ? hitRateFloor(values) : 0
+      const span = Math.max(max - floor, 1e-9)
+      // 多币种时一根柱无法表达，按既定决策禁用成本指标并给出口文案
+      const currencies = new Set()
+      for (const point of points) for (const currency of Object.keys(point.cost ?? {})) currencies.add(currency)
+      const costBlocked = metric === 'cost' && currencies.size > 1
+      const costCurrency = currencies.size === 1 ? [...currencies][0] : 'CNY'
+      const tickOf = (dayKey) => {
+        if (grain !== 'month') return String(dayKey).slice(5)
+        return isChinese() ? `${String(dayKey).slice(5)}月` : monthNameOf(dayKey)
+      }
+      // 日期刻度按可用宽度抽稀，末点必显
+      const step = Math.max(1, Math.ceil(points.length / 6))
+      const emptyMessage = costBlocked
+        ? tr('多币种下成本柱不可用，请切换其他指标')
+        : (points.length === 0 || known.length === 0 ? tr('该范围内暂无消耗') : null)
+      return h('div', { 'data-testid': 'token-dash-trend', 'data-td-trend': metric, style: styles.trendBox },
+        h('div', { style: styles.trendHead },
+          h('b', { 'data-testid': 'token-dash-trend-title', style: styles.trendTitle },
+            tr('使用趋势 · {metric}', { metric: tr(METRIC_LABELS[metric]) })),
+          h('span', { style: styles.trendHint }, tr(grain === 'month' ? '按月' : '按天')),
+          h('span', { style: styles.trendSpacer }),
+          h(Segmented, {
+            value: metric, onChange: onMetricChange, label: tr('趋势指标'), kind: 'radiogroup', fit: true,
+            options: TREND_METRICS.map(([value, label]) => ({ value, label: tr(label) })),
+          })),
+        h('div', { style: styles.trendPlot },
+          h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: 0 } }),
+          h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: '50%' } }),
+          h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, bottom: 18 } }),
+          emptyMessage === null ? h('span', { style: { ...styles.trendAxis, top: 0 } }, fmtAxisMetric(max, metric, costCurrency)) : null,
+          emptyMessage === null ? h('span', { style: { ...styles.trendAxis, top: '50%', transform: 'translateY(-100%)' } }, fmtAxisMetric(floor + span / 2, metric, costCurrency)) : null,
+          emptyMessage === null ? h('div', { style: styles.trendBars },
+            ...points.map((point, index) => {
+              const value = values[index]
+              const ratio = value === null || value <= floor ? 0 : Math.max(0, Math.min(100, ((value - floor) / span) * 100))
+              return h('span', {
+                key: point.dayKey,
+                'data-testid': `token-dash-trend-bar-${point.dayKey}`,
+                title: `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`,
+                style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
+              })
+            })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: styles.trendMsg }, emptyMessage),
+          emptyMessage === null ? h('div', { style: styles.trendTicks },
+            ...points.map((point, index) => h('span', { key: point.dayKey, style: styles.trendTick },
+              index % step === 0 || index === points.length - 1 ? tickOf(point.dayKey) : ''))) : null))
     }
 
     function MiniBar({ ratio = 0, neutral = false, stretch = false }) {
@@ -1769,6 +1940,7 @@ window.__ModuleLoader__.load({
       const [usage, setUsage] = useState(null)
       const [prefs, setPrefs] = useState(null)
       const [range, setRange] = useState('all')
+      const [metric, setMetric] = useState('tokens')
       const [refreshing, setRefreshing] = useState(false)
       const [error, setError] = useState(false)
       const [usageError, setUsageError] = useState(false)
@@ -1887,7 +2059,8 @@ window.__ModuleLoader__.load({
             usageError ? h('div', { style: styles.errorStrip, role: 'alert' },
               h('span', null, tr('范围数据加载失败')),
               h('button', { type: 'button', style: styles.button, onClick: () => { void loadUsage() } }, tr('重试'))) : null,
-            h(RangeCards, { usage }),
+            h(RangeCards, { usage, metric, onMetricChange: setMetric }),
+            h(TrendChart, { series: usage?.series, metric, grain: usage?.grain, onMetricChange: setMetric }),
             h('div', { style: styles.detailWrap }, h(DetailTable, {
               rows: models,
               providerNames: Object.fromEntries(providers.map((provider) => [provider.id, provider.name])),

@@ -84,7 +84,7 @@ Screenshots use mock data so the full layout is visible at once.
 - Subscription windows use three slots: first left, second center, third right; two windows occupy the first two slots.
 - Model column is capped at 150; Tokens / requests / hit rate are right-aligned.
 
-**P3 · Full dashboard**: cards for 8 providers, summary band, 8-column model breakdown and a settings capsule; the page owns its scrollbar at the window edge.
+**P3 · Full dashboard**: cards for 8 providers, a four-cell summary (cost / real tokens / requests / cache hit rate), usage trend bars, 8-column model breakdown and a settings capsule; the page owns its scrollbar at the window edge.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/settings.png" alt="Full dashboard" />

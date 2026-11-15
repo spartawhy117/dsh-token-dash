@@ -76,6 +76,23 @@ export const SPEC = {
     font: 12, // 数字字号（P1/P2 一致）
     gap: 4, // 环与数字间距
   },
+  /** P3 摘要带：四格，同时是指标选择器（点某格 → 趋势柱画该指标） */
+  summary: {
+    columns: 4,
+    font: 22, // 四格后每格约 226px，26px 放不下多币种金额
+    subFont: 11,
+    selectedAlpha: 10, // 选中格底色：accent 的百分比浓度
+  },
+  /** P3 趋势柱 */
+  trend: {
+    height: 132,
+    axisPadLeft: 34, // Y 轴数字占位
+    tickHeight: 18, // 底部日期刻度
+    barMax: 36,
+    barRadius: 3,
+    barGap: 2,
+    tickFont: 11,
+  },
   /** P2 用量表 */
   table: {
     rowHeight: 28,
