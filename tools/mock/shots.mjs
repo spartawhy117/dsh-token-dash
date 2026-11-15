@@ -71,12 +71,28 @@ let server
 let browser
 try {
   execFileSync(exe, ['--expose-internals', cliJs, 'plugin', '--profile', 'web', 'add', `link:${root}`], { env, encoding: 'utf8' })
+  // 0.2.2 起会话按工作区分组：fixture 的 cwd 必须真实存在并登记 workspace.json，否则侧栏列表为空
   const fixtureLines = readFileSync(join(root, 'test', 'fixtures', 'e2e-session.jsonl'), 'utf8').split(/\r?\n/).filter(Boolean)
   const fixtureHeader = JSON.parse(fixtureLines[0])
+  const fixtureWorkspace = join(home, 'shots-workspace')
+  mkdirSync(fixtureWorkspace, { recursive: true })
+  fixtureHeader.cwd = fixtureWorkspace
+  const fixtureBody = [JSON.stringify(fixtureHeader), ...fixtureLines.slice(1)]
   const fixtureKey = `--${fixtureHeader.cwd.replace(':', '').replaceAll('\\', '-')}--`
   const fixtureDir = join(home, 'sessions', fixtureKey, fixtureHeader.id)
   mkdirSync(fixtureDir, { recursive: true })
-  writeFileSync(join(fixtureDir, 'session.v4.jsonl.zstd'), Buffer.concat(fixtureLines.map((line) => zstdCompressSync(Buffer.from(`${line}\n`)))))
+  writeFileSync(join(fixtureDir, 'session.v4.jsonl.zstd'), Buffer.concat(fixtureBody.map((line) => zstdCompressSync(Buffer.from(`${line}\n`)))))
+  const seededAt = new Date().toISOString()
+  mkdirSync(join(home, 'storages'), { recursive: true })
+  writeFileSync(join(home, 'storages', 'workspace.json'), JSON.stringify({
+    unit: { name: 'workspace', version: 2 },
+    global: { initialized: true, workspaceIds: ['ws-shots'], archivedSessionIds: [], pinnedSessionIds: [] },
+    tables: {
+      workspaces: {
+        'ws-shots': { path: fixtureWorkspace, title: 'E2E', sessionIds: [fixtureHeader.id], createdAt: seededAt, updatedAt: seededAt },
+      },
+    },
+  }, null, 2))
   server = startWeb()
   const { base, token } = await server.ready
   console.log(`[shots] web ${base}`)
@@ -122,13 +138,22 @@ try {
   await page.evaluate(() => document.body.setAttribute('data-ds-dark-theme', '1'))
   await page.waitForTimeout(300)
 
+  // 侧栏条目只监听真实指针事件：evaluate(node.click) 不触发 React 的 onPointerDown
   const openFixtureSession = async () => {
     for (const title of ['E2E Fixture', '未命名', 'Untitled']) {
-      const candidate = page.getByText(title, { exact: true }).first()
-      if (await candidate.count() > 0) {
-        await candidate.evaluate((node) => node.click()).catch(() => {})
-        return
-      }
+      const clicked = await page.evaluate((wanted) => {
+        const nodes = [...document.querySelectorAll('*')].filter((node) => (node.textContent ?? '').trim().startsWith(wanted))
+        const target = nodes[nodes.length - 1]
+        if (target === undefined) return false
+        for (let node = target, depth = 0; node !== null && depth < 6; node = node.parentElement, depth += 1) {
+          node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+          node.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+          node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+        }
+        return true
+      }, title)
+      if (clicked) return
     }
   }
   await page.waitForTimeout(1200)
@@ -242,6 +267,12 @@ try {
   const board = page.locator('[data-testid=token-dash-board]')
   await board.waitFor({ timeout: 10000 })
   await page.waitForTimeout(600)
+  // 默认范围是「全部」（>60 天会切成按月桶，柱子挤成一片）；截图统一用近 30 天展示逐日柱
+  const rangeThirty = board.getByRole('tab', { name: /近30天|Last 30 days/ })
+  if (await rangeThirty.count() > 0) {
+    await jsClick(rangeThirty.first())
+    await page.waitForTimeout(700)
+  }
   // 元素截图会拼接滚动区域：胶囊改静态，整体缩放以在固定视口内完整呈现
   await page.addStyleTag({
     content: '[data-testid=token-dash-settings-capsule]{position:static !important}[data-testid=token-dash-board]{zoom:.72}',

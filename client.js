@@ -537,7 +537,9 @@ window.__ModuleLoader__.load({
       trendGrid: { position: 'absolute', left: 0, right: 0, height: 1, background: T.border, pointerEvents: 'none' },
       trendAxis: { position: 'absolute', left: 0, color: T.weak, fontSize: 11, fontVariantNumeric: 'tabular-nums' },
       trendBars: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'flex-end', gap: 2, paddingLeft: 34 },
-      trendBar: { flex: '1 1 0', minWidth: 1, maxWidth: 36, borderRadius: '3px 3px 0 0', background: T.accent },
+      // 每根柱独占一个等分槽并在槽内居中：只对柱体设 maxWidth 会让所有柱挤到一侧
+      trendSlot: { flex: '1 1 0', minWidth: 1, height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
+      trendBar: { width: '100%', maxWidth: 36, borderRadius: '3px 3px 0 0', background: T.accent },
       trendTicks: { position: 'absolute', left: 34, right: 0, bottom: 0, height: 18, display: 'flex', alignItems: 'center', gap: 2, color: T.weak, fontSize: 11 },
       trendTick: { flex: '1 1 0', minWidth: 0, textAlign: 'center', whiteSpace: 'nowrap' },
       trendMsg: { position: 'absolute', inset: '0 0 18px 34px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
@@ -1057,12 +1059,12 @@ window.__ModuleLoader__.load({
             ...points.map((point, index) => {
               const value = values[index]
               const ratio = value === null || value <= floor ? 0 : Math.max(0, Math.min(100, ((value - floor) / span) * 100))
-              return h('span', {
-                key: point.dayKey,
-                'data-testid': `token-dash-trend-bar-${point.dayKey}`,
-                title: `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`,
-                style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
-              })
+              return h('span', { key: point.dayKey, style: styles.trendSlot },
+                h('span', {
+                  'data-testid': `token-dash-trend-bar-${point.dayKey}`,
+                  title: `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`,
+                  style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
+                }))
             })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: styles.trendMsg }, emptyMessage),
           emptyMessage === null ? h('div', { style: styles.trendTicks },
             ...points.map((point, index) => h('span', { key: point.dayKey, style: styles.trendTick },

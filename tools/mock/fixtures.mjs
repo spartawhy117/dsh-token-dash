@@ -185,9 +185,17 @@ function aggregate(models) {
  * 逐日点：末点承接余量使 Σ 与 total / totals 闭合；第 5 天零值、第 6 天命中率缺失。
  * 与 aggregate 同口径——cost 只算 billable，其余含订阅行。
  */
-function seriesFor(models) {
-  const days = ['2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']
-  const weights = [0.08, 0.14, 0.11, 0.16, 0, 0.18]
+function seriesFor(models, dayCount = 7) {
+  // 按范围生成对应天数：近 30 天就给满 30 个点，截图里柱距才真实
+  const end = new Date(2026, 10, 2)
+  const days = Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(end)
+    date.setDate(end.getDate() - (dayCount - 1 - index))
+    const pad = (value) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  })
+  // 除第 5 天固定零值外，其余按 n-1 等分；末点只补浮点尾差，柱高看起来才均匀
+  const weights = days.slice(0, -1).map((_, index) => (index === 4 ? 0 : 1 / Math.max(1, days.length - 2)))
   const { totals, total } = aggregate(models)
   const used = { tokens: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 0 }
   for (const currency of Object.keys(totals)) used[currency] = 0
@@ -243,6 +251,8 @@ function seriesFor(models) {
 /** 每个时间范围给出不同量级，模拟"切范围数字变化"。 */
 export function usageFor(range) {
   const models = range === 'today' ? todayModels : monthModels
+  const dayCount = range === 'today' ? 1 : range === '7d' ? 7 : range === '30d' ? 30 : 84
+  const series = seriesFor(models, dayCount)
   const { totals, total } = aggregate(models)
   return {
     range,
@@ -253,8 +263,8 @@ export function usageFor(range) {
     totals,
     total,
     models,
-    grain: 'day',
-    series: seriesFor(models),
+    grain: series.length > 60 ? 'month' : 'day',
+    series,
   }
 }
 
