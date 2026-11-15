@@ -841,6 +841,50 @@ try {
   await page.screenshot({ path: join(tmpRoot, 'e2e', 'p3-dark.png'), fullPage: true })
   await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'))
 
+  // E9：英文 locale 下刻度单位必须切到 K / M / B，标题走英文词条（Issue #2）
+  const enPage = await browser.newPage({ viewport: { width: 1280, height: 900 }, locale: 'en-US' })
+  await enPage.route('**/token-dash/api/summary*', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: currentSummary }),
+  }))
+  await enPage.route('**/token-dash/api/usage*', (route) => {
+    const range = new URL(route.request().url()).searchParams.get('range') ?? 'today'
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: usageFor(range) }) })
+  })
+  await enPage.route('**/token-dash/api/update', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { published: true, hasUpdate: false, latest: '9.9.9', current: PKG_VERSION } }),
+  }))
+  await enPage.goto(`${base}/?token=${token}`, { waitUntil: 'domcontentloaded' })
+  await enPage.waitForTimeout(2500)
+  await enPage.evaluate(() => { for (const node of document.querySelectorAll('[role=presentation]')) node.remove() })
+  await enPage.waitForTimeout(300)
+  await enPage.evaluate(() => {
+    const nodes = [...document.querySelectorAll('*')].filter((node) => (node.textContent ?? '').trim().startsWith('E2E Fixture') || (node.textContent ?? '').trim().startsWith('Untitled') || (node.textContent ?? '').trim().startsWith('未命名'))
+    const target = nodes[nodes.length - 1]
+    if (target === undefined) return
+    for (let node = target, depth = 0; node !== null && depth < 6; node = node.parentElement, depth += 1) {
+      node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+      node.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+    }
+  })
+  await enPage.waitForTimeout(2000)
+  const enEntry = enPage.locator('[data-testid=token-dash-sidebar-entry]')
+  await enEntry.waitFor({ timeout: 15000 })
+  await jsClick(enEntry.first())
+  const enBoard = enPage.locator('[data-testid=token-dash-board]')
+  await enBoard.waitFor({ timeout: 10000 })
+  await enPage.waitForTimeout(600)
+  // 英文标题必须走词典，不能残留中文
+  assert.match(await enBoard.getByTestId('token-dash-trend-title').innerText(), /Trend · /)
+  assert.equal((await enBoard.getByTestId('token-dash-trend-title').innerText()).includes('使用趋势'), false, 'English title must not fall back to Chinese')
+  assert.match(await enBoard.getByTestId('token-dash-card-requests').innerText(), /Total requests/)
+  // 轴刻度不得出现中文单位「万 / 亿」
+  const enAxisText = await enBoard.getByTestId('token-dash-trend')
+    .evaluate((node) => [...node.querySelectorAll('span')].map((item) => item.textContent ?? '').join(' '))
+  assert.equal(/[万亿]/.test(enAxisText), false, `English axis must use K/M/B, got: ${enAxisText.slice(0, 120)}`)
+  await enPage.close()
+
   console.log('[e2e] UI assertions passed')
 
   // L4 真实调用采样（opt-in）：用真实 Key 发一次极短请求，再走本仓计价链验证可出价。
