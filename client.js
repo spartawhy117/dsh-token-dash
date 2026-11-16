@@ -368,6 +368,17 @@ window.__ModuleLoader__.load({
       writeStoredTs(Date.now())
     }
 
+    /** 调度日志：区分「按周期跳过」与「根本没跑」，否则线上无法判断更新为何不提示。 */
+    function logUpdateSchedule(event, meta) {
+      try {
+        void fetch(`${API}/log`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ module: 'update', event, meta }),
+        })
+      } catch { /* 日志失败不影响调度 */ }
+    }
+
     async function installUpdateRequest() {
       if (updateSnapshot.phase === 'installing') return
       emitUpdate({ phase: 'installing', text: null })
@@ -2274,11 +2285,22 @@ window.__ModuleLoader__.load({
             let timer = null
             let interval = null
             let cancelled = false
-            const runAuto = () => { if (!cancelled) void checkForUpdate({ manual: false }) }
             const lastAt = readStoredTs
+            const runAuto = () => { if (!cancelled) void checkForUpdate({ manual: false }) }
+            logUpdateSchedule('armed', {
+              delay: updateStartupDelay(), lastAt: lastAt(), interval: UPDATE_INTERVAL_MS,
+              hasLocalStorage: typeof globalThis.localStorage !== 'undefined',
+            })
             timer = setTimeout(() => {
               timer = null
-              if (Date.now() - lastAt() >= UPDATE_MIN_STARTUP_AGE) runAuto()
+              const elapsed = Date.now() - lastAt()
+              if (elapsed >= UPDATE_MIN_STARTUP_AGE) {
+                logUpdateSchedule('startup.run', { elapsed })
+                runAuto()
+              } else {
+                // 距上次检测不足 1h：跳过是设计行为，但要能在日志里看见，否则无从区分「跳过」与「没跑」
+                logUpdateSchedule('startup.skip', { elapsed, threshold: UPDATE_MIN_STARTUP_AGE })
+              }
               interval = setInterval(() => {
                 if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
                 runAuto()
@@ -2287,7 +2309,8 @@ window.__ModuleLoader__.load({
 
             const onVisible = () => {
               if (typeof document === 'undefined' || document.visibilityState !== 'visible') return
-              if (Date.now() - lastAt() >= UPDATE_INTERVAL_MS) runAuto()
+              const elapsed = Date.now() - lastAt()
+              if (elapsed >= UPDATE_INTERVAL_MS) { logUpdateSchedule('visible.run', { elapsed }); runAuto() }
             }
             if (typeof document !== 'undefined') document.addEventListener?.('visibilitychange', onVisible)
             return () => {

@@ -409,7 +409,11 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 | 6 | 尺寸未变 | `npm run e2e` 断言按钮高度 22px |
 | 7 | 三处词条同键同占位符 | `npm test` · `locale.test.mjs` |
 
-**结果**：通过（2026-11-16）。`npm test` 130 通过 / 0 失败；`npm run e2e` UI assertions passed，新增断言覆盖：本地假更新源四种判定（缺失 / 同版本 / 更高 / 损坏）、手动检测进 confirm 条、自动检测产生 available 态且版本号常显、按钮高度恒 22px、自动失败显示「更新检查失败」且按钮不变红。
+**结果**：通过（2026-11-16）。`npm test` 130 通过 / 0 失败；`npm run e2e` UI assertions passed，新增断言覆盖：本地假更新源四种判定（缺失 / 同版本 / 更高 / 损坏）、手动检测进 confirm 条、自动检测产生 available 态且版本号常显、按钮高度恒 22px、自动失败显示「更新检查失败」且按钮不变红、启动检测确实发出请求并写入时间戳。
+
+**实施中发现的额外缺陷（已修）**：
+1. **调度块存在暂时性死区**——`logUpdateSchedule('armed', ...)` 引用了在同一块内后面才 `const` 声明的 `lastAt`，`ctx.effect` 执行时抛 `ReferenceError` 并被 effect 机制静默吞掉。表现就是「重启后从不自动检测更新」，与用户观察到的一致。修复：把 `const lastAt` 提到使用之前。
+2. **client 日志白名单只允许 `slot`**——`POST /log` 对非 slot 模块返回 400，导致调度日志根本写不进去、线上无法诊断。修复：抽出 `CLIENT_LOG_MODULES`（`slot` / `update`）。
 
 #### 7.7 改动清单（预估）
 

@@ -319,9 +319,6 @@ try {
       billingModes: { zhipu: 'subscription', moonshot: 'subscription', 'opencode-go': 'subscription' },
       priceOverrides: { 'my-relay:my-private-model': { input: 2, output: 8, currency: 'CNY' }, 'bad-override': { input: 'x' } },
       providerCurrency: { 'my-relay': 'USD', broken: 'EUR' },
-      // 启动补检默认 30s，测试缩短到 2s；UPDATE_MIN_STARTUP_AGE 置 0 让首次启动必定检测
-      updateStartupDelay: 2000,
-      updateCheckedAt: 0,
     }),
   })
   assert.equal(prefsResponse.status, 200)
@@ -375,6 +372,12 @@ try {
   await page.route('**/open-in-app/open', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) }))
   await page.route('**/token-dash/api/logs/export*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { content: '{"type":"header"}\n' } }) }))
 
+  // 更新检测的时间戳在 localStorage（apply 时看板可能尚未挂载，读不到 /prefs）。
+  // 每次 e2e 用干净的 localStorage，保证启动补检必然触发，结果可复现。
+  // updateStartupDelay 也存 localStorage（apply 阶段读不到 prefs），测试改成 1s
+  await page.addInitScript(() => {
+    try { localStorage.clear(); localStorage.setItem('td:updateStartupDelay', '1000') } catch { /* ignore */ }
+  })
   await page.goto(`${base}/?token=${token}`, { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
     for (let round = 0; round < 4; round += 1) {
@@ -424,7 +427,16 @@ try {
   assert.match(await pill.innerText(), /¥49\.86/)
   assert.equal(await pill.locator('[data-testid=token-dash-pill-ring-budget] svg').count(), 1)
   await page.waitForTimeout(4300)
-  assert.ok(updateRequests >= 1, 'startup update check should run once')
+  // client 上报通道必须接收 update 模块（曾因模块白名单只允许 slot 被 400 拒绝）
+  const logProbe = await fetch(`${base}/token-dash/api/log`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ module: 'update', event: 'probe', meta: { from: 'e2e' } }),
+  })
+  assert.equal(logProbe.status, 200, 'client log whitelist must accept the update module')
+  assert.ok(updateRequests >= 1, `startup update check should run once (requests=${updateRequests})`)
+  // 启动检测完成后应写入时间戳，供下一轮启动去重
+  const checkedAt = await page.evaluate(() => localStorage.getItem('td:updateCheckedAt'))
+  assert.ok(checkedAt !== null && Number(checkedAt) > 0, 'startup check must record its timestamp')
 
   const jsClick = (locator) => locator.evaluate((node) => node.click())
   const openPanel = async () => {

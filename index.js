@@ -42,6 +42,8 @@ function hostVersion() {
   return 'unknown'
 }
 let updateCache = { at: 0, data: null }
+/** 允许 client 上报日志的模块白名单：只放已知来源，避免任意日志注入。 */
+const CLIENT_LOG_MODULES = new Set(['slot', 'update'])
 
 /** Locate the bundled dsh CLI (same layout scripts/e2e.mjs relies on). */
 function findDshCli() {
@@ -569,13 +571,13 @@ export function apply(ctx) {
             return
           }
           if (url.pathname === `${ROUTE_PREFIX}/log` && req.method === 'POST') {
-            // #46：client 端 slot 挂载上报落盘——模块白名单仅 slot，防日志注入
+            // client 端上报落盘：模块白名单（slot 挂载 / update 调度），防日志注入
             const body = JSON.parse((await readBody(req)) || '{}')
-            if (body?.module !== 'slot' || typeof body?.event !== 'string') {
+            if (!CLIENT_LOG_MODULES.has(body?.module) || typeof body?.event !== 'string') {
               json(res, 400, { ok: false, reason: 'invalid-log' })
               return
             }
-            logger.info('slot', body.event, typeof body.meta === 'object' && body.meta !== null ? body.meta : {})
+            logger.info(body.module, body.event, typeof body.meta === 'object' && body.meta !== null ? body.meta : {})
             json(res, 200, { ok: true, data: { logged: true } })
             return
           }

@@ -4,6 +4,24 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.1-local.3] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 修复启动时的更新检测可能完全不执行的问题：调度代码存在变量初始化顺序错误，导致检查逻辑抛出异常后被静默吞掉，表现为「重启后从不自动检查更新」。
+- 更新检测的调度过程现在会记录日志，启动时是检查了还是按周期跳过，都能在日志里看到，不再需要靠猜。
+
+### English
+
+#### Changes
+
+- Fixed the startup update check potentially never running: the scheduling code referenced a variable before it was initialised, so the check threw and was silently swallowed, which showed up as "no automatic update check after restart".
+- The update scheduling path now logs whether a startup check actually ran or was skipped by the interval rule, so the behaviour is observable instead of guessed.
+
 ## [2.2.1-local.2] - 2026-11-16
 
 > 本地构建，未发布
