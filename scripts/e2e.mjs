@@ -221,7 +221,13 @@ let usageRequests = 0
 let updateAvailable = false
 let updateRequests = 0
 let usageDelay = 0
-const env = { ...process.env, DSH_HOME: home }
+// 本地假更新源：让宿主从 <dir>/latest.json 读「最新版本」，不请求 npm registry。
+// 这样 /update 走真实后端路径，能测到「本地源 → 判定 → 提示 → 安装」整条链路。
+const updateSourceDir = join(tmpRoot, 'e2e-update-source')
+mkdirSync(updateSourceDir, { recursive: true })
+const writeLatest = (version) => writeFileSync(join(updateSourceDir, 'latest.json'), JSON.stringify({ version }))
+rmSync(join(updateSourceDir, 'latest.json'), { force: true })
+const env = { ...process.env, DSH_HOME: home, TOKEN_DASH_UPDATE_SOURCE: updateSourceDir }
 let server
 let browser
 try {
@@ -271,6 +277,25 @@ try {
     for (const key of ['dayKey', 'cost', 'requests', 'tokens', 'hitRate']) assert.ok(key in point, `series point missing ${key}`)
   }
   assert.equal((await fetch(`${base}/token-dash/api/usage?range=bad`)).status, 400)
+
+  // L2: 本地假更新源（TOKEN_DASH_UPDATE_SOURCE）——不请求 npm registry 也能判定更新
+  // refresh=1 只在本地假更新源启用时生效，用来绕过宿主 5min 缓存
+  const readUpdate = async () => (await (await fetch(`${base}/token-dash/api/update?refresh=1`)).json()).data
+  const updateMissing = await readUpdate()
+  assert.equal(updateMissing.published, false, 'missing latest.json should read as unpublished')
+  assert.equal(updateMissing.source, 'local', 'local source must be reported')
+  writeLatest(PKG_VERSION)
+  const updateSame = await readUpdate()
+  assert.equal(updateSame.published, true)
+  assert.equal(updateSame.hasUpdate, false, 'same version should not report an update')
+  writeLatest('9.9.9')
+  const updateNewer = await readUpdate()
+  assert.equal(updateNewer.hasUpdate, true, 'higher local version should report an update')
+  assert.equal(updateNewer.latest, '9.9.9')
+  writeFileSync(join(updateSourceDir, 'latest.json'), '{ broken json')
+  const updateBroken = await readUpdate()
+  assert.equal(updateBroken.published, false, 'broken latest.json should read as unpublished, not throw')
+  rmSync(join(updateSourceDir, 'latest.json'), { force: true })
 
   // L2: export / import round-trip on the real host API.
   const exportData = (await (await fetch(`${base}/token-dash/api/export`)).json()).data
@@ -339,9 +364,10 @@ try {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: usageFor(range) }) })
   })
   // /repo 不再请求：按钮只做跳转，不拦截该路由也能通过。
-  await page.route('**/token-dash/api/update', (route) => {
-    updateRequests += 1
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { published: true, hasUpdate: updateAvailable, latest: '9.9.9', current: PKG_VERSION } }) })
+  // /update 不再 mock：走宿主的真实实现，由 TOKEN_DASH_UPDATE_SOURCE 提供「最新版本」。
+  // 这里只统计请求次数，用于断言周期检测是否发生。
+  page.on('request', (request) => {
+    if (request.url().includes('/token-dash/api/update')) updateRequests += 1
   })
   await page.route('**/open-in-app/open', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) }))
   await page.route('**/token-dash/api/logs/export*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { content: '{"type":"header"}\n' } }) }))
@@ -850,19 +876,21 @@ try {
   const clearedPrefs = (await (await fetch(`${base}/token-dash/api/prefs`)).json()).data
   assert.equal(clearedPrefs.budgets['deepseek-official'].amount, 0)
 
-  // Update check restores the button after "up to date".
+  // Update control: 无 latest.json 时视为「未发布」，点按钮显示「未发布」
   const updateButton = board.getByTestId('token-dash-update')
   await updateButton.waitFor({ timeout: 5000 })
   await jsClick(updateButton)
-  await page.waitForTimeout(250)
-  assert.match(await board.innerText(), /已是最新/)
+  await page.waitForTimeout(400)
+  assert.match(await board.innerText(), /未发布/)
   assert.equal(await updateButton.isEnabled(), true)
-  updateAvailable = true
+  // 写入本地假更新源 → 手动重检 → 出现「发现 9.9.9」
+  writeLatest('9.9.9')
   await jsClick(updateButton)
-  await page.waitForTimeout(250)
+  await page.waitForTimeout(400)
   assert.match(await board.innerText(), /发现 9\.9\.9/)
   await jsClick(board.getByRole('button', { name: '取消' }))
-  updateAvailable = false
+  // 本地源改为「未发布」，避免影响后续断言
+  rmSync(join(updateSourceDir, 'latest.json'), { force: true })
 
   // Logs / data entries stay reachable from the capsule.
   await jsClick(board.getByTestId('token-dash-log-open'))

@@ -66,23 +66,63 @@ function installedVersion(home, profile) {
   }
 }
 
+const updateSource = () => {
+  const dir = process.env.TOKEN_DASH_UPDATE_SOURCE
+  return typeof dir === 'string' && dir !== '' ? dir : null
+}
+
+/**
+ * 本地假更新源：TOKEN_DASH_UPDATE_SOURCE 指向目录时读 <dir>/latest.json。
+ * 文件缺失 / JSON 非法 / 版本字段异常一律按「未发布」处理，不抛错——
+ * 这是测试通道，不能因为造数据不齐就把 /update 打成 500。
+ */
+function readLocalLatest(dir) {
+  try {
+    const meta = JSON.parse(readFileSync(join(dir, 'latest.json'), 'utf8'))
+    if (typeof meta?.version !== 'string' || meta.version === '') {
+      return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false, source: 'local' }
+    }
+    return {
+      current: CURRENT_VERSION,
+      latest: meta.version,
+      hasUpdate: isNewer(meta.version, CURRENT_VERSION),
+      published: true,
+      source: 'local',
+    }
+  } catch {
+    return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false, source: 'local' }
+  }
+}
+
 /** Ask the npm registry for the published latest; 404 means the package is not published yet. */
 async function fetchLatest() {
+  const dir = updateSource()
+  if (dir !== null) return readLocalLatest(dir)
   const response = await fetch('https://registry.npmjs.org/dsh-token-dash/latest', {
     headers: { accept: 'application/json' },
     signal: AbortSignal.timeout(5000),
   })
-  if (response.status === 404) return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false }
+  if (response.status === 404) return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false, source: 'registry' }
   if (!response.ok) throw new Error(`registry-${response.status}`)
   const meta = await response.json()
   if (typeof meta?.version !== 'string') throw new Error('invalid-registry-response')
-  return { current: CURRENT_VERSION, latest: meta.version, hasUpdate: isNewer(meta.version, CURRENT_VERSION), published: true }
+  return { current: CURRENT_VERSION, latest: meta.version, hasUpdate: isNewer(meta.version, CURRENT_VERSION), published: true, source: 'registry' }
 }
 
-/** Run `dsh plugin --profile <p> add dsh-token-dash@<version> --save-exact`; resolves with { ok, reason?, command, output }. */
+/**
+ * 安装 spec：生产走 npm 版本号；本地测试源（TOKEN_DASH_UPDATE_SOURCE 已设）时
+ * 走 TOKEN_DASH_UPDATE_PACKAGE 指定的 tarball，保持与真实安装同一条 CLI 路径。
+ */
+function updateSpec(version) {
+  const pkg = process.env.TOKEN_DASH_UPDATE_PACKAGE
+  if (updateSource() !== null && typeof pkg === 'string' && pkg !== '') return pkg
+  return `dsh-token-dash@${version}`
+}
+
+/** Run `dsh plugin --profile <p> add <spec> --save-exact`; resolves with { ok, reason?, command, output }. */
 function runPluginUpdate(profile, version) {
   return new Promise((resolve) => {
-    const spec = `dsh-token-dash@${version}`
+    const spec = updateSpec(version)
     const command = `dsh plugin --profile ${profile} add ${spec} --save-exact`
     const cli = findDshCli()
     if (cli === null) {
@@ -571,12 +611,22 @@ export function apply(ctx) {
             return
           }
           if (url.pathname === `${ROUTE_PREFIX}/update` && req.method === 'GET') {
-            if (updateCache.data !== null && Date.now() - updateCache.at < 300000) {
+            // ?refresh=1 强刷：只在本地假更新源启用时生效，供测试绕过 5min 缓存，
+            // 生产路径不受影响（未设 TOKEN_DASH_UPDATE_SOURCE 时该参数被忽略）。
+            const forceRefresh = url.searchParams.get('refresh') === '1' && updateSource() !== null
+            if (!forceRefresh && updateCache.data !== null && Date.now() - updateCache.at < 300000) {
               json(res, 200, { ok: true, data: updateCache.data })
               return
             }
             const data = await fetchLatest()
             updateCache = { at: Date.now(), data }
+            logger.info('update', 'check.ok', {
+              source: data.source ?? 'registry',
+              current: data.current,
+              latest: data.latest,
+              hasUpdate: data.hasUpdate,
+              published: data.published,
+            })
             json(res, 200, { ok: true, data })
             return
           }

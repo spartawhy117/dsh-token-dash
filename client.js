@@ -302,7 +302,8 @@ window.__ModuleLoader__.load({
       emitUpdate({ phase: 'checking', text: null, command: null })
       updateRequest = (async () => {
         try {
-          const data = await getJson('/update')
+          // 手动检测带 force 标记：宿主仅在本地假更新源启用时才认这个参数，生产等同不加
+          const data = await getJson(manual ? '/update?refresh=1' : '/update')
           if (data.published === false) {
             if (manual) { emitUpdate({ phase: 'done', text: tr('未发布') }); resetUpdateLater() }
             else emitUpdate({ phase: 'idle', text: null })
