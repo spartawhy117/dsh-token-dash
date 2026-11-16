@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；Issue #8（无障碍回归）、#9（更新侧复查）、#10（去掉二次确认）待修复）<br>
+> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；Issue #9（更新侧复查）与 #10（去确认条 + 无障碍播报）待修复，**先做 #9**）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -328,39 +328,9 @@ CL：git 仓 commit `3b0d071`（`test(update): 更新检测测试改走真实 re
 
 **遗留**：见 Issue #9（更新侧代码与测试复查）。
 
-### Issue #8 [待修复] 2026-11-16 UpdateButton 重构后丢失状态播报，无障碍回归
-
-#### 复现
-
-- **当前**：`UpdateButton` 的提示节点（`token-dash-update-hint`）与更新结果均无 `aria-live`，屏幕阅读器不会播报「已更新」「检查失败」等状态变化。重构前该区域由 SettingsRows 内的 `aria-live="polite"` 包裹。
-- **期望**：符合 `docs/ui-design.md` §6「刷新、保存、导出、检查更新结果用 `aria-live=polite`；错误用 `role=alert`」。
-- **影响**：键盘与读屏用户接收不到更新状态，属无障碍回归。视觉用户无感。
-
-#### 根因
-
-组件抽取时把状态文案从原有 `role=status` / `aria-live` 容器移到了新组件的独立 `span`，但未迁移无障碍属性。属于「重构遗漏」而非设计变更——`docs/ui-design.md` §6 的规则未改，实现单方面偏离。
-
-#### 修复实施（待实施）
-
-- `client.js` · `UpdateButton`：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态改用 `role="alert"`。
-- 若同一节点在两种态间切换 role 会导致读屏行为不一致，拆成两个节点按态渲染。
-
-#### 不改的位置与理由
-
-- 按钮本身的 `aria-label` 已随状态更新（`发现 {version}，点击更新` / `重试` / `检查更新`），保持不变。
-
-#### 验收
-
-| # | 项 | 方式 |
-|---|---|---|
-| 1 | 提示节点带 `aria-live=polite` | e2e 断言 `[data-testid=token-dash-update-hint]` 的 `aria-live` 属性 |
-| 2 | 错误态用 `role=alert` | e2e 在失败分级场景断言 role |
-
-**结果**：待实施（本轮按要求不继续改代码）。
-
 ### Issue #9 [待修复] 2026-11-16 更新侧代码与测试复查：3 处 A 级缺陷 + 2 处代码卫生 + 4 处测试盲区
 
-> 本轮按要求只记录，不改代码。按严重度排序。
+> 本轮按要求只记录，不改代码。按严重度排序。**执行顺序：#9 → #10**（#9 是更新逻辑根因，#10 在此基础上改交互）。
 
 #### 9.1 A 级：会导致用户可见错误
 
@@ -420,7 +390,7 @@ localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明�
 | 3 | 定时器与可见补检不重复 | 单测：同一 `lastAt` 下两次到期判定只触发一次 |
 | 4 | 调度函数 import 生产实现 | 单测直接 import |
 
-### Issue #10 [待修复] 2026-11-16 点击更新仍弹确认条，应改为直接安装
+### Issue #10 [待修复] 2026-11-16 点击更新仍弹确认条，应改为直接安装（并补回无障碍播报）
 
 #### 复现
 
@@ -451,6 +421,16 @@ localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明�
 4. `locale`：已核验「立即更新」「发现」「取消」三键**仅**用于 confirm 分支（`client.js` 各一处），删除后应一并从 `EN` 词典与 `locale/zh|en.json` 移除（138 → 135 键）；「发现 {version}」仍被 `aria-label` 使用，保留。
 5. `docs/ui-design.md` §5.7.1：8 态矩阵删除 `confirm`，改为 7 态；§5.7 版本行描述同步。
 
+#### 一并修：无障碍播报缺失（原 Issue #8 并入）
+
+> 与去掉确认条同一处代码，合并处理。**与多语言无关**，是读屏播报问题。
+
+- **现象**：`UpdateButton` 的状态提示节点（`token-dash-update-hint`）无 `aria-live`，屏幕阅读器不播报「已更新」「更新检查失败」。重构前该区域由 SettingsRows 内的 `aria-live="polite"` 包裹。
+- **根因**：组件抽取时状态文案搬到了新组件的独立 `span`，无障碍属性未一并迁移。属重构遗漏，`docs/ui-design.md` §6 规则未变、实现单方面偏离。
+- **修复**：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态改为 `role="alert"`（两者语义不同，不复用同一节点的 role）。
+- **不改**：按钮自身 `aria-label` 已随状态更新，保持不变。
+- **验收**：e2e 断言提示节点的 `aria-live` 属性；失败态断言 `role=alert`。
+
 #### 需要注意的连带影响
 
 - **A1 缺陷机会**：一旦去掉确认条，「用户看到的版本」与「实际安装的版本」之间没有人工停顿，Issue #9 A1（安装时重新查 registry）的错配窗口反而更小——但根因仍在，仍应修。#10 不替代 #9 A1。
@@ -470,6 +450,7 @@ localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明�
 | 2 | `available` 态点击直接安装 | e2e：同上 |
 | 3 | confirm 节点不再存在 | e2e：断言 `token-dash-update-confirm` 数量为 0 |
 | 4 | 组件降到 7 态 | `docs/ui-design.md` §5.7.1 与原型一致 |
+| 5 | 提示节点带 `aria-live=polite` | e2e 断言 `token-dash-update-hint` 的 `aria-live` |
+| 6 | 失败态用 `role=alert` | e2e 在失败分级场景断言 role |
 
 **结果**：本轮只记录，待实施。
-
