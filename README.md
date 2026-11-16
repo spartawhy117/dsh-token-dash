@@ -110,7 +110,7 @@ dsh plugin --profile desktop add github:spartawhy117/dsh-token-dash
 dsh plugin --profile desktop add /path/to/dsh-token-dash-x.y.z.tgz
 ```
 
-更新：`update` 同名命令（npm / github: 各自同名），或在插件设置页「价格与版本」右侧的 `⤓` 内完成。卸载：`remove` 同名命令，数据保留在 `$DSH_HOME/dsh-token-dash/`。
+更新：`update` 同名命令（npm / github: 各自同名），或在插件设置页「价格与版本」右侧的更新按钮内完成——每次启动 DSH 与运行中每 4 小时会自动检查，发现新版本时按钮直接显示版本号，点一下即可。卸载：`remove` 同名命令，数据保留在 `$DSH_HOME/dsh-token-dash/`。
 
 > DSH 0.2.2 升级后如果插件从 profile 消失，重装同一个 tarball 即可；账本与设置不随插件包删除。
 

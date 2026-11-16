@@ -111,7 +111,7 @@ dsh plugin --profile desktop add github:spartawhy117/dsh-token-dash
 dsh plugin --profile desktop add /path/to/dsh-token-dash-x.y.z.tgz
 ```
 
-Update: run `update` with the same name, or use the `⤓` button on the right of “Pricing & version” in settings. Remove: run `remove` with the same name; data stays in `$DSH_HOME/dsh-token-dash/`.
+Update: run `update` with the same name, or use the update button on the right of “Pricing & version” in settings. The plugin checks once at every DSH start and every 4 hours while running; when a new version exists the button shows the version number directly, so one click is enough. Remove: run `remove` with the same name; data stays in `$DSH_HOME/dsh-token-dash/`.
 
 > If the plugin disappears from the profile after a DSH 0.2.2 upgrade, reinstall the same tarball. The ledger and settings are not deleted with the plugin package.
 

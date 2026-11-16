@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：实施中（重开；`2.2.1-local.1` 已安装，Issue #6 已修复，Issue #7 待实施）<br>
+> 状态：实施中（重开；`2.2.1-local.4` 已安装。Issue #6 / #7 已修复，Issue #8（无障碍回归）待修复）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -82,7 +82,7 @@
 | CHG-40 | 修改 | `index.js` · `updateSpec` | 本地测试时安装 spec 可指向 tarball（`TOKEN_DASH_UPDATE_PACKAGE`） |
 | CHG-41 | 新增 | `client.js` · `UpdateButton` | 8 态更新控件组件；有更新转 accent + 常显版本号；移除小圆点；手动失败可重试 |
 | CHG-42 | 修改 | `client.js` · `checkForUpdate` | 失败分级：manual → `error`（强提示 + 可重试），auto → `autoError`（低强度文字，5s 消失） |
-| CHG-43 | 修改 | `client.js` · 插件 `apply` | 启动 30s 补检（距上次 <1h 跳过）+ 4h 周期检测 + `visibilitychange` 补偿；时间戳存 localStorage |
+| CHG-43 | 修改 | `client.js` · 插件 `apply` | 启动 30s **无条件**检测 + 4h 周期检测 + `visibilitychange` 补偿；时间戳存 localStorage（仅服务周期判定，不参与启动决策） |
 | CHG-44 | 修改 | `client.js` · `styles` / `EN` / `locale` | 新增 `updateButton*` 样式与 5 个词条（138 键中英一致） |
 | CHG-45 | 新增 | `test/unit/update-schedule.test.mjs` | 5 例调度单测 |
 
@@ -95,7 +95,7 @@
 section.boardSection「范围与明细」
 └─ div.rangeBox
    ├─ rangeHead（范围胶囊 + 共 N 个模型 · 更新于）
-   ├─ RangeCards（四格：总费用 / 真实 Tokens / 总请求数 / 缓存命中率）
+   ├─ RangeCards（四格：真实 Tokens / 总费用 / 缓存命中率 / 总请求数 —— 顺序同右侧胶囊）
    │   └─ 每格 button[role=radio] + aria-pressed，外层 role=radiogroup
    ├─ TrendChart（标题行[标题 + 粒度 + 指标胶囊] + 132px 柱区）
    │   └─ 柱区：3 条网格线 + 2 档 Y 轴 + N 个等分槽（槽内柱宽 ≤36）+ 日期刻度
@@ -333,7 +333,9 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 | 4 | 宿主 `/update` 有 5min 进程内缓存，仅安装成功后清空 | `index.js` · `updateCache` |
 | 5 | 「可更新」唯一可见信号是 4px `dot` | `client.js` · `IconButton` |
 
-### Issue #7 前置 · 本地假更新源 [待实施]
+### Issue #7 前置 · 本地假更新源 [已完成]
+
+> 已完成：随 `2.2.1-local.2` 落地，L2 已有四种判定断言（见 §7.6.2 #9）。
 
 #### 目的
 
@@ -397,37 +399,120 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 - **不改 `isNewer` 版本比较逻辑**：local → 正式版判定已由 `version.test.mjs` 覆盖，本轮复用。
 - **不改「版本」行其余排版**：组件抽取要求尺寸零变化，`settings.png` 不应因本轮产生布局差异。
 
-#### 7.6 验收
+#### 7.5.1 实施中发现并修复的额外缺陷
+
+1. **调度块暂时性死区**：`logUpdateSchedule('armed', ...)` 引用了同块内后面才 `const` 声明的 `lastAt`，`ctx.effect` 执行时抛 `ReferenceError` 并被 effect 机制静默吞掉。表现是「重启后从不自动检测更新」。修复：把 `const lastAt` 提到使用之前。
+   - **教训**：原有断言只验证「请求发了没有」，而该错误发生在发请求之前，因此单测与 E2E 全部绿灯却功能失效。补了 `armed` 调度日志后才暴露。
+2. **client 日志白名单只允许 `slot`**：`POST /log` 对非 slot 模块返回 400，`update` 的调度日志根本写不进去，线上无法诊断。修复：抽出 `CLIENT_LOG_MODULES`（`slot` / `update`），并在 e2e 加了白名单接受度断言。
+3. **启动检测被去重挡住**：初版按「距上次不足 1h 跳过」实现，与「每次启动都检查」的要求冲突。修复：启动检测无条件执行，启动/手动检测都带 `?refresh=1` 绕过宿主 5min 缓存。
+
+#### 7.6 测试补全与测试流程
+
+> 本节是 Issue #7 的测试事实来源。逐项列出「验证什么 / 在哪验证 / 现状」，标 **⚠ 缺口** 的为本轮复核发现、尚未覆盖或覆盖不足的项。
+
+##### 7.6.1 分层与职责
+
+| 层 | 命令 | 负责验证 | 不负责 |
+|---|---|---|---|
+| L1 单测 | `npm test` | 纯逻辑：调度判定、版本比较、词条键位 | 真实 DOM、真实宿主路由 |
+| L2 宿主契约 | `npm run e2e`（HTTP 段） | `/update` 与 `/log` 的真实响应、本地假更新源判定 | 组件渲染状态 |
+| L3 UI 断言 | `npm run e2e`（Playwright 段） | 8 态渲染、尺寸、文案、失败分级可见性 | 4h 真实等待 |
+| L4 人工 | 见 §7.6.4 | 真实 registry、真实安装链路 | 自动化回归 |
+
+##### 7.6.2 验收项与覆盖现状
+
+| # | 验证什么 | 在哪 | 现状 |
+|---|---|---|---|
+| 1 | 8 态视觉符合 §5.7.1 | `npm run preview drafts/update-button` | ✅ 原型覆盖 8 态；**⚠ 缺口**：原型未晋升 `templates/`，未进 §7 模板对照表 |
+| 2 | 有更新时按钮 accent + 版本号常显 | L3：`data-state=available` + `token-dash-update-latest` 文本 + 背景非透明 | ✅ 已覆盖 |
+| 3 | 自动失败可见且按钮不变红 | L3：独立页签 route 502 → 断言「更新检查失败」+ `data-state=idle` | ✅ 已覆盖（用独立页签隔离竞态） |
+| 4 | 启动无条件检测 | L3：预置「刚刚检测过」时间戳 → 断言仍发出请求 | ✅ 已覆盖 |
+| 5 | 4h 周期 / 恢复可见补检 | L1：`update-schedule.test.mjs` | **⚠ 缺口**：单测复刻逻辑而非导入实现，改代码不会让测试失败；且「4h 定时器真实触发」未验证 |
+| 6 | 失败写日志带 errorKind / httpStatus | 无 | **⚠ 缺口**：`check.fail` 日志内容无任何断言 |
+| 7 | 尺寸零变化（22px） | L3：`getBoundingClientRect().height === 22` | ✅ 已覆盖 |
+| 8 | 词条三方一致 | L1：`locale.test.mjs` 自动遍历 | ✅ 自动覆盖（138 键） |
+| 9 | 本地假更新源四种判定 | L2：缺失 / 同版本 / 更高 / 损坏 | ✅ 已覆盖 |
+| 10 | `?refresh=1` 绕过 5min 缓存 | 无 | **⚠ 缺口**：只验证了「能拿到新值」，未验证「不加 refresh 时确实命中缓存」 |
+| 11 | client 日志白名单接受 update 模块 | L2：POST `/log` 断言 200 | ✅ 已覆盖 |
+| 12 | 手动失败可重试（`error` 态） | 无 | **⚠ 缺口**：`data-state=error` 与「重试」按钮未断言 |
+| 13 | `confirm` 态结构 | L3：`token-dash-update-confirm` + 「立即更新」 | ✅ 已覆盖 |
+| 14 | 安装链路（`installUpdateRequest`） | 无 | **⚠ 缺口**：会真实改插件，自动化不覆盖，转 L4 人工 |
+
+##### 7.6.3 待补测试项（按优先级）
+
+| 优先级 | 项 | 补法 |
+|---|---|---|
+| P0 | #5 单测复刻逻辑 | 把 `shouldCheckOnVisible` 等判定抽到 `src/` 可导入模块，单测直接 import；或改为断言 client.js 源码中的常量字面量，防止实现漂移 |
+| P0 | #6 失败日志 | L2：让本地源指向不存在目录并请求 `?refresh=1`，断言日志文件出现 `check.fail` + `errorKind`；或在宿主返回 502 时断言 `logger` 输出 |
+| P1 | #10 缓存绕过 | L2：连发两次请求，第一次不带 `refresh` 第二次带，断言两次结果可不同（用 5min 内改 latest.json 验证） |
+| P1 | #12 手动失败态 | L3：route 502 + 手动点击 → 断言 `data-state=error`、「重试」按钮存在 |
+| P2 | #1 原型晋升 | 把 `drafts/update-button.html` 的数值搬进 `spec.mjs`，移入 `templates/`，登记 §7 对照表 |
+| P2 | #5 定时器真实触发 | L3：用假时间（`page.clock`）推进 4h，断言发出第二次请求 |
+
+##### 7.6.4 人工验证流程（L4）
+
+自动化不覆盖真实 registry 与真实安装，按下列步骤人工确认：
+
+1. **真实检测**：不设 `TOKEN_DASH_UPDATE_SOURCE` 启动 DSH，确认按钮为 `idle` 且日志出现 `check.ok` + `source: registry`。
+2. **本地假源检测**：设 `TOKEN_DASH_UPDATE_SOURCE` 指向含 `latest.json` 的目录，重启，30s 内应自动出现 accent「更新」+ 版本号，无需点击。
+3. **确认条**：点按钮 → 出现「发现 x / 立即更新 / 取消」，点取消回到 `available`。
+4. **真实安装**（可选，会改插件）：设 `TOKEN_DASH_UPDATE_PACKAGE` 指向本地 tarball 后点「立即更新」，确认安装成功并提示重启。
+5. **失败可感知**：把 `latest.json` 改成非法 JSON 或删除目录 → 手动点击应显示「未发布」；断开网络后手动点击应显示「检查失败」+「重试」。
+
+##### 7.6.5 回归口径
+
+- 每轮改动 `client.js` · `UpdateButton` / 调度块后必跑：`npm test` + `npm run e2e`。
+- 改动 `index.js` · `/update` 路由后额外跑 L2 段（已含在 e2e 内）。
+- `docs/pic/` 截图必须重出：`npm run shots`（中英文各一次）：组件尺寸变化会体现在 `settings.png`。
+
+#### 7.7 最终改动清单
+
+| 文件 · 位置 | 改动 | 状态 |
+|---|---|---|
+| `client.js` · `UpdateButton` | 新增组件，8 态渲染；移除 `dot` 小圆点 | 完成 |
+| `client.js` · `checkForUpdate` | 失败分级（manual → `error` / auto → `autoError`）；统一带 `?refresh=1` | 完成 |
+| `client.js` · `resetUpdateLater` | 支持自定义延迟：成功 1.6s，`autoError` 5s | 完成 |
+| `client.js` · 插件 `apply` | 启动 30s 无条件检测 + `setInterval` 4h + `visibilitychange` 补偿 + 调度日志 | 完成 |
+| `client.js` · `styles` | 新增 `updateBox` / `updateButton` / `updateButtonOn` / `updateButtonError` / `updateHint` / `updateHintError` / `updateAction` / `updateDismiss` | 完成 |
+| `client.js` · `EN` 词典 | 新增「发现」「立即更新」「重试」「更新中」「更新检查失败」5 键 | 完成 |
+| `client.js` · `logUpdateSchedule` | 调度事件上报（`armed` / `startup.run` / `visible.run`） | 完成 |
+| `locale/zh.json` / `en.json` | 同键同占位符，各 138 键 | 完成 |
+| `index.js` · `readLocalLatest` / `updateSpec` | 本地假更新源与 tarball 安装 spec | 完成 |
+| `index.js` · `/update` | `?refresh=1` 绕过缓存（生产亦生效）；成功写 `check.ok`，失败写 `check.fail` 带 `errorKind` / `httpStatus` 并返 502 | 完成 |
+| `index.js` · `CLIENT_LOG_MODULES` | client 日志白名单从仅 `slot` 扩为 `slot` / `update` | 完成 |
+| `scripts/e2e.mjs` | 本地源四种判定、启动无条件检测、白名单接受度、confirm 条、available 态、尺寸、失败分级（独立页签） | 完成 |
+| `test/unit/update-schedule.test.mjs` | 5 例调度单测 | 完成（**待改**：见 §7.6.3 P0） |
+| `docs/ui-design.md` | v3.16 §5.7.1 组件规格 + §5.7 版本行指向 | 完成 |
+| `tools/preview/drafts/update-button.html` | 8 态原型 | 完成（**待晋升** `templates/`） |
+| `docs/pic/` | `settings.png` 重出（组件抽取后尺寸不变） | 完成 |
+
+### Issue #8 [待修复] 2026-11-16 UpdateButton 重构后丢失状态播报，无障碍回归
+
+#### 复现
+
+- **当前**：`UpdateButton` 的提示节点（`token-dash-update-hint`）与更新结果均无 `aria-live`，屏幕阅读器不会播报「已更新」「检查失败」等状态变化。重构前该区域由 SettingsRows 内的 `aria-live="polite"` 包裹。
+- **期望**：符合 `docs/ui-design.md` §6「刷新、保存、导出、检查更新结果用 `aria-live=polite`；错误用 `role=alert`」。
+- **影响**：键盘与读屏用户接收不到更新状态，属无障碍回归。视觉用户无感。
+
+#### 根因
+
+组件抽取时把状态文案从原有 `role=status` / `aria-live` 容器移到了新组件的独立 `span`，但未迁移无障碍属性。属于「重构遗漏」而非设计变更——`docs/ui-design.md` §6 的规则未改，实现单方面偏离。
+
+#### 修复实施（待实施）
+
+- `client.js` · `UpdateButton`：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态改用 `role="alert"`。
+- 若同一节点在两种态间切换 role 会导致读屏行为不一致，拆成两个节点按态渲染。
+
+#### 不改的位置与理由
+
+- 按钮本身的 `aria-label` 已随状态更新（`发现 {version}，点击更新` / `重试` / `检查更新`），保持不变。
+
+#### 验收
 
 | # | 项 | 方式 |
 |---|---|---|
-| 1 | 8 态视觉符合 §5.7.1 | `npm run preview drafts/update-button` 逐态对照 + `docs/pic/` 截图 |
-| 2 | 有更新时按钮为 accent 且版本号常显 | `npm run e2e` 断言 `data-state=available` 与版本文案存在 |
-| 3 | 自动检测失败可见且按钮不变红 | `npm run e2e` mock `/update` 返回 500 → 断言提示文案存在、按钮 `data-state=idle` |
-| 4 | 4h 周期与启动补检逻辑 | 单测（注入假时钟）：`≥1h` 立即检、`<1h` 跳过、到期触发 |
-| 5 | 失败写日志带 errorKind | 单测断言 logger 收到 `[TD:update]` + `errorKind` |
-| 6 | 尺寸未变 | `npm run e2e` 断言按钮高度 22px |
-| 7 | 三处词条同键同占位符 | `npm test` · `locale.test.mjs` |
+| 1 | 提示节点带 `aria-live=polite` | e2e 断言 `[data-testid=token-dash-update-hint]` 的 `aria-live` 属性 |
+| 2 | 错误态用 `role=alert` | e2e 在失败分级场景断言 role |
 
-**结果**：通过（2026-11-16）。`npm test` 130 通过 / 0 失败；`npm run e2e` UI assertions passed，新增断言覆盖：本地假更新源四种判定（缺失 / 同版本 / 更高 / 损坏）、手动检测进 confirm 条、自动检测产生 available 态且版本号常显、按钮高度恒 22px、自动失败显示「更新检查失败」且按钮不变红、启动检测确实发出请求并写入时间戳。
+**结果**：待实施（本轮按要求不继续改代码）。
 
-**实施中发现的额外缺陷（已修）**：
-1. **调度块存在暂时性死区**——`logUpdateSchedule('armed', ...)` 引用了在同一块内后面才 `const` 声明的 `lastAt`，`ctx.effect` 执行时抛 `ReferenceError` 并被 effect 机制静默吞掉。表现就是「重启后从不自动检测更新」，与用户观察到的一致。修复：把 `const lastAt` 提到使用之前。
-2. **client 日志白名单只允许 `slot`**——`POST /log` 对非 slot 模块返回 400，导致调度日志根本写不进去、线上无法诊断。修复：抽出 `CLIENT_LOG_MODULES`（`slot` / `update`）。
-
-#### 7.7 改动清单（预估）
-
-| 文件 | 改动 |
-|---|---|
-| `client.js` · `UpdateButton` | 新增组件，8 态渲染 |
-| `client.js` · `checkForUpdate` | 区分 manual / auto 失败；补日志 |
-| `client.js` · 插件 `apply` | 启动补检 + `setInterval` 4h + `visibilitychange` 补偿 |
-| `client.js` · `styles` | 新增 `updateButton*` 系列（不改既有） |
-| `client.js` · `EN` 词典 | 新增「更新」「更新中」「重试」「更新检查失败」等键 |
-| `locale/zh.json` / `en.json` | 同键同占位符 |
-| `index.js` | `prefs` 增 `updateCheckedAt`；`/update` 日志补 `errorKind` / `httpStatus` |
-| `scripts/e2e.mjs` | 新增 6 项断言（见 §7.6） |
-| `test/unit/` | 新增检测调度单测 |
-| `docs/ui-design.md` | 已更新（v3.16 §5.7.1） |
-| `tools/preview/drafts/update-button.html` | 已有；定稿后晋升 `templates/` |
-| `test/unit/update-schedule.test.mjs` | 新增 5 例调度单测（启动补检 / 恢复可见 / 周期到期 / 非法时间戳） |

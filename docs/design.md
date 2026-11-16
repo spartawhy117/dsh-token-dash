@@ -288,6 +288,11 @@ adapters.readProviders(ctx, prefs, cache)
 | 脱敏 | 日志已过滤；错误响应只返回 `reason`，不含上游 body / Key |
 | 附加路由 | 无 `/repo`；仓库入口为静态 `REPO_URL` 链接 |
 | `/usage` DTO | `{ range, startAt, endAt, startKey, endKey, totals, total, models, series, grain }`；`series` 为连续日点（`grain='month'` 时按月），导出包**不含**该字段 |
+| `/update` DTO | `{ current, latest, hasUpdate, published, source }`；`source` 为 `registry`（默认）或 `local`（测试源）。`?refresh=1` 跳过 5min 进程内缓存 |
+| `/update/install` | POST；按 `updateSpec()` 决定安装 spec（生产为 npm 版本号，本地测试源为 `TOKEN_DASH_UPDATE_PACKAGE` 指向的 tarball） |
+| `/log` 白名单 | 只接受 `CLIENT_LOG_MODULES` 中的模块（`slot` 挂载上报 / `update` 调度上报），其余 400 |
+| 更新检测节奏 | 启动 30s 后**无条件**检测；运行中每 4h；页面恢复可见且距上次 ≥4h 时补检。时间戳存 localStorage（`td:updateCheckedAt`），仅服务周期判定 |
+| 测试用更新源 | `TOKEN_DASH_UPDATE_SOURCE` 指向目录时读 `<dir>/latest.json` 代替 registry；文件缺失或损坏按 `published:false` 处理，不抛错 |
 
 ## 文件目录组织
 
