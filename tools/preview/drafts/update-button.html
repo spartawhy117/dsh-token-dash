@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>UpdateButton · 状态矩阵</title>
+<style>
+  :root {
+    --bg: #1b1b1d;
+    --section: #232325;
+    --border: rgba(127,127,127,.24);
+    --text: #ececec;
+    --muted: rgba(236,236,236,.62);
+    --weak: rgba(236,236,236,.42);
+    --accent: #4176e6;
+    --over: #e5484d;
+    --warn: #f5a623;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --cb-radius: 8px;
+    --btn-height: 22px;
+    --btn-font: 11px;
+    --tip-font: 11px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px;
+    background: var(--bg); color: var(--text);
+    font: 13px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .lede { color: var(--muted); font-size: 12px; margin: 0 0 24px; max-width: 640px; }
+  h2 {
+    font-size: 12px; font-weight: 600; color: var(--weak);
+    text-transform: uppercase; letter-spacing: .06em;
+    margin: 28px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  h2:first-of-type { margin-top: 0; }
+
+  /* ===== 设置区容器：模拟 P3「版本」行 ===== */
+  .capsule {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--section); padding: var(--space-4);
+    display: grid; gap: 12px; max-width: 912px;
+  }
+  .row {
+    display: flex; align-items: center; gap: var(--space-2);
+    min-height: 26px; flex-wrap: wrap;
+  }
+  .row-label { font-size: 12px; color: var(--weak); min-width: 44px; }
+  .row-meta { font-size: 11px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .status { font-size: 11px; color: var(--muted); }
+
+  /* ===== UpdateButton 组件本体 ===== */
+  .ub { display: inline-flex; align-items: center; gap: 6px; }
+  .ub-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: var(--btn-height); min-width: var(--btn-height);
+    padding: 0 6px; gap: 4px;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--text);
+    font-size: var(--btn-font); font-family: inherit; cursor: pointer;
+    position: relative; transition: background .15s, border-color .15s, color .15s;
+  }
+  .ub-button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .ub-button[disabled] { opacity: .55; cursor: default; }
+  /* 有更新：整体转 accent 强调，不只靠小圆点 */
+  .ub-button[data-state="available"] {
+    border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent); font-weight: 500;
+  }
+  .ub-button[data-state="available"]:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+  .ub-button[data-state="error"] { border-color: color-mix(in srgb, var(--over) 42%, transparent); color: var(--over); }
+  .ub-button svg { width: 13px; height: 13px; }
+  .ub-spin { animation: spin 1s linear infinite; transform-origin: center; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 常显版本号 + 可读状态 */
+  .ub-hint { font-size: var(--btn-font); color: var(--accent); font-weight: 500; white-space: nowrap; }
+  .ub-hint[data-kind="error"] { color: var(--over); font-weight: 400; }
+
+  /* ===== 确认条 ===== */
+  .ub-confirm { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .ub-confirm-text { font-size: 12px; color: var(--text); }
+  .ub-confirm-text b { color: var(--accent); font-weight: 600; }
+  .ub-action {
+    height: var(--btn-height); padding: 0 10px; border-radius: 6px;
+    font-size: var(--btn-font); font-family: inherit; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+  }
+  .ub-action:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+  .ub-dismiss {
+    height: var(--btn-height); padding: 0 8px; border-radius: 6px;
+    font-size: var(--btn-font); font-family: inherit; cursor: pointer;
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+  }
+  .ub-dismiss:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+  /* ===== 状态矩阵 ===== */
+  .grid { display: grid; grid-template-columns: 148px 1fr; gap: 0; max-width: 912px; }
+  .grid > div { padding: 10px 0; border-bottom: 1px solid rgba(127,127,127,.12); }
+  .grid > .cell-name { font-size: 12px; color: var(--muted); padding-right: 16px; }
+  .grid > .cell-name code { font-size: 11px; color: var(--weak); display: block; }
+  .cell-demo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .note {
+    margin-top: 24px; padding: 12px 16px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--section);
+    font-size: 12px; color: var(--muted); max-width: 912px;
+  }
+  .note b { color: var(--text); }
+  .note ul { margin: 6px 0 0; padding-left: 18px; }
+  .note li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<h1>UpdateButton · 状态矩阵</h1>
+<p class="lede">把设置区「版本」行右侧的更新控件抽成独立组件后的目标形态。核心变化：<b>有更新时按钮整体转 accent 强调色并常显版本号</b>，不再只靠一个小圆点；<b>自动检测失败可见</b>，不再静默。</p>
+
+<h2>一、在设置区里的实际观感</h2>
+<div class="capsule">
+  <div class="row">
+    <span class="row-label">版本</span>
+    <span class="row-meta">v2.2.1-local.1 · 价格表 2026-11-02 11:45 <a href="#" style="color:inherit">社区</a></span>
+    <span class="spacer"></span>
+    <span class="status"></span>
+    <span class="ub">
+      <button class="ub-button" data-state="available">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        更新
+      </button>
+      <span class="ub-hint">v2.3.0</span>
+    </span>
+  </div>
+  <div class="row">
+    <span class="row-label">版本</span>
+    <span class="row-meta">v2.2.1-local.1 · 价格表 2026-11-02 11:45 <a href="#" style="color:inherit">社区</a></span>
+    <span class="spacer"></span>
+    <span class="status"></span>
+    <span class="ub">
+      <button class="ub-button" data-state="idle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      </button>
+    </span>
+  </div>
+</div>
+
+<h2>二、全部状态</h2>
+<div class="grid">
+  <div class="cell-name">idle<code>无更新 / 未检测</code></div>
+  <div class="cell-demo">
+    <span class="ub"><button class="ub-button" data-state="idle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    </button></span>
+    <span class="status">仅图标，无提示文字</span>
+  </div>
+
+  <div class="cell-name">checking<code>手动或自动检测中</code></div>
+  <div class="cell-demo">
+    <span class="ub"><button class="ub-button" data-state="idle" disabled>
+      <svg class="ub-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg>
+    </button></span>
+    <span class="status">转圈 + 禁用，防止重复点击</span>
+  </div>
+
+  <div class="cell-name">available<code>发现新版本</code></div>
+  <div class="cell-demo">
+    <span class="ub">
+      <button class="ub-button" data-state="available">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        更新
+      </button>
+      <span class="ub-hint">v2.3.0</span>
+    </span>
+    <span class="status">accent 描边 + 浅底 + 文案「更新」+ 常显版本号</span>
+  </div>
+
+  <div class="cell-name">confirm<code>点击后展开确认</code></div>
+  <div class="cell-demo">
+    <span class="ub-confirm">
+      <span class="ub-confirm-text">发现 <b>v2.3.0</b></span>
+      <button class="ub-action">立即更新</button>
+      <button class="ub-dismiss">取消</button>
+    </span>
+  </div>
+
+  <div class="cell-name">installing<code>安装中</code></div>
+  <div class="cell-demo">
+    <span class="ub"><button class="ub-button" data-state="available" disabled>
+      <svg class="ub-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg>
+      更新中
+    </button></span>
+  </div>
+
+  <div class="cell-name">done<code>成功，1.6s 后回 idle</code></div>
+  <div class="cell-demo">
+    <span class="ub">
+      <button class="ub-button" data-state="idle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+    </span>
+    <span class="status">已更新到 v2.3.0，重启 DSH 后生效</span>
+  </div>
+
+  <div class="cell-name">error · 手动<code>用户点了检查并失败</code></div>
+  <div class="cell-demo">
+    <span class="ub">
+      <button class="ub-button" data-state="error">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+        重试
+      </button>
+      <span class="ub-hint" data-kind="error">检查失败</span>
+    </span>
+    <span class="status">按钮转红 + 文字说明，可点击重试</span>
+  </div>
+
+  <div class="cell-name">error · 自动<code>后台检测失败（新增可见）</code></div>
+  <div class="cell-demo">
+    <span class="ub">
+      <button class="ub-button" data-state="idle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      </button>
+      <span class="ub-hint" data-kind="error">更新检查失败</span>
+    </span>
+    <span class="status">低强度提示，5s 后自动消失，不打断操作</span>
+  </div>
+</div>
+
+<div class="note">
+  <b>和当前实现的差异</b>
+  <ul>
+    <li><b>有更新</b>：现在只有图标 + 4px 小圆点，版本号藏在 hover title 里。改为按钮整体 accent 强调 + 常显 <code>v2.3.0</code>。</li>
+    <li><b>自动检测失败</b>：现在完全静默（catch 里只回 idle）。改为按钮旁显示「更新检查失败」，5s 后自动消失。</li>
+    <li><b>错误可重试</b>：现在 error 态只有「复制命令」按钮。改为按钮本身可点重试，复制命令降级为次要入口。</li>
+    <li><b>确认条</b>：文案从「发现 x」+「更新」+「取消」调整为带版本加粗的说明 + 「立即更新」/「取消」，落点仍在这一行内。</li>
+    <li><b>尺寸不变</b>：按钮高度仍 22px、字号 11px、圆角 6px，行高 26px，不影响「版本」行现有排版。</li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：待验收（重开；`2.2.1-local.1` 已安装，Issue #6 已修，等待重出候选包验证）<br>
+> 状态：实施中（重开；`2.2.1-local.1` 已安装，Issue #6 已修复，Issue #7 待实施）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -296,48 +296,91 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 
 **遗留**：长跨度里周末权重相同会让部分柱高巧合相等（30 天视图 29 根非零柱中 22 根互不相同），属可接受的视觉巧合；若将来调大尖峰倍数需复核末点余量不为负。约束已写入 `tools/mock/AGENTS.md` §3。
 
-### Issue #7 [待确认] 2026-11-16 P3 更新按钮在新版本已发布时不提示可更新
+### Issue #7 [待实施] 2026-11-16 更新检测无周期轮询，且「可更新」信号过弱
 
-#### 复现
+#### 7.1 复现
 
-- **当前**：用户观察到 P3 设置区的更新按钮有时不提示「发现新版本」，即便 npm 上已有更高版本。用户对更新检测频率的理解是「每小时一次 + DSH 启动时一次」。
-- **期望**：新版本发布后，最迟一个检测周期内按钮应显示「发现 {version}，点击更新」；启动时若远超过一个周期未检测，应立即检测。
-- **影响**：用户可能长期停在旧版本，且没有任何提示说明为什么没发现更新（静默失败，无日志可见于 UI）。
+- **当前**：① 新版本发布后长时间不提示。② 有更新时只有一个 4px 小圆点，版本号藏在 hover `title` 里。③ 自动检测失败完全不静默，用户无从得知「检测过但失败了」。
+- **期望**：① 每 4h 自动检测一次，启动时按上次检测时间补一次。② 有更新时按钮整体强调并常显版本号。③ 失败可见，日志留痕。
+- **影响**：用户可能长期停在旧版本，且没有任何提示解释为什么没发现更新。
 
-#### 已确认的代码事实
-
-以下为读代码得到的结论，**尚待现场日志确认触发条件**：
-
-1. **没有每小时轮询**。`client.js` 的自动检测只在插件 `apply` 时触发一次：`autoUpdateChecked` 布尔守卫 + `setTimeout(..., 4000)` 调 `checkForUpdate({ manual: false })`。代码里不存在 `setInterval` 或基于时间的周期检测。用户所说的「小时一次」与实现不符——实际是**每个宿主进程生命周期内仅一次**。
-2. **宿主端有 5 分钟缓存**。`index.js` 的 `GET /update` 用 `updateCache`（`Date.now() - updateCache.at < 300000`）挡掉重复请求，5 分钟内直接返回上次结果。仅在 `POST /update/install` 成功后清空缓存。
-3. **静默失败路径**。`checkForUpdate({ manual: false })` 的 catch 分支只 `emitUpdate({ phase: 'idle' })`，不发任何日志、不留 `errorKind`，UI 上也看不出「检测过但失败了」。这与 AGENTS.md §3「错误不吞，关键链路带 `errorKind` / `httpStatus`」不一致。
-4. **registry 超时 5s**。`fetchLatest` 用 `AbortSignal.timeout(5000)`，冷启动时若网络慢即静默失败。
-5. **判定依赖本地版本号**。`fetchLatest` 用 `CURRENT_VERSION` 与 registry 比对；local 版本（如 `2.2.1-local.1`）与正式版的比较走 `isNewer`，需确认 local → 正式版的判定与用户预期一致。
+#### 7.2 关键时序（现状 → 问题点）
 
 ```text
 【起点】插件 apply → autoUpdateChecked=false → setTimeout 4s → checkForUpdate({manual:false})
-【★问题根源】检测仅在 apply 触发一次，无周期轮询；失败分支静默 idle，无日志无 errorKind
+【★问题根源】检测仅在 apply 触发一次，无周期轮询；失败分支只 emitUpdate({phase:'idle'})，无日志无 errorKind
 【触发】① 启动 4s 时网络抖动 / registry 超 5s → 静默失败，此后不再重试
          ② 宿主进程不重启 → 永不再次检测
-         ③ 5 分钟内手动点按钮 → 命中宿主缓存，返回旧结果
-【对比】manual=true 路径会显示「检查失败」；auto 路径把这个信号吞掉了
-【修复待定】见下方「待确认事项」
+【对比】manual=true 路径会显示「检查失败」；auto 路径把该信号吞掉了
+【修复】加周期轮询 + 持久化上次检测时间 + 失败分级可见 + 按钮状态强化
 ```
 
-#### 待确认事项（本轮不设计方案）
+#### 7.3 结论（已确认事实）
 
-用户已明确本轮只记录 issue，**不补全方案**。以下问题需在下一轮确认：
+| # | 事实 | 位置 |
+|---|---|---|
+| 1 | 无 `setInterval`，仅 `apply` 时一次 `setTimeout(4000)` | `client.js` · 插件 `apply` |
+| 2 | 自动检测失败只回 `idle`，无日志 | `client.js` · `checkForUpdate` catch |
+| 3 | registry 请求超时 5s | `index.js` · `fetchLatest` (`AbortSignal.timeout(5000)`) |
+| 4 | 宿主 `/update` 有 5min 进程内缓存，仅安装成功后清空 | `index.js` · `updateCache` |
+| 5 | 「可更新」唯一可见信号是 4px `dot` | `client.js` · `IconButton` |
 
-1. 「每小时一次」是既有设计意图还是用户期望？当前代码没有周期检测，需先对齐目标行为。
-2. 静默失败是否要保留？即自动检测失败要不要在按钮上给出可感知状态（而非完全静默）。
-3. 5 分钟宿主缓存与「启动即检测」是否冲突——重装 / 重启后首个 `/update` 是否可能命中上一次进程的旧缓存（缓存是进程内变量，理论上重启即失效，需现场验证）。
-4. local 版本 → 正式版的更新判定是否符合预期。
+#### 7.4 修复实施
 
-#### 不改的位置与理由
+**7.4.1 检测频率（用户确认：4h）**
 
-- 本轮不改任何代码：用户明确「先不补全 issue 和设计方案」。
+- 启动后 **30s** 触发一次；若距上次检测 **≥1h** 则立即检测，否则跳过等周期。
+- 运行中 **每 4h** 自动检测一次（`setInterval` + `visibilitychange` 补偿：页面隐藏期间暂停，恢复可见且已过期则立即补检）。
+- 「上次检测时间」持久化到 `prefs.json`（`updateCheckedAt`），避免频繁重启反复请求 registry。
+- 手动点击不受周期限制，但仍受宿主 5min 缓存约束——**不绕过缓存**，避免用户狂点打爆 registry。
 
-#### 验收
+**7.4.2 UpdateButton 组件（用户确认：抽成独立组件）**
 
-- 待方案确定后补。
+- 新建 `client.js` · `UpdateButton`，接管原 `SettingsRows` 内联的 `updateControl` 分支（含 `confirm` 态）。
+- 8 态矩阵见 `docs/ui-design.md` §5.7.1；尺寸不变（22px 高 / 11px / 圆角 6px）。
+- `available`：accent 描边 42% + 浅底 16% + 「更新」文案 + 右侧常显 `vX.Y.Z`。
+- **移除 `dot`**：不再用小圆点表达有更新 / 错误。
+- `error`（手动）：按钮转 over 色 + 「重试」，点击即重新检测；`复制命令` 降为次要入口，仅 `error.command` 非空时出现。
+- `error`（自动）：按钮外观不变，右侧显示「更新检查失败」，**5s 后自动消失**。
 
+**7.4.3 失败可见（用户确认：需要）**
+
+- `checkForUpdate` catch 分支区分 manual / auto：manual → `phase: 'error'` 显示「检查失败」；auto → `phase: 'autoError'` 只置提示文案，按钮不变。
+- 两条分支都写日志：`[TD:update]` 前缀，带 `errorKind`（`timeout` / `network` / `registry-<status>`）与 `httpStatus`，符合 AGENTS.md §3「错误不吞」。
+
+#### 7.5 不改的位置与理由
+
+- **不改宿主端 5min 缓存**：它是防止 registry 打爆的保护，不是 bug；本轮只在客户端补周期检测与持久化时间戳。
+- **不改 `fetchLatest` 的 5s 超时**：超时本身合理，问题在失败被吞，不在超时值。
+- **不改 `isNewer` 版本比较逻辑**：local → 正式版判定已由 `version.test.mjs` 覆盖，本轮复用。
+- **不改「版本」行其余排版**：组件抽取要求尺寸零变化，`settings.png` 不应因本轮产生布局差异。
+
+#### 7.6 验收
+
+| # | 项 | 方式 |
+|---|---|---|
+| 1 | 8 态视觉符合 §5.7.1 | `npm run preview drafts/update-button` 逐态对照 + `docs/pic/` 截图 |
+| 2 | 有更新时按钮为 accent 且版本号常显 | `npm run e2e` 断言 `data-state=available` 与版本文案存在 |
+| 3 | 自动检测失败可见且按钮不变红 | `npm run e2e` mock `/update` 返回 500 → 断言提示文案存在、按钮 `data-state=idle` |
+| 4 | 4h 周期与启动补检逻辑 | 单测（注入假时钟）：`≥1h` 立即检、`<1h` 跳过、到期触发 |
+| 5 | 失败写日志带 errorKind | 单测断言 logger 收到 `[TD:update]` + `errorKind` |
+| 6 | 尺寸未变 | `npm run e2e` 断言按钮高度 22px |
+| 7 | 三处词条同键同占位符 | `npm test` · `locale.test.mjs` |
+
+**结果**：待实施。
+
+#### 7.7 改动清单（预估）
+
+| 文件 | 改动 |
+|---|---|
+| `client.js` · `UpdateButton` | 新增组件，8 态渲染 |
+| `client.js` · `checkForUpdate` | 区分 manual / auto 失败；补日志 |
+| `client.js` · 插件 `apply` | 启动补检 + `setInterval` 4h + `visibilitychange` 补偿 |
+| `client.js` · `styles` | 新增 `updateButton*` 系列（不改既有） |
+| `client.js` · `EN` 词典 | 新增「更新」「更新中」「重试」「更新检查失败」等键 |
+| `locale/zh.json` / `en.json` | 同键同占位符 |
+| `index.js` | `prefs` 增 `updateCheckedAt`；`/update` 日志补 `errorKind` / `httpStatus` |
+| `scripts/e2e.mjs` | 新增 6 项断言（见 §7.6） |
+| `test/unit/` | 新增检测调度单测 |
+| `docs/ui-design.md` | 已更新（v3.16 §5.7.1） |
+| `tools/preview/drafts/update-button.html` | 已有；定稿后晋升 `templates/` |
