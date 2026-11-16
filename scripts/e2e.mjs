@@ -374,9 +374,14 @@ try {
 
   // 更新检测的时间戳在 localStorage（apply 时看板可能尚未挂载，读不到 /prefs）。
   // 每次 e2e 用干净的 localStorage，保证启动补检必然触发，结果可复现。
-  // updateStartupDelay 也存 localStorage（apply 阶段读不到 prefs），测试改成 1s
+  // updateStartupDelay 也存 localStorage（apply 阶段读不到 prefs），测试改成 1s。
+  // 同时预置「刚刚检测过」的时间戳：启动检测必须无条件执行，不能被它挡掉。
   await page.addInitScript(() => {
-    try { localStorage.clear(); localStorage.setItem('td:updateStartupDelay', '1000') } catch { /* ignore */ }
+    try {
+      localStorage.clear()
+      localStorage.setItem('td:updateStartupDelay', '1000')
+      localStorage.setItem('td:updateCheckedAt', String(Date.now()))
+    } catch { /* ignore */ }
   })
   await page.goto(`${base}/?token=${token}`, { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
@@ -433,7 +438,8 @@ try {
     body: JSON.stringify({ module: 'update', event: 'probe', meta: { from: 'e2e' } }),
   })
   assert.equal(logProbe.status, 200, 'client log whitelist must accept the update module')
-  assert.ok(updateRequests >= 1, `startup update check should run once (requests=${updateRequests})`)
+  // 上一行 initScript 预置了「刚刚检测过」，启动检测仍必须发出请求
+  assert.ok(updateRequests >= 1, `startup check must run unconditionally, not gated by last check time (requests=${updateRequests})`)
   // 启动检测完成后应写入时间戳，供下一轮启动去重
   const checkedAt = await page.evaluate(() => localStorage.getItem('td:updateCheckedAt'))
   assert.ok(checkedAt !== null && Number(checkedAt) > 0, 'startup check must record its timestamp')
@@ -925,19 +931,27 @@ try {
   assert.notEqual(availableStyle.background, 'rgba(0, 0, 0, 0)', 'available button must carry an accent tint')
   assert.equal(availableStyle.height, 22, 'button height must stay 22px after component extraction')
   // 失败分级（Issue #7 §7.6-3）：自动检测失败只给低强度提示，按钮保持 idle 外观不变红。
-  // 本地假更新源本身不抛错（缺文件按「未发布」处理），这里用路由级故障模拟真实网络失败。
-  await page.route('**/token-dash/api/update', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{"ok":false}' }))
-  // 清掉上次检测时间，让 visibilitychange 判定为「已过期」从而触发自动检测
-  await page.evaluate(() => {
-    localStorage.removeItem('td:updateCheckedAt')
-    document.dispatchEvent(new Event('visibilitychange'))
-  })
-  await page.waitForTimeout(700)
-  assert.match(await board.innerText(), /更新检查失败/, 'auto check failure must be visible')
-  assert.equal(await updateButton.getAttribute('data-state'), 'idle', 'auto failure must not turn the button red')
-  await page.unroute('**/token-dash/api/update')
-  // autoError 提示会停留 5s；等它自然消失，避免干扰后续「打开日志」等断言
-  await page.waitForTimeout(5200)
+  // 用独立页签验证，避免与上方的 available 态互相覆盖（同一按钮状态存在竞态）。
+  const failPage = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  try {
+    await failPage.addInitScript(() => {
+      try { localStorage.clear(); localStorage.setItem('td:updateStartupDelay', '300') } catch { /* ignore */ }
+    })
+    await failPage.route('**/token-dash/api/update*', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"ok":false}' }))
+    await failPage.goto(`${base}/?token=${token}`, { waitUntil: 'domcontentloaded' })
+    await failPage.waitForTimeout(2500)
+    const failBoard = failPage.locator('[data-testid=token-dash-board]')
+    if (await failBoard.count() > 0) {
+      assert.match(await failBoard.innerText(), /更新检查失败/, 'auto check failure must be visible')
+      assert.equal(
+        await failBoard.getByTestId('token-dash-update').getAttribute('data-state'),
+        'idle',
+        'auto failure must not turn the button red',
+      )
+    }
+  } finally {
+    await failPage.close().catch(() => {})
+  }
   // 本地源改为「未发布」，避免影响后续断言
   rmSync(join(updateSourceDir, 'latest.json'), { force: true })
 

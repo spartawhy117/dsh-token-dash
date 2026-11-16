@@ -613,9 +613,9 @@ export function apply(ctx) {
             return
           }
           if (url.pathname === `${ROUTE_PREFIX}/update` && req.method === 'GET') {
-            // ?refresh=1 强刷：只在本地假更新源启用时生效，供测试绕过 5min 缓存，
-            // 生产路径不受影响（未设 TOKEN_DASH_UPDATE_SOURCE 时该参数被忽略）。
-            const forceRefresh = url.searchParams.get('refresh') === '1' && updateSource() !== null
+            // ?refresh=1 跳过 5min 缓存。启动检测与手动点击都带这个参数：
+            // 用户要求「每次启动无条件检查」，命中旧缓存就等于没检查。
+            const forceRefresh = url.searchParams.get('refresh') === '1'
             if (!forceRefresh && updateCache.data !== null && Date.now() - updateCache.at < 300000) {
               json(res, 200, { ok: true, data: updateCache.data })
               return

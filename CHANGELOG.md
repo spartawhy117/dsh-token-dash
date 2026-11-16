@@ -4,6 +4,24 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.1-local.4] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 每次启动 DSH 都会检查一次更新，不再因为「不久前刚检查过」而跳过。
+- 启动检查与手动检查都会绕过短时缓存，确保看到的是当下最新版本，而不是几分钟前的旧结果。
+
+### English
+
+#### Changes
+
+- Every DSH start now performs an update check, with no skip based on how recently the last check ran.
+- Both the startup check and manual checks bypass the short-lived cache, so the result reflects the latest published version instead of one cached minutes ago.
+
 ## [2.2.1-local.3] - 2026-11-16
 
 > 本地构建，未发布

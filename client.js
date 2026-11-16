@@ -273,10 +273,9 @@ window.__ModuleLoader__.load({
     let updateRequest = null
     let updateResetTimer = null
     let autoUpdateChecked = false
-    /** 更新检测节奏：UI 稳定 30s 后启动补检，运行中每 4h 一次；距上次检测不足 1h 的启动不重复请求。 */
+    /** 更新检测节奏：UI 稳定 30s 后启动检测（无条件），运行中每 4h 一次。 */
     const UPDATE_STARTUP_DELAY = 30_000
     const UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000
-    const UPDATE_MIN_STARTUP_AGE = 60 * 60 * 1000
     /** 测试可缩短启动延迟（localStorage td:updateStartupDelay），生产恒为 UPDATE_STARTUP_DELAY。 */
     const updateStartupDelay = () => {
       try {
@@ -329,8 +328,8 @@ window.__ModuleLoader__.load({
       emitUpdate({ phase: 'checking', text: null, command: null })
       updateRequest = (async () => {
         try {
-          // 手动检测带 force 标记：宿主仅在本地假更新源启用时才认这个参数，生产等同不加
-          const data = await getJson(manual ? '/update?refresh=1' : '/update')
+          // 启动检测与手动点击都强刷：命中宿主 5min 缓存就等于没检查
+          const data = await getJson('/update?refresh=1')
           if (data.published === false) {
             if (manual) { emitUpdate({ phase: 'done', text: tr('未发布') }); resetUpdateLater() }
             else emitUpdate({ phase: 'idle', text: null })
@@ -2293,14 +2292,9 @@ window.__ModuleLoader__.load({
             })
             timer = setTimeout(() => {
               timer = null
-              const elapsed = Date.now() - lastAt()
-              if (elapsed >= UPDATE_MIN_STARTUP_AGE) {
-                logUpdateSchedule('startup.run', { elapsed })
-                runAuto()
-              } else {
-                // 距上次检测不足 1h：跳过是设计行为，但要能在日志里看见，否则无从区分「跳过」与「没跑」
-                logUpdateSchedule('startup.skip', { elapsed, threshold: UPDATE_MIN_STARTUP_AGE })
-              }
+              // 启动检测无条件执行：用户要求「每次启动都检查」，不看缓存也不看上次检测时间
+              logUpdateSchedule('startup.run', { lastAt: lastAt() })
+              runAuto()
               interval = setInterval(() => {
                 if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
                 runAuto()
