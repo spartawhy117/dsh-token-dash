@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；Issue #9（更新侧复查）与 #10（去确认条 + 无障碍播报）待修复，**先做 #9**）<br>
+> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；待修 #9 安装链路 → #10 调度重复 → #11 去确认条+无障碍 → #12 测试补全）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -328,125 +328,157 @@ CL：git 仓 commit `3b0d071`（`test(update): 更新检测测试改走真实 re
 
 **遗留**：见 Issue #9（更新侧代码与测试复查）。
 
-### Issue #9 [待修复] 2026-11-16 更新侧代码与测试复查：3 处 A 级缺陷 + 2 处代码卫生 + 4 处测试盲区
+### Issue #9 [待修复] 2026-11-16 安装链路版本错配与错误不可读
 
-> 本轮按要求只记录，不改代码。按严重度排序。**执行顺序：#9 → #10**（#9 是更新逻辑根因，#10 在此基础上改交互）。
+> 优先级 P0。**先做这条**——#10 让用户「点一下就开始安装」，本条修的正是被点之后走的那条路。不先修，去掉确认后误装错误的代价更大。
 
-#### 9.1 A 级：会导致用户可见错误
+#### 9.1 复现
 
-**A1 · 安装请求绕过缓存，可能装到非预期版本**
+- **当前**：① 客户端展示的版本来自 `GET /update`，点安装时宿主在 `/update/install` 内**再查一次** registry，两次之间若发版会出现「提示 2.2.0，装成 2.3.0」；② 客户端只判 `body?.ok === true`，不读 `res.ok` / `body.reason`，宿主对非法版本号抛错后用户只看到「更新失败（unknown）」。
+- **期望**：装的就是按钮上显示的版本；失败原因能读出来。
+- **影响**：版本错配可导致降级或装到预期外的版本；错误不可读使问题无法自查。
 
-`index.js` · `/update/install` 直接调 `fetchLatest()`，**不带 `?refresh=1` 的语义也没有缓存**，与 `GET /update` 各自算一次。客户端展示的是 `GET /update` 的结果，安装时宿主重新查一次 registry——两次之间若发版，会出现「提示 2.2.0，实际装 2.3.0」，或者 `data.latest` 与 `from/to` 不一致。
+#### 9.2 关键时序
 
-修复方向：安装时使用客户端在确认条上展示的那个版本（把 `latest` 作为 POST body 传入，宿主校验其合法性并安装），而不是重新查 registry。
+```text
+【现状】
+  客户端：GET /update?refresh=1 → data.latest = 2.2.0 → 显示「更新 2.2.0」
+  点安装：POST /update/install（无 body）
+  宿主  ：fetchLatest() 再查一次 → latest 可能是 2.3.0 → 安装 2.3.0
+  ★错配点：展示值与安装值之间没有任何绑定
 
-**A2 · `installUpdateRequest` 无响应状态校验**
+【目标】
+  客户端：GET /update?refresh=1 → data.latest = 2.2.0
+  点安装：POST /update/install { version: "2.2.0" }   ← 展示值随请求带上
+  宿主  ：校验 version 合法 → 按该版本安装 → 返回实际装上的版本
+          若校验失败 → 400 + reason（不再是 500）
+```
 
-客户端只判断 `body?.ok === true`，未检查 `res.ok` / `res.status`。宿主在 `/update/install` 里对非法版本号 `throw new Error('invalid-latest-version')`，该 throw 落到路由兜底返回 500 且 `ok:false`，客户端会显示「更新失败（unknown）」——reason 丢失。
+#### 9.3 结论与修复
 
-修复方向：读取 `body.reason` 与 `res.status`，区分「网络失败」「版本非法」「安装失败」。
-
-**A3 · 4h 定时器不检查 `lastAt`，与「恢复可见补检」重复触发**
-
-`setInterval` 每 4h 无条件 `runAuto()`；`visibilitychange` 在 `elapsed >= 4h` 时也 `runAuto()`。两者独立，用户切标签页即可与定时器叠加。虽然有 `updateRequest !== null` 兜底（同一时刻只跑一个），但**串行仍会连发两次**：第一次结束后第二次立刻又发。
-
-修复方向：`setInterval` 内也判 `elapsed >= UPDATE_INTERVAL_MS`，与 `onVisible` 共用同一个到期判定。
-
-#### 9.2 B 级：代码卫生 / 可维护性
-
-**B1 · 注释与实现不符**
-
-`client.js` · `apply` 内仍写「距上次检测不足 1h 则跳过」——该逻辑已在 local.4 删除。这类过时注释会误导后续维护者重加去重。
-
-**B2 · `updateStartupDelay` 是纯测试后门留在生产代码里**
-
-localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明「不改变检测内容」，但生产包保留一个可让检测提前触发的外部开关，收益（e2e 少等 29s）与风险不对等。
-
-修复方向：改为构建期常量或用 `window.__TD_E2E__` 这类仅测试注入的全局标记，避免用户会话里生效。
-
-#### 9.3 C 级：测试盲区
-
-| # | 盲区 | 后果 |
+| # | 问题 | 修复落点 |
 |---|---|---|
-| C1 | `shouldCheckOnVisible` 仍在测试内复刻，未 import 生产实现 | 改坏 `onVisible` 逻辑测试不会红（`isNewer` 已改为 import，但调度函数没有） |
-| C2 | `check.fail` 日志的 `errorKind` / `httpStatus` 无断言 | 日志字段改名或丢失无人发现 |
-| C3 | 手动 `error` 态（按钮转红 + 「重试」）无断言 | A2 这类问题不会被测出来 |
-| C4 | 4h 定时器真实触发未验证 | A3 的重复触发不会被测出来 |
+| A1 | 安装重新查 registry，与展示值脱钩 | 宿主 `/update/install` 接受 `{ version }` body 并按它安装；`client.js` · `installUpdateRequest` 把 `update.latest` 放进请求体 |
+| A2 | 未校验 `res.ok` / `reason` | `installUpdateRequest` 读 `res.status` 与 `body.reason`，映射为「网络失败 / 版本非法 / 安装失败」三种文案 |
+| A3 | 非法版本号抛错导致 500 | 宿主改为 `400 { ok:false, reason:'invalid-version' }`，不 throw |
 
-另：`scripts/e2e.mjs` 的英文页仍 mock `/update`（固定回无更新），这本身合理（避免遮挡刻度断言），但应在注释中说明它是**唯一保留的 mock**，防止后续被误删。
+- 宿主保留「安装后读 `installedVersion` 校验」逻辑：装完核对磁盘版本，与请求版本不符则报 `version-unchanged`。
+- `latest` 缺省时（旧客户端）仍回退到 `fetchLatest()`，保持向后兼容。
 
 #### 9.4 不改的位置与理由
 
-- 宿主 5min 缓存：防 registry 打爆的保护，保留；只是 A1 要让它与安装共用同一份数据。
+- 宿主 5min 缓存：防 registry 打爆的保护，保留。
 - `fetchLatest` 的 5s 超时：合理。
-- `/log` 白名单机制：已验证有效且必要，保留。
+- `/log` 白名单：已验证有效，保留。
 
-#### 9.5 验收（待实施后补）
+#### 9.5 验收
 
 | # | 项 | 方式 |
 |---|---|---|
-| 1 | 安装使用确认条上的版本 | 单测：`installUpdateRequest` 传入的 version 与 `update.latest` 一致 |
-| 2 | reason 正确透传 | e2e：宿主返回 500 + reason，断言 UI 显示该 reason |
-| 3 | 定时器与可见补检不重复 | 单测：同一 `lastAt` 下两次到期判定只触发一次 |
-| 4 | 调度函数 import 生产实现 | 单测直接 import |
+| 1 | 安装用请求体里的版本 | e2e：POST 带 `{version}`，宿主按该版本拼 spec |
+| 2 | 请求版本非法返回 400 而非 500 | e2e：POST `{version:'../../evil'}` → 400 + `reason` |
+| 3 | 失败原因透传 | e2e：宿主返 400 + reason，断言 UI 显示该 reason 而非「unknown」 |
+| 4 | 缺省 version 仍可用 | e2e：POST 空 body → 回退 `fetchLatest()` |
+| 5 | 安装成功后版本一致 | 人工（会改本机插件），见 update-testing.md |
 
-### Issue #10 [待修复] 2026-11-16 点击更新仍弹确认条，应改为直接安装（并补回无障碍播报）
+**结果**：本轮只记录，待实施。
 
-#### 复现
+---
 
-- **当前**：点「更新」按钮后先出现一条确认行「发现 **2.2.0** / 立即更新 / 取消」，还要再点一次才真正安装。
-- **期望**：点「更新」直接开始安装，不再二次确认。按钮本身已显示「更新」+ 版本号，语义已足够明确。
-- **影响**：多一次点击；且确认条会把按钮整行替换掉，视觉上像是页面跳变。
+### Issue #10 [待修复] 2026-11-16 更新检测调度重复触发
 
-#### 关键时序（两条路径都要拆）
+> 优先级 P1。纯客户端调度逻辑，与 #9 / #11 无代码交叉，可独立验证。
+
+#### 10.1 复现
+
+- **当前**：`setInterval` 每 4h 无条件 `runAuto()`；`visibilitychange` 在 `elapsed >= 4h` 时也 `runAuto()`。两者独立判定，用户切回标签页即可与定时器叠加。虽有 `updateRequest !== null` 兜底（同一时刻只跑一个），但**串行仍连发两次**：第一次结束，第二次立刻又发。
+- **期望**：同一到期窗口内只检测一次。
+- **影响**：无谓请求翻倍；日志出现成对的 `check.ok`，干扰排查。
+
+#### 10.2 关键时序
+
+```text
+【起点】启动 30s → runAuto → 记 lastAt = T
+【★问题根源】setInterval(4h) 到点无条件 runAuto，不看 lastAt；
+             onVisible 也判 elapsed >= 4h 后 runAuto。两个判定源互不知情。
+【触发】用户在第 4h 切回标签页 → onVisible 判定到期 → runAuto
+        同一时刻 setInterval 也到点 → runAuto
+        updateRequest 守卫挡住并发，但第二个请求在第一个结束后立即发出
+【对比】onVisible 的判定是正确的（判 elapsed），setInterval 缺少同一判定
+【修复】给 setInterval 补 elapsed 判定，与 onVisible 共用同一个 `isDue()`
+```
+
+#### 10.3 结论与修复
+
+- `client.js` · `apply` 内抽出 `isDue = () => Date.now() - lastAt() >= UPDATE_INTERVAL_MS`。
+- `setInterval` 回调改为 `if (!isDue()) return; runAuto()`；`onVisible` 复用同一 `isDue`。
+- 顺带修 B1：删除 `apply` 内「距上次检测不足 1h 则跳过」这句过时注释（该逻辑已在 local.4 移除）。
+
+#### 10.4 不改的位置与理由
+
+- 启动检测保持无条件，不受 `isDue` 影响——这是用户明确要求。
+- 4h 周期与 30s 启动延迟常量不变。
+
+#### 10.5 验收
+
+| # | 项 | 方式 |
+|---|---|---|
+| 1 | 到期窗口内只触发一次 | 单测：同一 `lastAt` 下 `isDue` 连续两次判定，第二次调用后 `lastAt` 已刷新 → 不再触发 |
+| 2 | 定时器真实触发 | e2e：`page.clock` 推进 4h，断言只发一次请求 |
+| 3 | 启动检测仍无条件 | e2e：预置刚检测过的时间戳，断言启动仍发请求（现有断言保持） |
+
+**结果**：本轮只记录，待实施。
+
+---
+
+### Issue #11 [待修复] 2026-11-16 点击更新仍弹确认条，且状态无读屏播报
+
+> 优先级 P2。**最后做**：它改的是「点击之后」的交互，依赖 #9 已把安装链路修对。
+
+#### 11.1 复现
+
+- **当前**：① 点「更新」后先出现确认行「发现 **2.2.0** / 立即更新 / 取消」，还要再点一次才安装；② 状态提示节点无 `aria-live`，读屏用户听不到「已更新」「更新检查失败」。
+- **期望**：点「更新」直接安装；状态变化可被读屏播报。
+- **影响**：多一次点击，确认条替换整行使视觉跳变；读屏用户失去更新状态反馈。
+
+#### 11.2 关键时序
 
 ```text
 路径 A（手动检测命中可更新）
-  点按钮 → checkForUpdate({manual:true}) → data.hasUpdate → phase='confirm'
-  行为：按钮被确认条替换 → 点「立即更新」→ installUpdateRequest()
+  点按钮 → checkForUpdate({manual:true}) → hasUpdate → phase='confirm'
+  行为：按钮被确认条替换 → 再点「立即更新」→ installUpdateRequest()
 
 路径 B（已是 available 态再点）
   自动检测后 phase='available' → 点按钮 → onConfirm() → 又 emitUpdate({phase:'confirm'})
-  行为：同样被确认条拦截一次
 
-【★问题根源】两条路径都以 confirm 为终点，而不是直接安装；confirm 是 v3.16 规格里显式定义的中间态
-【修复】移除 confirm 态：手动检测命中更新即直接 install；available 态点击也直接 install
+【★问题根源】两条路径都以 confirm 为终点，而非直接安装；confirm 是 v3.16 规格显式定义的中间态
+【修复】移除 confirm 态：手动命中即 install；available 态点击直接 install
 ```
 
-#### 结论
+#### 11.3 结论与修复
 
-1. `client.js` · `checkForUpdate`：`manual && hasUpdate` 时 `phase` 由 `'confirm'` 改为直接触发安装。
-2. `client.js` · `UpdateButton`：删除 `phase === 'confirm'` 整段分支（约 5 行），`onConfirm` 参数随之删除。
-3. `client.js` · 调用处：`onConfirm` 传参移除；`available` 态点击直接 `onInstall()`。
-4. `locale`：已核验「立即更新」「发现」「取消」三键**仅**用于 confirm 分支（`client.js` 各一处），删除后应一并从 `EN` 词典与 `locale/zh|en.json` 移除（138 → 135 键）；「发现 {version}」仍被 `aria-label` 使用，保留。
-5. `docs/ui-design.md` §5.7.1：8 态矩阵删除 `confirm`，改为 7 态；§5.7 版本行描述同步。
+1. `client.js` · `checkForUpdate`：`manual && hasUpdate` 时直接触发安装，不再置 `confirm`。
+2. `client.js` · `UpdateButton`：删除 `phase === 'confirm'` 分支（约 5 行）与 `onConfirm` 参数；`available` 态点击直接 `onInstall()`。
+3. `client.js` · `UpdateButton`：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态用 `role="alert"`（语义不同，不复用同一节点）。
+4. `locale`：「立即更新」「发现」「取消」三键已核验**仅**用于 confirm 分支，一并移除（138 → 135 键）；「发现 {version}」保留（`aria-label` 在用）。
+5. `docs/ui-design.md` §5.7.1：8 态矩阵删除 `confirm` → 7 态；§6 无障碍条目不变（实现回归规格）。
 
-#### 一并修：无障碍播报缺失（原 Issue #8 并入）
+#### 11.4 需要注意
 
-> 与去掉确认条同一处代码，合并处理。**与多语言无关**，是读屏播报问题。
+- **误触风险**：安装会真实改插件，去掉确认后误点即触发。`idle` 是「检查更新」、`available` 才是「更新」，文案与颜色均不同，判定可接受。若后续有顾虑需用户拍板，本轮按「不要确认」执行。
+- **与 #9 的关系**：#9 已让安装使用展示值，本条去掉人工停顿后不会引入版本错配窗口。
+- **测试**：`scripts/e2e.mjs` 中断言 `token-dash-update-confirm` 存在、点「立即更新」、点「取消」三段需删除，改为断言「点击后直接进入 `installing` 态」。
 
-- **现象**：`UpdateButton` 的状态提示节点（`token-dash-update-hint`）无 `aria-live`，屏幕阅读器不播报「已更新」「更新检查失败」。重构前该区域由 SettingsRows 内的 `aria-live="polite"` 包裹。
-- **根因**：组件抽取时状态文案搬到了新组件的独立 `span`，无障碍属性未一并迁移。属重构遗漏，`docs/ui-design.md` §6 规则未变、实现单方面偏离。
-- **修复**：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态改为 `role="alert"`（两者语义不同，不复用同一节点的 role）。
-- **不改**：按钮自身 `aria-label` 已随状态更新，保持不变。
-- **验收**：e2e 断言提示节点的 `aria-live` 属性；失败态断言 `role=alert`。
+#### 11.5 不改的位置与理由
 
-#### 需要注意的连带影响
-
-- **A1 缺陷机会**：一旦去掉确认条，「用户看到的版本」与「实际安装的版本」之间没有人工停顿，Issue #9 A1（安装时重新查 registry）的错配窗口反而更小——但根因仍在，仍应修。#10 不替代 #9 A1。
-- **误触风险**：安装会真实改插件，去掉确认后误点即触发。按钮在 `idle` 态是「检查更新」、`available` 态才是「更新」，两态文案与颜色不同，可接受。若后续仍有顾虑，可改为按钮变色但保留二次确认——需用户拍板，本轮按「不要确认」执行。
-- **测试**：`scripts/e2e.mjs` 里断言 `token-dash-update-confirm` 存在、点击「立即更新」、点「取消」的三段需删除，改为断言「点击后直接进入 installing 态」。
-
-#### 不改的位置与理由
-
-- 不保留任何形式的二次确认（包括 toast 二次点击）：用户明确要求直接更新。
+- 不保留任何形式的二次确认（含 toast 二次点击）：用户明确要求直接更新。
 - 不动 `available` / `installing` / `done` / `error` 其余状态的视觉与尺寸。
 
-#### 验收
+#### 11.6 验收
 
 | # | 项 | 方式 |
 |---|---|---|
-| 1 | 手动检测命中更新后直接安装 | e2e：点击后断言出现 `installing` 而非 `confirm` |
+| 1 | 手动命中更新后直接安装 | e2e：点击后断言进入 `installing` 而非 `confirm` |
 | 2 | `available` 态点击直接安装 | e2e：同上 |
 | 3 | confirm 节点不再存在 | e2e：断言 `token-dash-update-confirm` 数量为 0 |
 | 4 | 组件降到 7 态 | `docs/ui-design.md` §5.7.1 与原型一致 |
@@ -454,3 +486,34 @@ localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明�
 | 6 | 失败态用 `role=alert` | e2e 在失败分级场景断言 role |
 
 **结果**：本轮只记录，待实施。
+
+---
+
+### Issue #12 [待修复] 2026-11-16 更新侧测试盲区（4 项）
+
+> 优先级 P2，与前三条并行；**每修完一条就补对应断言**，不要集中到最后。
+
+| # | 盲区 | 后果 | 补法 |
+|---|---|---|---|
+| C1 | `shouldCheckOnVisible` 在测试内复刻，未 import 生产实现 | 改坏 `onVisible` 测试不会红（`isNewer` 已改为 import，调度函数没有） | 抽到 `src/` 可导入模块，单测直接 import |
+| C2 | `check.fail` 的 `errorKind` / `httpStatus` 无断言 | 字段改名或丢失无人发现 | L2：制造 registry 失败，读日志断言字段 |
+| C3 | 手动 `error` 态（按钮转红 + 「重试」）无断言 | #9 A2 这类问题测不出来 | e2e：route 502 + 手动点击 → 断言 `data-state=error` 与「重试」 |
+| C4 | 安装链路零覆盖 | #9 的 A1/A2 全靠人工 | e2e：POST `/update/install` 带非法版本 → 断言 400 + reason（不真装） |
+
+另：删掉 B2（`td:updateStartupDelay` 生产后门）。e2e 改用 `page.clock` 快进 30s 等待启动检测，不再依赖 localStorage 覆盖。
+
+**结果**：本轮只记录，待实施。
+
+---
+
+### 待修 Issue 执行顺序
+
+| 顺序 | Issue | 为什么这个位置 |
+|---|---|---|
+| 1 | **#9** 安装链路版本错配 | #11 的「一点即装」要走这条路，先修根因 |
+| 2 | **#10** 调度重复触发 | 纯客户端、无交叉，做完 #9 可立即验证 |
+| 3 | **#11** 去确认条 + 无障碍 | 依赖 #9 已保证装对版本 |
+| 4 | **#12** 测试补全 | 前三条各自的断言随手补，这条收尾统一登记 |
+
+> 每条修完立刻跑 `npm test` + `npm run e2e`；涉及 `docs/pic/` 的重出截图。
+
