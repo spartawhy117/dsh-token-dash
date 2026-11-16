@@ -10,37 +10,55 @@ This file records the **new features** and **changes** of each release in Chines
 
 #### 新增
 
-- 设置区的更新控件重做：发现新版本时按钮整体高亮并直接显示版本号，不用把鼠标移上去才知道更新了什么。
-- 更新检测改为启动时检查一次、运行中每 4 小时检查一次；每次启动都会检查，不会因为「刚刚查过」而跳过。
-- 后台检查失败不再毫无提示：会在按钮旁显示「更新检查失败」并在 5 秒后自动消失，开关本身的错误也会写进日志便于排查。
+**自动更新检测**
+
+- 每次启动 DSH 都会检查一次新版本，运行期间每 4 小时再检查一次，不再需要手动点。
+- 发现新版本时，更新按钮会整体高亮并直接显示版本号，一眼就能看到要升到哪个版本。
+- 点击按钮即开始下载安装，无需二次确认；安装的正是按钮上显示的那个版本。
+- 更新结果（已更新、检查失败）会被读屏软件播报，此前更新状态对读屏用户完全不可见。
+
+**后台检查失败提示**
+
+- 后台检查出错时会在按钮旁显示「更新检查失败」，5 秒后自动消失，不影响当前操作。
+- 检查失败的原因会写进日志，排查时能看到具体是哪一步出的问题。
+
+**趋势柱悬停指示线**
+
+- 鼠标移到趋势柱上会显示一条垂直虚线，标出当前指向的是哪一天。
+- 对应的数值提示跟随鼠标立即出现，取代原先需要等待约一秒的浏览器默认提示。
 
 #### 修改
 
-- 点击更新后直接开始下载安装，不再弹二次确认；安装的就是按钮上显示的那个版本。
-- 更新失败时能看清具体原因（版本号不合法 / 该版本未发布 / 版本未变化 / 找不到 dsh 命令），不再是笼统的未知错误。
-- 修复后台定时检查与切回页面时的重复检测：同一时间段内只检查一次。
-- 更新状态变化现在能被读屏软件播报，此前这些提示对读屏用户不可见。
-- P3 范围摘要的四张卡片调整为「真实 Tokens → 总费用 → 缓存命中率 → 总请求数」，与趋势图右侧的指标切换按钮顺序完全一致，对应位置不再需要左右来回找。
-- 四张卡片与指标切换按钮现在共用同一份顺序定义，后续增删指标不会再出现两处顺序不一致。
-- 趋势柱悬停时显示一条垂直虚线标出当前所在的那根柱子，数值提示改为跟随鼠标立即出现，不再需要等待浏览器默认提示的一秒延迟。
+- 更新失败时会显示具体原因（版本号不合法 / 该版本未发布 / 版本未变化 / 找不到 dsh 命令），不再只显示笼统的未知错误。
+- P3 范围摘要的四张卡片顺序调整为「真实 Tokens → 总费用 → 缓存命中率 → 总请求数」，与趋势图右侧的指标切换按钮保持一致。
+- 趋势图的指标切换按钮顺序同步调整，与四张卡片的顺序对齐。
 
 ### English
 
 #### Added
 
-- Reworked the update control in settings: when a new version exists the button highlights itself and shows the version number directly, so the version is visible without hovering.
-- Update checks now run once at startup and every 4 hours while running. Every DSH start performs a check and never skips because a check ran recently.
-- A failed background check is no longer silent: it shows "Update check failed" next to the button and clears after five seconds, and failures are written to the log for troubleshooting.
+**Automatic update checks**
+
+- A new version check now runs on every DSH start and again every 4 hours while running, so no manual click is needed.
+- When a new version exists, the update button highlights itself and shows the version number, so the target version is visible at a glance.
+- Clicking the button starts the download and install right away with no second confirmation, and installs exactly the version shown.
+- Update results (updated, check failed) are now announced by screen readers; previously update status was invisible to them.
+
+**Feedback when a background check fails**
+
+- A failed background check now shows "Update check failed" next to the button and clears after five seconds without interrupting your work.
+- The failure reason is written to the log, so troubleshooting shows which step went wrong.
+
+**Hover guide line on trend bars**
+
+- Hovering a trend bar now draws a vertical dashed line marking which day is being pointed at.
+- The matching value tooltip follows the cursor and appears immediately, replacing the browser's default tooltip that took about a second.
 
 #### Changes
 
-- Clicking update now starts the download and install immediately with no confirmation step, and installs exactly the version shown on the button.
-- Failed updates now report a readable reason (invalid version, not published, version unchanged, dsh command not found) instead of a generic unknown error.
-- Fixed duplicate background checks when both the timer and the return-to-page trigger fired in the same window.
-- Update status changes are now announced by screen readers; previously these messages were invisible to them.
-- The four P3 range summary cells now read real tokens, total cost, cache hit rate and total requests, matching the metric switcher on the right of the trend chart so the same metric sits in the same relative position.
-- The summary cells and the metric switcher now share one ordering definition, so adding or removing a metric can no longer desynchronise them.
-- Hovering a trend bar now draws a vertical dashed guide line marking that bar, and the value tooltip appears immediately instead of waiting for the browser's default one-second delay.
+- Failed updates now show a concrete reason (invalid version, not published, version unchanged, dsh command not found) instead of a generic unknown error.
+- The four P3 range summary cells now read real tokens, total cost, cache hit rate and total requests, matching the metric switcher on the right of the trend chart.
+- The trend chart's metric switcher order was adjusted to line up with the four summary cells.
 
 ## [2.2.0] - 2026-11-16
 
