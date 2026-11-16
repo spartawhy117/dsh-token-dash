@@ -181,26 +181,27 @@
         <span class="box-meta">共 3 个模型 · 更新于 12:30</span>
       </div>
 
+      <!-- 四格顺序 = 右侧指标胶囊顺序：Tokens → 费用 → 命中率 → 请求数（TREND_METRICS 单一顺序源） -->
       <div class="summary-band" role="radiogroup" aria-label="趋势指标" id="summary">
-        <button class="summary-half" type="button" role="radio" data-metric="cost" aria-pressed="false">
-          <span class="k">总费用</span>
-          <div class="v"><span>¥12.68</span><span>$19.00</span></div>
-          <div class="s">2 个币种</div>
-        </button>
         <button class="summary-half" type="button" role="radio" data-metric="tokens" aria-pressed="true">
           <span class="k">真实 Tokens</span>
           <div class="v">1.24M</div>
           <div class="s">输入 620k · 缓存 520k · 输出 100k</div>
         </button>
-        <button class="summary-half" type="button" role="radio" data-metric="requests" aria-pressed="false">
-          <span class="k">总请求数</span>
-          <div class="v">128</div>
-          <div class="s">范围内全部模型</div>
+        <button class="summary-half" type="button" role="radio" data-metric="cost" aria-pressed="false">
+          <span class="k">总费用</span>
+          <div class="v"><span>¥12.68</span><span>$19.00</span></div>
+          <div class="s">2 个币种</div>
         </button>
         <button class="summary-half" type="button" role="radio" data-metric="hitRate" aria-pressed="false">
           <span class="k">缓存命中率</span>
           <div class="v">96.1%</div>
           <div class="s">创建 0 · 命中 1.19M</div>
+        </button>
+        <button class="summary-half" type="button" role="radio" data-metric="requests" aria-pressed="false">
+          <span class="k">总请求数</span>
+          <div class="v">128</div>
+          <div class="s">范围内全部模型</div>
         </button>
       </div>
 
@@ -211,9 +212,9 @@
           <span class="spacer"></span>
           <span class="metric-seg" id="metric-seg">
             <button type="button" data-metric="tokens" aria-pressed="true">Tokens</button>
-            <button type="button" data-metric="requests" aria-pressed="false">请求</button>
             <button type="button" data-metric="cost" aria-pressed="false">费用</button>
             <button type="button" data-metric="hitRate" aria-pressed="false">命中率</button>
+            <button type="button" data-metric="requests" aria-pressed="false">请求</button>
           </span>
         </div>
         <div class="plot" id="plot"></div>

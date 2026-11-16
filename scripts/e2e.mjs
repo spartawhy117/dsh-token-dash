@@ -585,12 +585,28 @@ try {
   assert.match(await board.getByTestId('token-dash-quota-cell-opencode-go-month').innerText(), /58\.0%|58%/)
   assert.match(await board.getByTestId('token-dash-quota-rel-opencode-go-month').innerText(), /天后|小时后|分钟后/)
   assert.match(await board.getByTestId('token-dash-quota-abs-opencode-go-month').innerText(), /\d{2}-\d{2} \d{2}:\d{2}/)
-  // Summary band: two halves inside one bordered band, above the detail table.
+  // Summary band: four halves inside one bordered band, above the detail table.
   const cardCost = board.getByTestId('token-dash-card-cost')
   const cardTokens = board.getByTestId('token-dash-card-tokens')
   const [costBox, tokensBox] = await Promise.all([cardCost.boundingBox(), cardTokens.boundingBox()])
   assert.ok(costBox !== null && tokensBox !== null)
-  assert.ok(tokensBox.x > costBox.x, 'tokens half should sit right of cost half')
+  assert.ok(tokensBox.x < costBox.x, 'tokens cell should sit left of cost cell')
+  // 四格与右侧指标胶囊必须同序：Tokens → 费用 → 命中率 → 请求数（Issue #3）
+  const EXPECTED_METRIC_ORDER = ['tokens', 'cost', 'hitRate', 'requests']
+  const cellOrder = await board.locator('[data-testid^=token-dash-card-]').evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute('data-testid').replace('token-dash-card-', '')))
+  assert.deepEqual(cellOrder, EXPECTED_METRIC_ORDER, 'summary cells must follow TREND_METRICS order')
+  const pillLabels = await board.getByTestId('token-dash-trend').locator('[role=radio]').evaluateAll((nodes) =>
+    nodes.map((node) => node.textContent.trim()))
+  assert.deepEqual(pillLabels, ['Tokens', '费用', '命中率', '请求'], 'metric pills must follow TREND_METRICS order')
+  // 逐格横向递增，确认顺序不是只靠 DOM 顺序
+  const cellXs = []
+  for (const metric of EXPECTED_METRIC_ORDER) {
+    const box = await board.getByTestId(`token-dash-card-${metric}`).boundingBox()
+    assert.ok(box !== null, `card ${metric} should be visible`)
+    cellXs.push(box.x)
+  }
+  assert.deepEqual([...cellXs].sort((a, b) => a - b), cellXs, 'summary cells must be laid out left-to-right in order')
   const bandBorder = await board.getByTestId('token-dash-range-cards').evaluate((node) => getComputedStyle(node).borderTopStyle)
   assert.equal(bandBorder, 'solid')
   // 四格：总请求数与缓存命中率随四格方案新增，且四格都是指标选择器

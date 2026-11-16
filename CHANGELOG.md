@@ -4,6 +4,24 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.1-local.1] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- P3 范围摘要的四张卡片调整为「真实 Tokens → 总费用 → 缓存命中率 → 总请求数」，与趋势图右侧的指标切换按钮顺序完全一致，对应位置不再需要左右来回找。
+- 四张卡片与指标切换按钮现在共用同一份顺序定义，后续增删指标不会再出现两处顺序不一致。
+
+### English
+
+#### Changes
+
+- The four P3 range summary cells now read real tokens → total cost → cache hit rate → total requests, matching the metric switcher on the right of the trend chart so the same metric sits in the same relative position.
+- The summary cells and the metric switcher now share one ordering definition, so adding or removing a metric can no longer desynchronise them.
+
 ## [2.2.0] - 2026-11-16
 
 ### 中文

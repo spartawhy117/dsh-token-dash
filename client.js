@@ -904,8 +904,8 @@ window.__ModuleLoader__.load({
                 : `${row.approximate === true ? '≈' : ''}${fmtMoney(row.cost, row.currency)}`)))))
     }
 
-    /** P3 趋势指标：顺序即四格与胶囊的显示顺序。 */
-    const TREND_METRICS = [['tokens', 'Tokens'], ['requests', '请求'], ['cost', '费用'], ['hitRate', '命中率']]
+    /** P3 趋势指标：唯一顺序源——四格摘要带与右侧胶囊都从这里派生，禁止各自维护顺序。 */
+    const TREND_METRICS = [['tokens', 'Tokens'], ['cost', '费用'], ['hitRate', '命中率'], ['requests', '请求']]
     const METRIC_LABELS = { tokens: 'Tokens', requests: '请求', cost: '费用', hitRate: '命中率' }
     /** 词典里 '万' 的英文值是 K：据此判断当前是否中文，不依赖 localeService 暴露语言码。 */
     const isChinese = () => tr('万') === '万'
@@ -972,49 +972,63 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** P3 四格卡：兼作趋势指标选择器；每格 button[role=radio]，选中态由 metric 决定。 */
+    /** P3 四格卡：兼作趋势指标选择器；每格 button[role=radio]，选中态由 metric 决定。
+     *  渲染顺序固定取自 TREND_METRICS（与右侧指标胶囊同源），禁止在此手写格子顺序。 */
     function RangeCards({ usage, metric = 'tokens', onMetricChange }) {
       const pending = usage === null
       const costEntries = Object.entries(usage?.totals ?? {})
       const total = usage?.total ?? null
+      const dash = '—'
       const costNodes = costEntries.map(([currency, value]) => h('span', { key: currency }, fmtMoney(value.cost, currency)))
-      const cell = (key, label, valueNode, subNode) => h('button', {
-        type: 'button', role: 'radio', 'aria-pressed': metric === key,
-        'data-testid': `token-dash-card-${key}`,
-        onClick: () => onMetricChange?.(key),
-        style: { ...styles.summaryHalf, ...(metric === key ? styles.summaryHalfOn : null) },
-      },
-        h('span', { style: { ...styles.summaryK, ...(metric === key ? { color: T.accent } : null) } }, label),
-        h('div', { style: styles.summaryV }, valueNode),
-        h('div', { style: styles.summarySub }, subNode))
+      const tokensLabel = h('span', null,
+        tr('真实 Tokens'),
+        h(InfoTip, {
+          label: tr('Tokens 括号说明'),
+          text: tr('Tokens 括号顺序：输入 / 缓存（读+写）/ 输出'),
+          variant: 'inline',
+        }, h(Icon, { name: 'info', size: 11 })))
+      /** 一格一渲染器：长标签 / 主值节点 / 副值文案；主值节点沿用历史 testid。 */
+      const CARDS = {
+        tokens: {
+          label: tokensLabel,
+          main: () => h('div', { 'data-testid': 'token-dash-cost-values', style: styles.summaryV },
+            pending ? dash : fmtTokens(total?.tokens ?? 0)),
+          sub: () => (pending ? dash : `${fmtTokens(total?.input ?? 0)} · ${fmtTokens(total?.cache ?? 0)} · ${fmtTokens(total?.output ?? 0)}`),
+        },
+        cost: {
+          label: tr('总费用'),
+          main: () => h('div', { style: styles.summaryV },
+            pending ? dash : (costNodes.length === 0 ? dash : costNodes)),
+          sub: () => (pending ? dash : tr('{n} 个币种', { n: costEntries.length })),
+        },
+        hitRate: {
+          label: tr('缓存命中率'),
+          main: () => h('div', { style: styles.summaryV },
+            pending ? dash : (total?.hitRate === null || total?.hitRate === undefined ? dash : fmtRatio(total.hitRate))),
+          sub: () => (pending ? dash : tr('创建 {a} · 命中 {b}', { a: fmtTokens(total?.cacheWrite ?? 0), b: fmtTokens(total?.cacheRead ?? 0) })),
+        },
+        requests: {
+          label: tr('总请求数'),
+          main: () => h('div', { style: styles.summaryV }, pending ? dash : String(total?.requests ?? 0)),
+          sub: () => tr('范围内全部模型'),
+        },
+      }
       return h('div', {
         'data-testid': 'token-dash-range-cards', 'data-td-cards': true, role: 'radiogroup',
         'aria-label': tr('趋势指标'), style: styles.summaryBand,
       },
-        cell('cost', tr('总费用'),
-          pending ? '—' : (costNodes.length === 0 ? '—' : costNodes),
-          pending ? '—' : tr('{n} 个币种', { n: costEntries.length })),
-        h('button', {
-          type: 'button', role: 'radio', 'aria-pressed': metric === 'tokens',
-          'data-testid': 'token-dash-card-tokens',
-          onClick: () => onMetricChange?.('tokens'),
-          style: { ...styles.summaryHalf, ...(metric === 'tokens' ? styles.summaryHalfOn : null) },
-        },
-          h('span', { style: { ...styles.summaryK, ...(metric === 'tokens' ? { color: T.accent } : null) } },
-            `${tr('真实 Tokens')}`,
-            h(InfoTip, {
-              label: tr('Tokens 括号说明'),
-              text: tr('Tokens 括号顺序：输入 / 缓存（读+写）/ 输出'),
-              variant: 'inline',
-            }, h(Icon, { name: 'info', size: 11 }))),
-          h('div', { 'data-testid': 'token-dash-cost-values', style: styles.summaryV }, pending ? '—' : fmtTokens(total?.tokens ?? 0)),
-          h('div', { style: styles.summarySub },
-            pending ? '—' : `${fmtTokens(total?.input ?? 0)} · ${fmtTokens(total?.cache ?? 0)} · ${fmtTokens(total?.output ?? 0)}`)),
-        cell('requests', tr('总请求数'),
-          pending ? '—' : String(total?.requests ?? 0), tr('范围内全部模型')),
-        cell('hitRate', tr('缓存命中率'),
-          pending ? '—' : (total?.hitRate === null || total?.hitRate === undefined ? '—' : fmtRatio(total.hitRate)),
-          pending ? '—' : tr('创建 {a} · 命中 {b}', { a: fmtTokens(total?.cacheWrite ?? 0), b: fmtTokens(total?.cacheRead ?? 0) })))
+        ...TREND_METRICS.map(([key]) => {
+          const card = CARDS[key]
+          return h('button', {
+            key, type: 'button', role: 'radio', 'aria-pressed': metric === key,
+            'data-testid': `token-dash-card-${key}`,
+            onClick: () => onMetricChange?.(key),
+            style: { ...styles.summaryHalf, ...(metric === key ? styles.summaryHalfOn : null) },
+          },
+            h('span', { style: { ...styles.summaryK, ...(metric === key ? { color: T.accent } : null) } }, card.label),
+            card.main(),
+            h('div', { style: styles.summarySub }, card.sub()))
+        }))
     }
 
     /** P3 趋势柱：连续日/月序列 → flex 柱 + 绝对定位网格线；悬停走原生 title，无交互状态。 */
