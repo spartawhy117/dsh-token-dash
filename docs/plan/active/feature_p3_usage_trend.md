@@ -455,26 +455,38 @@ CL：git 仓 commit `3b0d071`（`test(update): 更新检测测试改走真实 re
 【修复】移除 confirm 态：手动命中即 install；available 态点击直接 install
 ```
 
-#### 11.3 结论与修复
+#### 11.3 已确认的交互决策
+
+| # | 决策 | 结论 |
+|---|---|---|
+| 1 | 安装期间「更新中」可能持续数秒到数十秒（`dsh plugin add` 无进度回调） | **接受**，不做进度百分比；按钮禁用 + loader 即可 |
+| 2 | 安装失败后点「重试」的行为 | **A：直接重新安装**（用户刚点的就是安装，重试自然是安装） |
+| 3 | 「可更新」时按钮文案 | **A：保持「更新」+ 右侧 `vX.Y.Z`**（不改宽、不做「更新到 x」） |
+| 4 | 是否加误点撤销窗口 | **不加**。点下即开始安装，无撤销、无二次确认 |
+
+#### 11.4 结论与修复
 
 1. `client.js` · `checkForUpdate`：`manual && hasUpdate` 时直接触发安装，不再置 `confirm`。
 2. `client.js` · `UpdateButton`：删除 `phase === 'confirm'` 分支（约 5 行）与 `onConfirm` 参数；`available` 态点击直接 `onInstall()`。
-3. `client.js` · `UpdateButton`：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态用 `role="alert"`（语义不同，不复用同一节点）。
-4. `locale`：「立即更新」「发现」「取消」三键已核验**仅**用于 confirm 分支，一并移除（138 → 135 键）；「发现 {version}」保留（`aria-label` 在用）。
-5. `docs/ui-design.md` §5.7.1：8 态矩阵删除 `confirm` → 7 态；§6 无障碍条目不变（实现回归规格）。
+3. `client.js` · `UpdateButton`：`error` 态文案保持「重试」，点击直接重新调用 `onInstall()`（决策 2A）；`done` 态保留 1.6s「已更新到 X，重启 DSH 后生效」。
+4. `client.js` · `UpdateButton`：提示节点补 `role="status"` + `aria-live="polite"`；`error` / `autoError` 态用 `role="alert"`（语义不同，不复用同一节点）。
+5. `locale`：「立即更新」「发现」「取消」三键已核验**仅**用于 confirm 分支，一并移除（138 → 135 键）；「发现 {version}」保留（`aria-label` 在用）。
+6. `docs/ui-design.md` §5.7.1：8 态矩阵删除 `confirm` → 7 态；§6 无障碍条目不变（实现回归规格）。
 
-#### 11.4 需要注意
+#### 11.5 需要注意
 
-- **误触风险**：安装会真实改插件，去掉确认后误点即触发。`idle` 是「检查更新」、`available` 才是「更新」，文案与颜色均不同，判定可接受。若后续有顾虑需用户拍板，本轮按「不要确认」执行。
+- **误触风险**：已与用户确认，不加撤销窗口。`idle` 是「检查更新」、`available` 才是「更新」，文案与颜色均不同，判定可接受。
 - **与 #9 的关系**：#9 已让安装使用展示值，本条去掉人工停顿后不会引入版本错配窗口。
 - **测试**：`scripts/e2e.mjs` 中断言 `token-dash-update-confirm` 存在、点「立即更新」、点「取消」三段需删除，改为断言「点击后直接进入 `installing` 态」。
 
-#### 11.5 不改的位置与理由
+#### 11.6 不改的位置与理由
 
-- 不保留任何形式的二次确认（含 toast 二次点击）：用户明确要求直接更新。
+- 不保留任何形式的二次确认（含 toast 二次点击、撤销窗口）：用户明确要求直接更新。
+- 不加安装进度百分比：`dsh plugin add` 无进度回调，自行解析输出成本过高。
+- 不改按钮宽度与文案形态（决策 3A）。
 - 不动 `available` / `installing` / `done` / `error` 其余状态的视觉与尺寸。
 
-#### 11.6 验收
+#### 11.7 验收
 
 | # | 项 | 方式 |
 |---|---|---|
