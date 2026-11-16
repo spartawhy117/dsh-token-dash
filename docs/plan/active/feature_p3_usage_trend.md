@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：实施中（重开；`2.2.1-local.1` 已安装，Issue #6 待修）<br>
+> 状态：待验收（重开；`2.2.1-local.1` 已安装，Issue #6 已修，等待重出候选包验证）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -73,6 +73,10 @@
 | CHG-31 | 修改 | `client.js` · `styles` | 新增 `trendHoverLine` / `trendHoverDot` / `trendTip`；`trendBars` 补 `zIndex: 1` 让虚线压到柱上 |
 | CHG-32 | 修改 | `docs/ui-design.md` §5.5 | 悬停规格由「原生 title」改为「虚线 + 圆点 + 自绘浮层」 |
 | CHG-33 | 修改 | `scripts/e2e.mjs` / `tools/mock/shots.mjs` | 新增 5 项悬停断言；截图脚本补悬停态取图 |
+| CHG-34 | 修改 | `tools/mock/fixtures.mjs` · `dailyWeights` | 新增确定性权重曲线（周末低 / 工作日高 + 两个尖峰 + 逐日波动），替换等权分摊；末点份额预留在归一化目标内，避免末柱塌成 0 |
+| CHG-35 | 修改 | `tools/mock/fixtures.mjs` · `seriesFor` | `hitRate: null` 的索引由固定 5 改为 `days.length - 3`，四档范围都能演示「无数据」 |
+| CHG-36 | 修改 | `tools/mock/AGENTS.md` | §3 数值与边界补「逐日权重必须确定性且带起伏」约束 |
+| CHG-37 | 修改 | `docs/pic/` · `docs/pic/en/` | 6 张截图重出，趋势柱呈现真实起伏 |
 
 > 已落地内容一律回填本表；不保留逐文件 diff。
 
@@ -270,7 +274,7 @@ CL：git 仓 commit `c41b9eb`（`feat(p3): 趋势柱悬停虚线指示线与即�
 
 **遗留**：无。悬停位置按「等分槽中心」计算，与柱体居中绘制共用同一槽宽；若后续把 `trendBars` 的 `paddingLeft: 34` 改成动态轴宽，`calc()` 里的 34px 需同步替换为变量。
 
-### Issue #6 [待修复] 2026-11-16 README 截图里的趋势柱高度几乎一致，看不出走势
+### Issue #6 [已修复] 2026-11-16 README 截图里的趋势柱高度几乎一致，看不出走势
 
 #### 复现
 
@@ -307,6 +311,6 @@ CL：git 仓 commit `c41b9eb`（`feat(p3): 趋势柱悬停虚线指示线与即�
 #### 验收
 
 - 环境与方式：`npm run shots` 重出后目检 `docs/pic/settings.png`，柱高应有肉眼可辨的起伏；`npm test` 与 `npm run e2e` 全绿（闭合断言不变）。
-- 结果：待实施。
-- 剩余风险：权重要与 `total` 量级自洽，若曲线振幅过大导致末点承接成负值，需回退调整；截图可复现性靠「无随机数 + 固定基准日」保证。
+- 结果：通过（2026-11-16）。`npm test` 无失败、`npm run e2e` UI assertions passed；截图重出后 30 天视图跨度比 4.55、7 天视图 6 根柱各不相同，零值日（11-01）与 `hitRate: null`（10-31）两个演示点保留。
+- 剩余风险：① 长跨度里周末权重相同会让部分柱高巧合相等（30 天视图 29 根非零柱中 22 根互不相同），属可接受的视觉巧合；② 权重与 `total` 量级联动，若将来调大尖峰倍数需复核末点余量不为负。截图可复现性靠「无随机数 + 固定基准日 2026-11-02」保证。
 

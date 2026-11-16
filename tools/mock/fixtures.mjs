@@ -182,7 +182,41 @@ function aggregate(models) {
 }
 
 /**
- * 逐日点：末点承接余量使 Σ 与 total / totals 闭合；第 5 天零值、第 6 天命中率缺失。
+ * 逐日权重：返回长度等于 dayCount 的数组，前 n-1 项为分摊权重，末项固定 0。
+ * 末点由 seriesFor 承接余量，必须靠近平均值，否则末柱会塌成 0 或暴涨。
+ * 曲线按「周末低、工作日高 + 两个尖峰」取值，全程确定性——不用随机数，
+ * 否则每次 npm run shots 的产物都在变，截图无法复现也无法 review。
+ */
+function dailyWeights(days) {
+  const count = days.length
+  const equal = 1 / Math.max(1, count)
+  if (count <= 3) return days.map(() => equal)
+  // 尖峰位置按比例定位：跨度变化时仍在视觉中后段
+  const peakA = Math.max(1, Math.round((count - 2) * 0.42))
+  const peakB = Math.max(1, Math.round((count - 2) * 0.78))
+  const raw = days.slice(0, -1).map((dayKey, index) => {
+    if (index === count - 2) return 0 // 倒数第 2 天：零值日
+    const weekday = new Date(dayKey + 'T00:00:00').getDay()
+    const weekend = weekday === 0 || weekday === 6
+    let value = weekend ? 0.55 : 1 // 周末低一档，但不至于塌成平线
+    if (index === peakA) value *= 1.9 // 尖峰：集中调用日
+    if (index === peakB) value *= 1.35
+    // 再叠一层逐日波动：短跨度也要避免「几个工作日柱高完全相同」的观感，
+    // 长跨度波动更强，避免 30 天内出现整片等高
+    const ripple = 0.85 + ((index * 7) % 11) / 26
+    value *= count > 12 ? ripple : 0.9 + ((index * 5) % 7) / 20
+    return value
+  })
+  // 归一化目标不是 1 而是「1 - 末点份额」：给末点留出与其它柱相当的一格，
+  // 否则前 n-1 项吃满 100%，末点承接余量后必然塌成 0。
+  const target = 1 - equal
+  const sum = raw.reduce((acc, value) => acc + value, 0)
+  if (sum <= 0) return days.map(() => equal)
+  return raw.map((value) => (value / sum) * target)
+}
+
+/**
+ * 逐日点：末点承接余量使 Σ 与 total / totals 闭合；倒数第 2 天零值、倒数第 3 天命中率缺失。
  * 与 aggregate 同口径——cost 只算 billable，其余含订阅行。
  */
 function seriesFor(models, dayCount = 7) {
@@ -194,8 +228,8 @@ function seriesFor(models, dayCount = 7) {
     const pad = (value) => String(value).padStart(2, '0')
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
   })
-  // 除第 5 天固定零值外，其余按 n-1 等分；末点只补浮点尾差，柱高看起来才均匀
-  const weights = days.slice(0, -1).map((_, index) => (index === 4 ? 0 : 1 / Math.max(1, days.length - 2)))
+  // 权重带确定性起伏：截图要能一眼看出「趋势」，等权分摊会让柱高齐平成一块矩形
+  const weights = dailyWeights(days)
   const { totals, total } = aggregate(models)
   const used = { tokens: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, requests: 0 }
   for (const currency of Object.keys(totals)) used[currency] = 0
@@ -236,7 +270,7 @@ function seriesFor(models, dayCount = 7) {
       cacheWrite: Math.round(total.cacheWrite * share),
       output: Math.round(total.output * share),
       tokens: Math.round(total.tokens * share),
-      hitRate: index === 5 ? null : total.hitRate,
+      hitRate: index === days.length - 3 ? null : total.hitRate, // 倒数第 3 天：演示「无数据」而非 0%
     }
     used.tokens += point.tokens
     used.input += point.input

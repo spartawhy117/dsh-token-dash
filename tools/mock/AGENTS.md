@@ -35,6 +35,8 @@
 - `windows` 长度覆盖 1–3；`key` 只允许 `5h / week / month`；缺窗**不要**造占位对象。
 - `resetAt` 至少一个 `<60min`、一个 `>1440min`；允许 `null` 走 `—`。
 - 同一条数据内部必须自洽：`budget.used ≈ monthCost`、`todayCost ≤ monthCost`、`currentProviderId` 必须指向已存在的 provider。
+- 趋势序列权重必须**确定性且带起伏**（周末低 / 工作日高 + 尖峰），不能等权分摊：等权会让截图里的柱高齐平成矩形，失去趋势图的意义；同时禁止随机数，否则每次 `npm run shots` 产物都在变。
+- 逐日权重归一化时给末点预留份额（末点承接余量），否则前 n-1 项吃满 100% 会把末柱压成 0。
 
 ## 4. 命名与产出
 
