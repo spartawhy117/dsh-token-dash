@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：实施中（重开；`2.2.1-local.4` 已安装。Issue #6 / #7 已修复，Issue #8（无障碍回归）待修复）<br>
+> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；Issue #8（无障碍回归）、#9（更新侧复查）待修复）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -84,7 +84,7 @@
 | CHG-42 | 修改 | `client.js` · `checkForUpdate` | 失败分级：manual → `error`（强提示 + 可重试），auto → `autoError`（低强度文字，5s 消失） |
 | CHG-43 | 修改 | `client.js` · 插件 `apply` | 启动 30s **无条件**检测 + 4h 周期检测 + `visibilitychange` 补偿；时间戳存 localStorage（仅服务周期判定，不参与启动决策） |
 | CHG-44 | 修改 | `client.js` · `styles` / `EN` / `locale` | 新增 `updateButton*` 样式与 5 个词条（138 键中英一致） |
-| CHG-45 | 新增 | `test/unit/update-schedule.test.mjs` | 5 例调度单测 |
+| CHG-45 | 新增 | `test/unit/update-schedule.test.mjs` | 5 例单测；版本判定改为 import 生产 `isNewer`，不再复刻逻辑 |
 
 > 已落地内容一律回填本表；不保留逐文件 diff。
 
@@ -306,188 +306,27 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 
 ### Issue #7 [已修复] 2026-11-16 更新检测无周期轮询，且「可更新」信号过弱
 
-#### 7.1 复现
+> 关闭口径：用户反馈｜dsh-token-dash 自查修复｜验证：2026-11-16 / Windows / `npm test` 通过、`npm run e2e` UI assertions passed、日志核对 + 真实低版本包人工验证｜TAPD 不适用
 
-- **当前**：① 新版本发布后长时间不提示。② 有更新时只有一个 4px 小圆点，版本号藏在 hover `title` 里。③ 自动检测失败完全不静默，用户无从得知「检测过但失败了」。
-- **期望**：① 每 4h 自动检测一次，启动时按上次检测时间补一次。② 有更新时按钮整体强调并常显版本号。③ 失败可见，日志留痕。
-- **影响**：用户可能长期停在旧版本，且没有任何提示解释为什么没发现更新。
-
-#### 7.2 关键时序（现状 → 问题点）
+**根因**：检测只在插件 `apply` 触发一次，无周期轮询；柱子…（略）。三处叠加：① 无周期检测，进程不重启就永不重检；② 失败分支只回 `idle`，无日志无提示；③ 「可更新」唯一信号是 4px 小圆点，版本号藏在 `title` 里。
 
 ```text
-【起点】插件 apply → autoUpdateChecked=false → setTimeout 4s → checkForUpdate({manual:false})
-【★问题根源】检测仅在 apply 触发一次，无周期轮询；失败分支只 emitUpdate({phase:'idle'})，无日志无 errorKind
-【触发】① 启动 4s 时网络抖动 / registry 超 5s → 静默失败，此后不再重试
-         ② 宿主进程不重启 → 永不再次检测
-【对比】manual=true 路径会显示「检查失败」；auto 路径把该信号吞掉了
-【修复】加周期轮询 + 持久化上次检测时间 + 失败分级可见 + 按钮状态强化
+【起点】apply → autoUpdateChecked=false → setTimeout 4s → checkForUpdate({manual:false})
+【★问题根源】仅 apply 触发一次，无周期；失败只 emitUpdate({idle})，无 errorKind 无日志
+【触发】启动 4s 网络抖动 / registry 超 5s → 静默失败，此后不再重试
+【对比】manual=true 会显示「检查失败」；auto 把该信号吞掉了
+【修复】4h 周期 + 启动无条件检测 + 失败分级 + UpdateButton 组件化
 ```
 
-#### 7.3 结论（已确认事实）
+**处理**：`client.js` 新增 `UpdateButton`（8 态，移除小圆点，有更新转 accent 并常显版本号）；`checkForUpdate` 失败分级（manual → `error` 可重试 / auto → `autoError` 低强度 5s 消失）；插件 `apply` 启动 30s **无条件**检测 + `setInterval` 4h + `visibilitychange` 补偿；`index.js` `/update` 支持 `?refresh=1` 绕过 5min 缓存、失败写 `check.fail` 带 `errorKind`/`httpStatus`、`/log` 白名单扩为 `slot`/`update`。落地明细见 §三 CHG-38~45。
 
-| # | 事实 | 位置 |
-|---|---|---|
-| 1 | 无 `setInterval`，仅 `apply` 时一次 `setTimeout(4000)` | `client.js` · 插件 `apply` |
-| 2 | 自动检测失败只回 `idle`，无日志 | `client.js` · `checkForUpdate` catch |
-| 3 | registry 请求超时 5s | `index.js` · `fetchLatest` (`AbortSignal.timeout(5000)`) |
-| 4 | 宿主 `/update` 有 5min 进程内缓存，仅安装成功后清空 | `index.js` · `updateCache` |
-| 5 | 「可更新」唯一可见信号是 4px `dot` | `client.js` · `IconButton` |
+**测试策略**：弃用本地假更新源（测的是自造规则），改为 `TOKEN_DASH_CURRENT_VERSION=2.1.0` 对 npm 上真实 `2.2.0` 判定——检测源、版本比较、安装 spec 全走生产路径。人工验证见 [update-testing.md](../../update-testing.md)。
 
-### Issue #7 测试策略 · 走真实 registry [已实施]
+**实施中修的额外缺陷**：① 调度块暂时性死区（`lastAt` 先于声明被引用 → `ReferenceError` 被 effect 吞掉，表现为「重启后从不检测」）；② `/log` 白名单只允许 `slot` → 调度日志写不进去；③ 启动检测被 1h 去重挡住，与「每次启动都检查」冲突。**前两项在所有测试绿灯时依然存在**，说明当时的断言只验证「请求发了没有」，没验证「调度逻辑跑没跑」。
 
-#### 为什么不用本地假更新源
+CL：git 仓 commit `3b0d071`（`test(update): 更新检测测试改走真实 registry`，含本轮全部实现）
 
-初版实现过一条「`TOKEN_DASH_UPDATE_SOURCE` 指向本地目录读 `latest.json`」的测试通道。**该方案已被否决并整体删除**，原因是它测的是自己造的规则：
-
-- 假源返回什么版本，完全由测试写入，因此「有没有新版本」这一判定从未被真实校验；
-- registry 请求、真实版本比较、真实安装 spec 三条链路全部被绕过；
-- 相当于「写了一套假实现，再验证假实现」——功能坏了测试照样绿。
-
-#### 采纳方案：真实 registry + 压低当前版本
-
-不改任何判定逻辑，只让**当前版本**可被覆盖：
-
-| 环节 | 做法 | 真实性 |
-|---|---|---|
-| 检测源 | 宿主真实请求 `https://registry.npmjs.org/dsh-token-dash/latest` | 完全真实 |
-| 版本比较 | 复用生产 `isNewer` | 完全真实 |
-| 当前版本 | `TOKEN_DASH_CURRENT_VERSION=2.1.0` 覆盖 `package.json` 的版本 | 仅改比对基准 |
-| 已发布对照 | npm 上真实存在 `2.2.0` | 完全真实 |
-| 安装 spec | 仍由 `updateSpec()` 按 npm 版本号拼装 | 完全真实 |
-
-结果：e2e 里 `current=2.1.0`、`latest=2.2.0`、`hasUpdate=true`，走的是与用户完全相同的代码路径，没有一处自造数据。
-
-#### 覆盖到的链路
-
-- L2：`/update?refresh=1` 返回真实 registry 结果；不带 `refresh` 时命中 5min 缓存（断言两次响应一致）。
-- L3：手动检测进 `confirm` 条并显示真实版本号 `2.2.0`；自动检测产生 `available` 态且版本号常显；按钮尺寸 22px。
-- L3：自动检测失败（路由级 502）显示「更新检查失败」且按钮不变红。
-
-#### 不覆盖的部分（转人工）
-
-- 真实安装：`POST /update/install` 会真的执行 `dsh plugin add`，会改变本机插件状态，不进自动化。
-- 网络异常的真实超时：用路由级 502 模拟，不真制造断网。
-
-人工验证流程见 **[docs/update-testing.md](../../update-testing.md)**：装一个低版本包（源码同当前、仅版本号压低），重启后应自动检测到 npm 上的真实新版本。
-
-#### 7.4 修复实施
-
-**7.4.1 检测频率（用户确认：4h）**
-
-- 启动后 **30s** 触发一次，**无条件执行**——不看缓存、不看上次检测时间。启动即检查是用户的明确要求。
-- 运行中 **每 4h** 自动检测一次（`setInterval` + `visibilitychange` 补偿：页面隐藏期间暂停，恢复可见且已过期则立即补检）。
-- 「上次检测时间」持久化到 `prefs.json`（`updateCheckedAt`），避免频繁重启反复请求 registry。
-- 手动点击不受周期限制，但仍受宿主 5min 缓存约束——**不绕过缓存**，避免用户狂点打爆 registry。
-
-**7.4.2 UpdateButton 组件（用户确认：抽成独立组件）**
-
-- 新建 `client.js` · `UpdateButton`，接管原 `SettingsRows` 内联的 `updateControl` 分支（含 `confirm` 态）。
-- 8 态矩阵见 `docs/ui-design.md` §5.7.1；尺寸不变（22px 高 / 11px / 圆角 6px）。
-- `available`：accent 描边 42% + 浅底 16% + 「更新」文案 + 右侧常显 `vX.Y.Z`。
-- **移除 `dot`**：不再用小圆点表达有更新 / 错误。
-- `error`（手动）：按钮转 over 色 + 「重试」，点击即重新检测；`复制命令` 降为次要入口，仅 `error.command` 非空时出现。
-- `error`（自动）：按钮外观不变，右侧显示「更新检查失败」，**5s 后自动消失**。
-
-**7.4.3 失败可见（用户确认：需要）**
-
-- `checkForUpdate` catch 分支区分 manual / auto：manual → `phase: 'error'` 显示「检查失败」；auto → `phase: 'autoError'` 只置提示文案，按钮不变。
-- 两条分支都写日志：`[TD:update]` 前缀，带 `errorKind`（`timeout` / `network` / `registry-<status>`）与 `httpStatus`，符合 AGENTS.md §3「错误不吞」。
-
-#### 7.5 不改的位置与理由
-
-- **不改宿主端 5min 缓存**：它是防止 registry 打爆的保护，不是 bug；本轮只在客户端补周期检测与持久化时间戳。
-- **不改 `fetchLatest` 的 5s 超时**：超时本身合理，问题在失败被吞，不在超时值。
-- **不改 `isNewer` 版本比较逻辑**：local → 正式版判定已由 `version.test.mjs` 覆盖，本轮复用。
-- **不改「版本」行其余排版**：组件抽取要求尺寸零变化，`settings.png` 不应因本轮产生布局差异。
-
-#### 7.5.1 实施中发现并修复的额外缺陷
-
-1. **调度块暂时性死区**：`logUpdateSchedule('armed', ...)` 引用了同块内后面才 `const` 声明的 `lastAt`，`ctx.effect` 执行时抛 `ReferenceError` 并被 effect 机制静默吞掉。表现是「重启后从不自动检测更新」。修复：把 `const lastAt` 提到使用之前。
-   - **教训**：原有断言只验证「请求发了没有」，而该错误发生在发请求之前，因此单测与 E2E 全部绿灯却功能失效。补了 `armed` 调度日志后才暴露。
-2. **client 日志白名单只允许 `slot`**：`POST /log` 对非 slot 模块返回 400，`update` 的调度日志根本写不进去，线上无法诊断。修复：抽出 `CLIENT_LOG_MODULES`（`slot` / `update`），并在 e2e 加了白名单接受度断言。
-3. **启动检测被去重挡住**：初版按「距上次不足 1h 跳过」实现，与「每次启动都检查」的要求冲突。修复：启动检测无条件执行，启动/手动检测都带 `?refresh=1` 绕过宿主 5min 缓存。
-
-#### 7.6 测试补全与测试流程
-
-> 本节是 Issue #7 的测试事实来源。逐项列出「验证什么 / 在哪验证 / 现状」，标 **⚠ 缺口** 的为本轮复核发现、尚未覆盖或覆盖不足的项。
-
-##### 7.6.1 分层与职责
-
-| 层 | 命令 | 负责验证 | 不负责 |
-|---|---|---|---|
-| L1 单测 | `npm test` | 纯逻辑：调度判定、版本比较、词条键位 | 真实 DOM、真实宿主路由 |
-| L2 宿主契约 | `npm run e2e`（HTTP 段） | `/update` 与 `/log` 的真实响应、真实 registry 判定、5min 缓存 | 组件渲染状态 |
-| L3 UI 断言 | `npm run e2e`（Playwright 段） | 8 态渲染、尺寸、文案、失败分级可见性 | 4h 真实等待 |
-| L4 人工 | 见 §7.6.4 | 真实 registry、真实安装链路 | 自动化回归 |
-
-##### 7.6.2 验收项与覆盖现状
-
-> 测试策略已改为「真实 registry + 压低当前版本」，详见 §7.6 前置说明。原「本地假更新源」相关项已随机制删除。
-
-| # | 验证什么 | 在哪 | 现状 |
-|---|---|---|---|
-| 1 | 8 态视觉符合 §5.7.1 | `npm run preview drafts/update-button` | ✅ 原型覆盖 8 态；**⚠ 缺口**：原型未晋升 `templates/`，未进模板对照表 |
-| 2 | 有更新时按钮 accent + 版本号常显 | L3：`data-state=available` + `token-dash-update-latest` 文本为真实的 `2.2.0` + 背景非透明 | ✅ 已覆盖 |
-| 3 | 自动失败可见且按钮不变红 | L3：独立页签 route 502 → 断言「更新检查失败」+ `data-state=idle` | ✅ 已覆盖 |
-| 4 | 启动无条件检测 | L3：预置「刚刚检测过」时间戳 → 断言仍发出请求 | ✅ 已覆盖 |
-| 5 | 真实 registry 判定 | L2：`current=2.1.0` 对已发布 `2.2.0` 判定 `hasUpdate=true` | ✅ 已覆盖（真实网络） |
-| 6 | 5min 缓存确实生效 | L2：带 `refresh=1` 与不带的两响应深度相等 | ✅ 已覆盖 |
-| 7 | 版本比较正确性 | L1：直接 import 生产 `isNewer`，含 local ↔ 正式版组合 | ✅ 已覆盖（复用生产实现） |
-| 8 | 恢复可见 / 4h 周期判定 | L1：`update-schedule.test.mjs` | **⚠ 缺口**：判定函数仍在测试内复刻，「4h 定时器真实触发」未验证 |
-| 9 | 失败写日志带 errorKind / httpStatus | 无 | **⚠ 缺口**：`check.fail` 日志内容无断言 |
-| 10 | 尺寸零变化（22px） | L3：`getBoundingClientRect().height === 22` | ✅ 已覆盖 |
-| 11 | 词条三方一致 | L1：`locale.test.mjs` 自动遍历 | ✅ 自动覆盖（138 键） |
-| 12 | client 日志白名单接受 update 模块 | L2：POST `/log` 断言 200 | ✅ 已覆盖 |
-| 13 | 手动失败可重试（`error` 态） | 无 | **⚠ 缺口**：`data-state=error` 与「重试」按钮未断言 |
-| 14 | `confirm` 态结构 | L3：`token-dash-update-confirm` + 「立即更新」+ 真实版本号 | ✅ 已覆盖 |
-| 15 | 安装链路（`installUpdateRequest`） | 无 | **⚠ 缺口**：会真实改插件，自动化不覆盖，转 L4 人工 |
-
-##### 7.6.3 待补测试项（按优先级）
-
-| 优先级 | 项 | 补法 |
-|---|---|---|
-| P0 | #9 失败日志 | L2：让宿主在 registry 不可达时返回 502，断言日志出现 `check.fail` + `errorKind`；可在请求前把 registry 指向不可解析域名（`fetchLatest` 支持 env 覆盖前需先加）或直接用路由级 502 配 `/log` 断言 |
-| P0 | #8 判定函数复刻 | 把 `shouldCheckOnVisible` 抽到 `src/` 可导入模块，单测直接 import；或断言 client.js 中常量字面量，防实现漂移 |
-| P1 | #13 手动失败态 | L3：route 502 + 手动点击 → 断言 `data-state=error` 与「重试」按钮 |
-| P2 | #8 定时器真实触发 | L3：用 `page.clock` 推进 4h，断言发出第二次请求 |
-| P2 | #1 原型晋升 | 把 `drafts/update-button.html` 的数值搬进 `spec.mjs`，移入 `templates/`，登记对照表 |
-
-##### 7.6.4 人工验证流程（L4）
-
-自动化不覆盖真实 registry 与真实安装，按下列步骤人工确认：
-
-1. **真实检测**：以当前版本启动 DSH（已是最新），确认按钮为 `idle` 且日志出现 `check.ok`。
-2. **可更新检测**：以 `TOKEN_DASH_CURRENT_VERSION=2.1.0` 启动（或安装低于最新已发布版本的 local 包），30s 内应自动出现 accent「更新」+ 真实版本号，无需点击。
-3. **确认条**：点按钮 → 出现「发现 x / 立即更新 / 取消」，点取消回到 `available`。
-4. **真实安装**（可选，会改插件）：点「立即更新」，确认走真实 `dsh plugin add` 安装成功并提示重启。
-5. **失败可感知**：断网后手动点击，应显示「检查失败」+ 可点击的「重试」。
-
-##### 7.6.5 回归口径
-
-- 每轮改动 `client.js` · `UpdateButton` / 调度块后必跑：`npm test` + `npm run e2e`。
-- 改动 `index.js` · `/update` 路由后额外跑 L2 段（已含在 e2e 内）。
-- `docs/pic/` 截图必须重出：`npm run shots`（中英文各一次）：组件尺寸变化会体现在 `settings.png`。
-
-#### 7.7 最终改动清单
-
-| 文件 · 位置 | 改动 | 状态 |
-|---|---|---|
-| `client.js` · `UpdateButton` | 新增组件，8 态渲染；移除 `dot` 小圆点 | 完成 |
-| `client.js` · `checkForUpdate` | 失败分级（manual → `error` / auto → `autoError`）；统一带 `?refresh=1` | 完成 |
-| `client.js` · `resetUpdateLater` | 支持自定义延迟：成功 1.6s，`autoError` 5s | 完成 |
-| `client.js` · 插件 `apply` | 启动 30s 无条件检测 + `setInterval` 4h + `visibilitychange` 补偿 + 调度日志 | 完成 |
-| `client.js` · `styles` | 新增 `updateBox` / `updateButton` / `updateButtonOn` / `updateButtonError` / `updateHint` / `updateHintError` / `updateAction` / `updateDismiss` | 完成 |
-| `client.js` · `EN` 词典 | 新增「发现」「立即更新」「重试」「更新中」「更新检查失败」5 键 | 完成 |
-| `client.js` · `logUpdateSchedule` | 调度事件上报（`armed` / `startup.run` / `visible.run`） | 完成 |
-| `locale/zh.json` / `en.json` | 同键同占位符，各 138 键 | 完成 |
-| `index.js` · `fetchLatest` | 恢复为纯 registry 请求；新增 `TOKEN_DASH_CURRENT_VERSION` 覆盖比对基准 | 完成 |
-| `index.js` · `/update` | `?refresh=1` 绕过 5min 缓存；成功写 `check.ok`，失败写 `check.fail` 带 `errorKind` / `httpStatus` 并返 502 | 完成 |
-| `index.js` · `CLIENT_LOG_MODULES` | client 日志白名单从仅 `slot` 扩为 `slot` / `update` | 完成 |
-| `scripts/e2e.mjs` | 本地源四种判定、启动无条件检测、白名单接受度、confirm 条、available 态、尺寸、失败分级（独立页签） | 完成 |
-| `test/unit/update-schedule.test.mjs` | 5 例调度单测 | 完成（**待改**：见 §7.6.3 P0） |
-| `docs/ui-design.md` | v3.16 §5.7.1 组件规格 + §5.7 版本行指向 | 完成 |
-| `tools/preview/drafts/update-button.html` | 8 态原型 | 完成（**待晋升** `templates/`） |
-| `docs/pic/` | `settings.png` 重出（组件抽取后尺寸不变） | 完成 |
+**遗留**：见 Issue #9（更新侧代码与测试复查）。
 
 ### Issue #8 [待修复] 2026-11-16 UpdateButton 重构后丢失状态播报，无障碍回归
 
@@ -518,3 +357,66 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 | 2 | 错误态用 `role=alert` | e2e 在失败分级场景断言 role |
 
 **结果**：待实施（本轮按要求不继续改代码）。
+
+### Issue #9 [待修复] 2026-11-16 更新侧代码与测试复查：3 处 A 级缺陷 + 2 处代码卫生 + 4 处测试盲区
+
+> 本轮按要求只记录，不改代码。按严重度排序。
+
+#### 9.1 A 级：会导致用户可见错误
+
+**A1 · 安装请求绕过缓存，可能装到非预期版本**
+
+`index.js` · `/update/install` 直接调 `fetchLatest()`，**不带 `?refresh=1` 的语义也没有缓存**，与 `GET /update` 各自算一次。客户端展示的是 `GET /update` 的结果，安装时宿主重新查一次 registry——两次之间若发版，会出现「提示 2.2.0，实际装 2.3.0」，或者 `data.latest` 与 `from/to` 不一致。
+
+修复方向：安装时使用客户端在确认条上展示的那个版本（把 `latest` 作为 POST body 传入，宿主校验其合法性并安装），而不是重新查 registry。
+
+**A2 · `installUpdateRequest` 无响应状态校验**
+
+客户端只判断 `body?.ok === true`，未检查 `res.ok` / `res.status`。宿主在 `/update/install` 里对非法版本号 `throw new Error('invalid-latest-version')`，该 throw 落到路由兜底返回 500 且 `ok:false`，客户端会显示「更新失败（unknown）」——reason 丢失。
+
+修复方向：读取 `body.reason` 与 `res.status`，区分「网络失败」「版本非法」「安装失败」。
+
+**A3 · 4h 定时器不检查 `lastAt`，与「恢复可见补检」重复触发**
+
+`setInterval` 每 4h 无条件 `runAuto()`；`visibilitychange` 在 `elapsed >= 4h` 时也 `runAuto()`。两者独立，用户切标签页即可与定时器叠加。虽然有 `updateRequest !== null` 兜底（同一时刻只跑一个），但**串行仍会连发两次**：第一次结束后第二次立刻又发。
+
+修复方向：`setInterval` 内也判 `elapsed >= UPDATE_INTERVAL_MS`，与 `onVisible` 共用同一个到期判定。
+
+#### 9.2 B 级：代码卫生 / 可维护性
+
+**B1 · 注释与实现不符**
+
+`client.js` · `apply` 内仍写「距上次检测不足 1h 则跳过」——该逻辑已在 local.4 删除。这类过时注释会误导后续维护者重加去重。
+
+**B2 · `updateStartupDelay` 是纯测试后门留在生产代码里**
+
+localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明「不改变检测内容」，但生产包保留一个可让检测提前触发的外部开关，收益（e2e 少等 29s）与风险不对等。
+
+修复方向：改为构建期常量或用 `window.__TD_E2E__` 这类仅测试注入的全局标记，避免用户会话里生效。
+
+#### 9.3 C 级：测试盲区
+
+| # | 盲区 | 后果 |
+|---|---|---|
+| C1 | `shouldCheckOnVisible` 仍在测试内复刻，未 import 生产实现 | 改坏 `onVisible` 逻辑测试不会红（`isNewer` 已改为 import，但调度函数没有） |
+| C2 | `check.fail` 日志的 `errorKind` / `httpStatus` 无断言 | 日志字段改名或丢失无人发现 |
+| C3 | 手动 `error` 态（按钮转红 + 「重试」）无断言 | A2 这类问题不会被测出来 |
+| C4 | 4h 定时器真实触发未验证 | A3 的重复触发不会被测出来 |
+
+另：`scripts/e2e.mjs` 的英文页仍 mock `/update`（固定回无更新），这本身合理（避免遮挡刻度断言），但应在注释中说明它是**唯一保留的 mock**，防止后续被误删。
+
+#### 9.4 不改的位置与理由
+
+- 宿主 5min 缓存：防 registry 打爆的保护，保留；只是 A1 要让它与安装共用同一份数据。
+- `fetchLatest` 的 5s 超时：合理。
+- `/log` 白名单机制：已验证有效且必要，保留。
+
+#### 9.5 验收（待实施后补）
+
+| # | 项 | 方式 |
+|---|---|---|
+| 1 | 安装使用确认条上的版本 | 单测：`installUpdateRequest` 传入的 version 与 `update.latest` 一致 |
+| 2 | reason 正确透传 | e2e：宿主返回 500 + reason，断言 UI 显示该 reason |
+| 3 | 定时器与可见补检不重复 | 单测：同一 `lastAt` 下两次到期判定只触发一次 |
+| 4 | 调度函数 import 生产实现 | 单测直接 import |
+
