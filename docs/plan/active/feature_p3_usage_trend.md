@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；Issue #8（无障碍回归）、#9（更新侧复查）待修复）<br>
+> 状态：实施中（重开；`2.2.1-local.5` 已安装。Issue #6 / #7 已修复并经人工验证；Issue #8（无障碍回归）、#9（更新侧复查）、#10（去掉二次确认）待修复）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -419,4 +419,57 @@ localStorage `td:updateStartupDelay` 可覆盖启动延迟。虽已注释说明�
 | 2 | reason 正确透传 | e2e：宿主返回 500 + reason，断言 UI 显示该 reason |
 | 3 | 定时器与可见补检不重复 | 单测：同一 `lastAt` 下两次到期判定只触发一次 |
 | 4 | 调度函数 import 生产实现 | 单测直接 import |
+
+### Issue #10 [待修复] 2026-11-16 点击更新仍弹确认条，应改为直接安装
+
+#### 复现
+
+- **当前**：点「更新」按钮后先出现一条确认行「发现 **2.2.0** / 立即更新 / 取消」，还要再点一次才真正安装。
+- **期望**：点「更新」直接开始安装，不再二次确认。按钮本身已显示「更新」+ 版本号，语义已足够明确。
+- **影响**：多一次点击；且确认条会把按钮整行替换掉，视觉上像是页面跳变。
+
+#### 关键时序（两条路径都要拆）
+
+```text
+路径 A（手动检测命中可更新）
+  点按钮 → checkForUpdate({manual:true}) → data.hasUpdate → phase='confirm'
+  行为：按钮被确认条替换 → 点「立即更新」→ installUpdateRequest()
+
+路径 B（已是 available 态再点）
+  自动检测后 phase='available' → 点按钮 → onConfirm() → 又 emitUpdate({phase:'confirm'})
+  行为：同样被确认条拦截一次
+
+【★问题根源】两条路径都以 confirm 为终点，而不是直接安装；confirm 是 v3.16 规格里显式定义的中间态
+【修复】移除 confirm 态：手动检测命中更新即直接 install；available 态点击也直接 install
+```
+
+#### 结论
+
+1. `client.js` · `checkForUpdate`：`manual && hasUpdate` 时 `phase` 由 `'confirm'` 改为直接触发安装。
+2. `client.js` · `UpdateButton`：删除 `phase === 'confirm'` 整段分支（约 5 行），`onConfirm` 参数随之删除。
+3. `client.js` · 调用处：`onConfirm` 传参移除；`available` 态点击直接 `onInstall()`。
+4. `locale`：已核验「立即更新」「发现」「取消」三键**仅**用于 confirm 分支（`client.js` 各一处），删除后应一并从 `EN` 词典与 `locale/zh|en.json` 移除（138 → 135 键）；「发现 {version}」仍被 `aria-label` 使用，保留。
+5. `docs/ui-design.md` §5.7.1：8 态矩阵删除 `confirm`，改为 7 态；§5.7 版本行描述同步。
+
+#### 需要注意的连带影响
+
+- **A1 缺陷机会**：一旦去掉确认条，「用户看到的版本」与「实际安装的版本」之间没有人工停顿，Issue #9 A1（安装时重新查 registry）的错配窗口反而更小——但根因仍在，仍应修。#10 不替代 #9 A1。
+- **误触风险**：安装会真实改插件，去掉确认后误点即触发。按钮在 `idle` 态是「检查更新」、`available` 态才是「更新」，两态文案与颜色不同，可接受。若后续仍有顾虑，可改为按钮变色但保留二次确认——需用户拍板，本轮按「不要确认」执行。
+- **测试**：`scripts/e2e.mjs` 里断言 `token-dash-update-confirm` 存在、点击「立即更新」、点「取消」的三段需删除，改为断言「点击后直接进入 installing 态」。
+
+#### 不改的位置与理由
+
+- 不保留任何形式的二次确认（包括 toast 二次点击）：用户明确要求直接更新。
+- 不动 `available` / `installing` / `done` / `error` 其余状态的视觉与尺寸。
+
+#### 验收
+
+| # | 项 | 方式 |
+|---|---|---|
+| 1 | 手动检测命中更新后直接安装 | e2e：点击后断言出现 `installing` 而非 `confirm` |
+| 2 | `available` 态点击直接安装 | e2e：同上 |
+| 3 | confirm 节点不再存在 | e2e：断言 `token-dash-update-confirm` 数量为 0 |
+| 4 | 组件降到 7 态 | `docs/ui-design.md` §5.7.1 与原型一致 |
+
+**结果**：本轮只记录，待实施。
 
