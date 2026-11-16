@@ -23,7 +23,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/v/tag/spartawhy117/dsh-token-dash?label=version&sort=semver" alt="version" />
   <img src="https://img.shields.io/npm/dt/dsh-token-dash?logo=npm&label=npm%20downloads" alt="npm downloads" />
-  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.1_tested-4c8bf5" alt="DSH tested" />
+  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.3_tested-4c8bf5" alt="DSH tested" />
   <img src="https://img.shields.io/github/license/spartawhy117/dsh-token-dash" alt="license" />
   <a href="https://awesome-dsh-plugin.com/zh/p/spartawhy117/dsh-token-dash"><img src="https://img.shields.io/badge/awesome--dsh--plugin-listed-6ea8ff" alt="awesome-dsh-plugin" /></a>
 </p>
@@ -97,7 +97,7 @@
 
 ## 安装
 
-需要 DSH `0.2.1` 或更新版本；已在 **DSH 0.2.2-rc.1** 上验证。DSH 0.2.2 自身要求 Node **24.9+**。
+需要 DSH `0.2.1` 或更新版本；已在 **DSH 0.2.2-rc.3** 上验证。DSH 0.2.2 自身要求 Node **24.9+**。
 
 ```bash
 # 方式一：npm 安装（推荐）
@@ -116,7 +116,7 @@ dsh plugin --profile desktop add /path/to/dsh-token-dash-x.y.z.tgz
 
 ## 兼容与限制
 
-- DSH `0.2.1+`；已在 `0.2.2-rc.1` 上验证。DSH 0.2.2 是预发布版，且自身要求 Node 24.9。
+- DSH `0.2.1+`；已在 `0.2.2-rc.3` 上验证。DSH 0.2.2 是预发布版，且自身要求 Node 24.9。
 - 界面语言当前仅中文 / English；选择日语、德语、俄语等其他 DSH 语言时，插件文案显示英文回退。
 - 升级 DSH 后插件可能从 profile 消失，重装同一个 tarball 即可，账本不会被删。
 - Qwen 只统计用量，余额接口不支持；其余供应商的余额/配额以接口实际返回为准。

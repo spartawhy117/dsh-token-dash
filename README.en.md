@@ -23,7 +23,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/v/tag/spartawhy117/dsh-token-dash?label=version&sort=semver" alt="version" />
   <img src="https://img.shields.io/npm/dt/dsh-token-dash?logo=npm&label=npm%20downloads" alt="npm downloads" />
-  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.1_tested-4c8bf5" alt="DSH tested" />
+  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.3_tested-4c8bf5" alt="DSH tested" />
   <img src="https://img.shields.io/github/license/spartawhy117/dsh-token-dash" alt="license" />
   <a href="https://awesome-dsh-plugin.com/p/spartawhy117/dsh-token-dash"><img src="https://img.shields.io/badge/awesome--dsh--plugin-listed-6ea8ff" alt="awesome-dsh-plugin" /></a>
 </p>
@@ -98,7 +98,7 @@ Screenshots use mock data so the full layout is visible at once.
 
 ## Install
 
-Requires DSH `0.2.1` or newer; tested on **DSH 0.2.2-rc.1**. DSH 0.2.2 itself requires Node **24.9+**.
+Requires DSH `0.2.1` or newer; tested on **DSH 0.2.2-rc.3**. DSH 0.2.2 itself requires Node **24.9+**.
 
 ```bash
 # Option 1: install from npm (recommended)
@@ -117,7 +117,7 @@ Update: run `update` with the same name, or use the update button on the right o
 
 ## Compatibility & limitations
 
-- DSH `0.2.1+`; verified on `0.2.2-rc.1`. DSH 0.2.2 is a pre-release and itself requires Node 24.9.
+- DSH `0.2.1+`; verified on `0.2.2-rc.3`. DSH 0.2.2 is a pre-release and itself requires Node 24.9.
 - The UI currently ships Chinese / English only. Other DSH languages (Japanese, German, Russian, etc.) fall back to English.
 - After a DSH upgrade the plugin may disappear from the profile; reinstall the same tarball — the ledger is not deleted.
 - Qwen tracks usage only; its balance endpoint is unsupported. Other balances/quotas follow what each API returns.
