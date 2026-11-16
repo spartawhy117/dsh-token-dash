@@ -290,6 +290,14 @@ try {
   const updateCached = await readUpdate(false)
   assert.deepEqual(updateCached, updateFirst, 'without refresh the host must serve the cached payload')
 
+  // L2: 安装接口契约（Issue #9）——只验校验分支，绝不真的触发安装
+  const installBad = await fetch(`${base}/token-dash/api/update/install`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ version: '../../evil' }),
+  })
+  assert.equal(installBad.status, 400, 'illegal version must be rejected with 400, not 500')
+  assert.equal((await installBad.json()).reason, 'invalid-version', 'rejection must carry a readable reason')
+
   // L2: export / import round-trip on the real host API.
   const exportData = (await (await fetch(`${base}/token-dash/api/export`)).json()).data
   assert.equal(exportData.schema, 1)
@@ -893,22 +901,18 @@ try {
   // Update control：真实 registry 下 2.1.0 会看到已发布的 2.2.0。
   const updateButton = board.getByTestId('token-dash-update')
   await updateButton.waitFor({ timeout: 5000 })
-  // 手动检测在 hasUpdate 时直接进 confirm 条（自动检测才产生 available）
-  await jsClick(updateButton)
-  await page.waitForTimeout(600)
-  assert.equal(await board.getByTestId('token-dash-update-confirm').count(), 1, 'manual check with a real update available enters confirm')
-  assert.match(await board.getByTestId('token-dash-update-confirm').innerText(), /发现\s*2\.2\.0/)
-  assert.equal(await board.getByRole('button', { name: '立即更新' }).count(), 1)
-  await jsClick(board.getByRole('button', { name: '取消' }))
-  await page.waitForTimeout(200)
-  // available 态：自动检测不弹 confirm，只把按钮转 accent + 常显版本号。
-  // 触发方式：清掉上次检测时间并派发 visibilitychange，走真实的自动检测分支。
+  // 先让自动检测建立 available 态（点击前必须能看到版本号）
   await page.evaluate(() => {
     localStorage.setItem('td:updateCheckedAt', '0')
     document.dispatchEvent(new Event('visibilitychange'))
   })
-  await page.waitForTimeout(900)
-  assert.equal(await updateButton.count(), 1, 'auto check must not replace the button with a confirm bar')
+  // 用户切回可见触发补检，需要等一等让它真正发出请求并渲染 available
+  await updateButton.waitFor({ timeout: 5000 })
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid=token-dash-update]')?.getAttribute('data-state') === 'available',
+    undefined,
+    { timeout: 8000 },
+  )
   assert.equal(await updateButton.getAttribute('data-state'), 'available', 'auto check with update available shows available state')
   assert.match(await board.getByTestId('token-dash-update-latest').innerText(), /2\.2\.0/, 'version must be visible without hovering')
   const availableStyle = await updateButton.evaluate((node) => {
@@ -917,7 +921,19 @@ try {
   })
   assert.notEqual(availableStyle.background, 'rgba(0, 0, 0, 0)', 'available button must carry an accent tint')
   assert.equal(availableStyle.height, 22, 'button height must stay 22px after component extraction')
-  // 失败分级：自动检测失败只给低强度提示，按钮保持 idle 外观不变红。
+  // 调度去重（Issue #10）：短时间内连续派发可见事件，到期判定只放行一次
+  const beforeBurst = updateRequests
+  await page.evaluate(() => {
+    for (let i = 0; i < 5; i += 1) document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await page.waitForTimeout(700)
+  assert.ok(
+    updateRequests - beforeBurst <= 1,
+    `repeated visibility events must not fan out checks (delta=${updateRequests - beforeBurst})`,
+  )
+  // 无二次确认（Issue #11）：confirm 节点永不存在，点击直接进入安装
+  assert.equal(await board.getByTestId('token-dash-update-confirm').count(), 0, 'confirm bar must no longer exist')
+  assert.equal(await board.getByRole('button', { name: '立即更新' }).count(), 0, 'immediate-update button must no longer exist')
   // 用独立页签验证，避免与上方的 available 态互相覆盖（同一按钮状态存在竞态）。
   const failPage = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   try {
@@ -935,6 +951,10 @@ try {
         'idle',
         'auto failure must not turn the button red',
       )
+      // 无障碍（Issue #11）：失败提示必须用 alert 语义，读屏会立即播报
+      const failHint = failBoard.getByTestId('token-dash-update-hint')
+      assert.equal(await failHint.getAttribute('role'), 'alert', 'failure hint must use role=alert')
+      assert.equal(await failHint.getAttribute('aria-live'), 'assertive', 'failure hint must be assertive')
     }
   } finally {
     await failPage.close().catch(() => {})

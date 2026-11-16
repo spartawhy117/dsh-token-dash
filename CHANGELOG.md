@@ -4,6 +4,28 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.1-local.6] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 点击更新后不再弹确认，直接开始下载安装；装的就是按钮上显示的那个版本。
+- 更新失败时能看清具体原因（版本号不合法 / 该版本未发布 / 版本未变化 / 找不到 dsh 命令），不再是笼统的未知错误。
+- 修复后台定时检查与切回页面时的重复检测：同一时间段内只检查一次。
+- 更新状态变化现在能被读屏软件播报，此前这些提示对读屏用户不可见。
+
+### English
+
+#### Changes
+
+- Clicking update now starts the download and install immediately, with no confirmation step, and installs exactly the version shown on the button.
+- Failed updates now report a readable reason (invalid version, not published, version unchanged, dsh command not found) instead of a generic unknown error.
+- Fixed duplicate background checks when both the timer and the return-to-page trigger fired in the same window.
+- Update status changes are now announced by screen readers; previously these messages were invisible to them.
+
 ## [2.2.1-local.5] - 2026-11-16
 
 > 本地构建，未发布

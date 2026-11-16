@@ -559,31 +559,45 @@ export function apply(ctx) {
           }
           if (url.pathname === `${ROUTE_PREFIX}/update/install` && req.method === 'POST') {
             const profile = typeof process.env.DSH_PROFILE === 'string' && process.env.DSH_PROFILE !== '' ? process.env.DSH_PROFILE : 'desktop'
-            const latest = (await fetchLatest()).latest
-            if (latest === null) {
+            // 优先安装客户端展示过的那个版本：用户看到的与真正装上的必须是同一个，
+            // 否则两次查询 registry 之间若发版，会出现「提示 A 装成 B」。
+            // 未带 version 时（旧客户端）回退查询 registry，保持向后兼容。
+            let target = null
+            try {
+              const body = JSON.parse((await readBody(req)) || '{}')
+              if (typeof body?.version === 'string' && body.version !== '') target = body.version
+            } catch { /* 空 body 或非法 JSON 按未指定处理 */ }
+            if (target === null) target = (await fetchLatest()).latest
+            if (target === null) {
               logger.info('update', 'install.fail', { profile, reason: 'unpublished' })
-              json(res, 200, { ok: false, reason: 'unpublished', data: { reason: 'unpublished', command: '' } })
+              json(res, 400, { ok: false, reason: 'unpublished' })
               return
             }
-            if (/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(latest) === false) throw new Error('invalid-latest-version')
+            // 版本号必须是合法 semver：既防注入，也防把任意字符串拼进 CLI 参数
+            if (/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(target) === false) {
+              logger.info('update', 'install.fail', { profile, reason: 'invalid-version', target })
+              json(res, 400, { ok: false, reason: 'invalid-version' })
+              return
+            }
             const home = resolveHome(scoped)
             const from = installedVersion(home, profile) ?? CURRENT_VERSION
-            const result = await runPluginUpdate(profile, latest)
+            const result = await runPluginUpdate(profile, target)
             const to = installedVersion(home, profile)
-            const changed = to === latest
+            const changed = to === target
             const ok = result.ok === true && changed
             const failReason = result.ok === true ? 'version-unchanged' : result.reason ?? 'install-failed'
             logger.info('update', ok ? 'install.ok' : 'install.fail', {
               profile,
               from,
               to,
+              target,
               reason: ok ? null : failReason,
               ...(ok ? {} : { output: String(result.output ?? '').slice(-500) }),
             })
             updateCache = { at: 0, data: null }
-            json(res, 200, {
+            json(res, ok ? 200 : 500, {
               ok,
-              data: { ...result, from, to, latest, ...(ok ? {} : { reason: failReason }) },
+              data: { ...result, from, to, latest: target, ...(ok ? {} : { reason: failReason }) },
               ...(ok ? {} : { reason: failReason }),
             })
             return

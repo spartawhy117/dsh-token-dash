@@ -91,7 +91,6 @@
   "已是最新": "Up to date",
   "发现 {version}": "Found {version}",
   "更新": "Update",
-  "取消": "Cancel",
   "复制命令": "Copy command",
   "命令已复制": "Command copied",
   "复制失败": "Copy failed",
@@ -133,8 +132,10 @@
   "无数据": "No data",
   "多币种下成本柱不可用，请切换其他指标": "Cost bars unavailable with multiple currencies; switch metric",
   "万": "K",
-  "发现": "Found",
-  "立即更新": "Update now",
   "更新中": "Updating",
-  "更新检查失败": "Update check failed"
+  "更新检查失败": "Update check failed",
+  "版本号不合法": "Invalid version",
+  "该版本未发布": "Version not published",
+  "版本未变化": "Version unchanged",
+  "未找到 dsh 命令": "dsh command not found"
 }

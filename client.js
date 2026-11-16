@@ -89,9 +89,11 @@ window.__ModuleLoader__.load({
       '导入中…': 'Importing…', '数据已导出': 'Data exported', '数据导出失败': 'Data export failed',
       '已导入 {month} 数据': 'Imported {month} data', '导入失败：{reason}': 'Import failed: {reason}',
       '检查失败': 'Check failed', '未发布': 'Not published', '已是最新': 'Up to date',
-      '发现 {version}': 'Found {version}', '更新': 'Update', '取消': 'Cancel',
-      '发现': 'Found', '立即更新': 'Update now', '重试': 'Retry', '更新中': 'Updating',
+      '发现 {version}': 'Found {version}', '更新': 'Update',
+      '重试': 'Retry', '更新中': 'Updating',
       '更新检查失败': 'Update check failed',
+      '版本号不合法': 'Invalid version', '该版本未发布': 'Version not published',
+      '版本未变化': 'Version unchanged', '未找到 dsh 命令': 'dsh command not found',
       '复制命令': 'Copy command', '命令已复制': 'Command copied', '复制失败': 'Copy failed',
       '设置加载中…': 'Loading settings…', '检查更新': 'Check for updates',
       '更新失败（{reason}）': 'Update failed ({reason})',
@@ -337,7 +339,9 @@ window.__ModuleLoader__.load({
             if (manual) { emitUpdate({ phase: 'done', text: tr('未发布') }); resetUpdateLater() }
             else emitUpdate({ phase: 'idle', text: null })
           } else if (data.hasUpdate) {
-            emitUpdate({ phase: manual ? 'confirm' : 'available', latest: data.latest, text: null })
+            emitUpdate({ phase: 'available', latest: data.latest, text: null })
+            // 手动检测命中更新：直接开始安装，不再弹二次确认
+            if (manual) void installUpdateRequest()
           } else if (manual) {
             emitUpdate({ phase: 'done', text: tr('已是最新') })
             resetUpdateLater()
@@ -381,21 +385,40 @@ window.__ModuleLoader__.load({
       } catch { /* 日志失败不影响调度 */ }
     }
 
+    /** 安装失败原因 → 用户可读文案；未知原因保留原文而不是吞成 unknown。 */
+    const INSTALL_REASON_TEXT = {
+      'invalid-version': '版本号不合法',
+      unpublished: '该版本未发布',
+      'version-unchanged': '版本未变化',
+      'cli-not-found': '未找到 dsh 命令',
+    }
+    const installReasonText = (reason) => INSTALL_REASON_TEXT[reason] ?? (String(reason ?? '').trim() || 'unknown')
+
     async function installUpdateRequest() {
       if (updateSnapshot.phase === 'installing') return
+      const target = updateSnapshot.latest
       emitUpdate({ phase: 'installing', text: null })
       try {
-        const res = await fetch(`${API}/update/install`, { method: 'POST', headers: { accept: 'application/json' } })
+        // 把用户看到的版本原样交给宿主，避免宿主重新查 registry 导致装到别的版本
+        const res = await fetch(`${API}/update/install`, {
+          method: 'POST',
+          headers: { accept: 'application/json', 'content-type': 'application/json' },
+          body: JSON.stringify(target === null ? {} : { version: target }),
+        })
         const body = await res.json().catch(() => ({}))
         const data = body?.data
-        if (body?.ok === true) {
+        if (res.ok && body?.ok === true) {
           emitUpdate({ phase: 'done', text: data?.to ? tr('已更新到 {version}，重启 DSH 后生效', { version: data.to }) : tr('已更新，重启 DSH 后生效'), latest: null })
           resetUpdateLater()
-        } else {
-          emitUpdate({ phase: 'error', text: tr('更新失败（{reason}）', { reason: data?.reason ?? 'unknown' }), command: data?.command ?? null })
+          return
         }
+        emitUpdate({
+          phase: 'error',
+          text: tr('更新失败（{reason}）', { reason: installReasonText(body?.reason ?? data?.reason) }),
+          command: data?.command ?? null,
+        })
       } catch (error) {
-        emitUpdate({ phase: 'error', text: tr('更新失败（{reason}）', { reason: error.message }), command: null })
+        emitUpdate({ phase: 'error', text: tr('更新失败（{reason}）', { reason: installReasonText(error?.message) }), command: null })
       }
     }
 
@@ -635,11 +658,6 @@ window.__ModuleLoader__.load({
       },
       updateHint: { fontSize: 11, color: T.accent, fontWeight: 500, whiteSpace: 'nowrap' },
       updateHintError: { fontSize: 11, color: T.over, whiteSpace: 'nowrap' },
-      updateAction: {
-        height: 22, padding: '0 10px', boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11,
-        cursor: 'pointer', border: `1px solid color-mix(in srgb, ${T.accent} 42%, transparent)`,
-        background: `color-mix(in srgb, ${T.accent} 18%, transparent)`, color: T.accent,
-      },
       updateDismiss: {
         height: 22, padding: '0 8px', boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11,
         cursor: 'pointer', border: '1px solid transparent', background: 'transparent', color: T.muted,
@@ -1138,7 +1156,7 @@ window.__ModuleLoader__.load({
      * 有更新时按钮整体转 accent 并常显版本号——不用小圆点，避免「看到点但不知道是什么」。
      * 失败分级：手动失败按钮转 over 色可重试；自动失败只给低强度文字，不动按钮外观。
      */
-    function UpdateButton({ update, onCheck, onConfirm, onInstall, onCancel, onCopyCommand }) {
+    function UpdateButton({ update, onCheck, onInstall, onCopyCommand }) {
       const phase = update?.phase ?? 'idle'
       const latest = update?.latest ?? null
       const busy = phase === 'checking' || phase === 'installing'
@@ -1146,12 +1164,6 @@ window.__ModuleLoader__.load({
       const manualError = phase === 'error'
       const autoError = phase === 'autoError'
       const done = phase === 'done'
-      if (phase === 'confirm') {
-        return h('span', { style: styles.updateBox, 'data-testid': 'token-dash-update-confirm' },
-          h('span', { style: { fontSize: 12, color: T.text } }, tr('发现'), ' ', h('b', { style: { color: T.accent, fontWeight: 600 } }, latest ?? '')),
-          h('button', { type: 'button', style: styles.updateAction, onClick: () => onInstall?.() }, tr('立即更新')),
-          h('button', { type: 'button', style: styles.updateDismiss, onClick: () => onCancel?.() }, tr('取消')))
-      }
       const iconName = busy ? 'loader' : (manualError ? 'refresh' : (done ? 'check' : 'download'))
       const label = available
         ? tr('发现 {version}，点击更新', { version: latest })
@@ -1174,7 +1186,7 @@ window.__ModuleLoader__.load({
           title: label,
           disabled: busy,
           style: buttonStyle,
-          onClick: () => { if (available) onConfirm?.(); else onCheck?.() },
+          onClick: () => { if (available || manualError) onInstall?.(); else onCheck?.() },
         },
           h(Icon, { name: iconName, size: 13 }),
           buttonText !== null ? h('span', null, buttonText) : null),
@@ -1182,7 +1194,10 @@ window.__ModuleLoader__.load({
           ? h('span', { style: styles.updateHint, 'data-testid': 'token-dash-update-latest' }, latest)
           : null,
         hintText !== null
+          // 成功/中性提示用 status 播报；失败用 alert，语义不同不复用同一节点
           ? h('span', {
+            role: autoError ? 'alert' : 'status',
+            'aria-live': autoError ? 'assertive' : 'polite',
             style: autoError ? styles.updateHintError : { fontSize: 11, color: T.muted },
             'data-testid': 'token-dash-update-hint',
           }, hintText)
@@ -1856,9 +1871,7 @@ window.__ModuleLoader__.load({
       const updateControl = h(UpdateButton, {
         update,
         onCheck: checkUpdate,
-        onConfirm: () => emitUpdate({ phase: 'confirm', latest: update.latest }),
         onInstall: installUpdate,
-        onCancel: () => emitUpdate({ phase: 'idle', latest: null }),
         onCopyCommand: copyCommand,
       })
 
@@ -2288,7 +2301,13 @@ window.__ModuleLoader__.load({
             let interval = null
             let cancelled = false
             const lastAt = readStoredTs
-            const runAuto = () => { if (!cancelled) void checkForUpdate({ manual: false }) }
+            // 周期检测与「恢复可见补检」共用同一个到期判定，避免两处各判一次导致连发
+            const isDue = () => Date.now() - lastAt() >= UPDATE_INTERVAL_MS
+            const runAuto = (source) => {
+              if (cancelled) return
+              logUpdateSchedule(source, { elapsed: Date.now() - lastAt() })
+              void checkForUpdate({ manual: false })
+            }
             logUpdateSchedule('armed', {
               delay: updateStartupDelay(), lastAt: lastAt(), interval: UPDATE_INTERVAL_MS,
               hasLocalStorage: typeof globalThis.localStorage !== 'undefined',
@@ -2296,18 +2315,18 @@ window.__ModuleLoader__.load({
             timer = setTimeout(() => {
               timer = null
               // 启动检测无条件执行：用户要求「每次启动都检查」，不看缓存也不看上次检测时间
-              logUpdateSchedule('startup.run', { lastAt: lastAt() })
-              runAuto()
+              runAuto('startup.run')
               interval = setInterval(() => {
                 if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-                runAuto()
+                if (!isDue()) return
+                runAuto('interval.run')
               }, UPDATE_INTERVAL_MS)
             }, updateStartupDelay())
 
             const onVisible = () => {
               if (typeof document === 'undefined' || document.visibilityState !== 'visible') return
-              const elapsed = Date.now() - lastAt()
-              if (elapsed >= UPDATE_INTERVAL_MS) { logUpdateSchedule('visible.run', { elapsed }); runAuto() }
+              if (!isDue()) return
+              runAuto('visible.run')
             }
             if (typeof document !== 'undefined') document.addEventListener?.('visibilitychange', onVisible)
             return () => {
