@@ -4,127 +4,41 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [2.2.1-local.6] - 2026-11-16
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 点击更新后不再弹确认，直接开始下载安装；装的就是按钮上显示的那个版本。
-- 更新失败时能看清具体原因（版本号不合法 / 该版本未发布 / 版本未变化 / 找不到 dsh 命令），不再是笼统的未知错误。
-- 修复后台定时检查与切回页面时的重复检测：同一时间段内只检查一次。
-- 更新状态变化现在能被读屏软件播报，此前这些提示对读屏用户不可见。
-
-### English
-
-#### Changes
-
-- Clicking update now starts the download and install immediately, with no confirmation step, and installs exactly the version shown on the button.
-- Failed updates now report a readable reason (invalid version, not published, version unchanged, dsh command not found) instead of a generic unknown error.
-- Fixed duplicate background checks when both the timer and the return-to-page trigger fired in the same window.
-- Update status changes are now announced by screen readers; previously these messages were invisible to them.
-
-## [2.2.1-local.5] - 2026-11-16
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 更新检测的测试改为走真实版本服务：不再使用本地伪造的版本文件，检测源、版本比较与安装方式都与线上完全一致。
-- 移除了仅供测试使用的本地版本源开关与其配套逻辑，减少一套需要长期维护的旁路代码。
-
-### English
-
-#### Changes
-
-- The update check is now tested against the real version service: the local stubbed version file is gone, so the check source, version comparison and install path all match production.
-- Removed the test-only local version-source switch and its supporting code, dropping a permanent bypass path from the codebase.
-
-## [2.2.1-local.4] - 2026-11-16
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 每次启动 DSH 都会检查一次更新，不再因为「不久前刚检查过」而跳过。
-- 启动检查与手动检查都会绕过短时缓存，确保看到的是当下最新版本，而不是几分钟前的旧结果。
-
-### English
-
-#### Changes
-
-- Every DSH start now performs an update check, with no skip based on how recently the last check ran.
-- Both the startup check and manual checks bypass the short-lived cache, so the result reflects the latest published version instead of one cached minutes ago.
-
-## [2.2.1-local.3] - 2026-11-16
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
-- 修复启动时的更新检测可能完全不执行的问题：调度代码存在变量初始化顺序错误，导致检查逻辑抛出异常后被静默吞掉，表现为「重启后从不自动检查更新」。
-- 更新检测的调度过程现在会记录日志，启动时是检查了还是按周期跳过，都能在日志里看到，不再需要靠猜。
-
-### English
-
-#### Changes
-
-- Fixed the startup update check potentially never running: the scheduling code referenced a variable before it was initialised, so the check threw and was silently swallowed, which showed up as "no automatic update check after restart".
-- The update scheduling path now logs whether a startup check actually ran or was skipped by the interval rule, so the behaviour is observable instead of guessed.
-
-## [2.2.1-local.2] - 2026-11-16
-
-> 本地构建，未发布
+## [2.3.0] - 2026-11-16
 
 ### 中文
 
 #### 新增
 
-- 更新检测改为**启动时检查一次、运行中每 4 小时检查一次**；距上次检查不足 1 小时的启动不会重复检查，避免频繁重启反复请求版本服务。
-- 发现新版本时，更新按钮会整体高亮并直接显示版本号，不需要把鼠标移上去才知道更新了什么。
+- 设置区的更新控件重做：发现新版本时按钮整体高亮并直接显示版本号，不用把鼠标移上去才知道更新了什么。
+- 更新检测改为启动时检查一次、运行中每 4 小时检查一次；每次启动都会检查，不会因为「刚刚查过」而跳过。
+- 后台检查失败不再毫无提示：会在按钮旁显示「更新检查失败」并在 5 秒后自动消失，开关本身的错误也会写进日志便于排查。
 
 #### 修改
 
-- 更新按钮的几种状态重新区分：检查中、有新版本可更新、更新中、更新完成、检查失败各自呈现，失败时可直接点击重试。
-- 后台自动检查失败不再毫无提示，会显示「更新检查失败」并在 5 秒后自动消失，按钮本身不变色以免打断当前操作。
-
-### English
-
-#### Added
-
-- Update checks now run once at startup and every 4 hours while running. A restart within an hour of the last check skips the check, so frequent restarts do not keep hitting the version service.
-- When a new version exists, the update button highlights itself and shows the version number directly, so the version is visible without hovering.
-
-#### Changes
-
-- The update button now distinguishes its states clearly: checking, update available, updating, up to date, and check failed. A failed check can be retried directly from the button.
-- A failed background check is no longer silent. It shows "Update check failed" and clears after five seconds, while the button keeps its normal look so the current work is not interrupted.
-
-## [2.2.1-local.1] - 2026-11-16
-
-> 本地构建，未发布
-
-### 中文
-
-#### 修改
-
+- 点击更新后直接开始下载安装，不再弹二次确认；安装的就是按钮上显示的那个版本。
+- 更新失败时能看清具体原因（版本号不合法 / 该版本未发布 / 版本未变化 / 找不到 dsh 命令），不再是笼统的未知错误。
+- 修复后台定时检查与切回页面时的重复检测：同一时间段内只检查一次。
+- 更新状态变化现在能被读屏软件播报，此前这些提示对读屏用户不可见。
 - P3 范围摘要的四张卡片调整为「真实 Tokens → 总费用 → 缓存命中率 → 总请求数」，与趋势图右侧的指标切换按钮顺序完全一致，对应位置不再需要左右来回找。
 - 四张卡片与指标切换按钮现在共用同一份顺序定义，后续增删指标不会再出现两处顺序不一致。
 - 趋势柱悬停时显示一条垂直虚线标出当前所在的那根柱子，数值提示改为跟随鼠标立即出现，不再需要等待浏览器默认提示的一秒延迟。
 
 ### English
 
+#### Added
+
+- Reworked the update control in settings: when a new version exists the button highlights itself and shows the version number directly, so the version is visible without hovering.
+- Update checks now run once at startup and every 4 hours while running. Every DSH start performs a check and never skips because a check ran recently.
+- A failed background check is no longer silent: it shows "Update check failed" next to the button and clears after five seconds, and failures are written to the log for troubleshooting.
+
 #### Changes
 
-- The four P3 range summary cells now read real tokens → total cost → cache hit rate → total requests, matching the metric switcher on the right of the trend chart so the same metric sits in the same relative position.
+- Clicking update now starts the download and install immediately with no confirmation step, and installs exactly the version shown on the button.
+- Failed updates now report a readable reason (invalid version, not published, version unchanged, dsh command not found) instead of a generic unknown error.
+- Fixed duplicate background checks when both the timer and the return-to-page trigger fired in the same window.
+- Update status changes are now announced by screen readers; previously these messages were invisible to them.
+- The four P3 range summary cells now read real tokens, total cost, cache hit rate and total requests, matching the metric switcher on the right of the trend chart so the same metric sits in the same relative position.
 - The summary cells and the metric switcher now share one ordering definition, so adding or removing a metric can no longer desynchronise them.
 - Hovering a trend bar now draws a vertical dashed guide line marking that bar, and the value tooltip appears immediately instead of waiting for the browser's default one-second delay.
 
