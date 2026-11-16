@@ -325,6 +325,40 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 | 4 | 宿主 `/update` 有 5min 进程内缓存，仅安装成功后清空 | `index.js` · `updateCache` |
 | 5 | 「可更新」唯一可见信号是 4px `dot` | `client.js` · `IconButton` |
 
+### Issue #7 前置 · 本地假更新源 [待实施]
+
+#### 目的
+
+真实 `/update` 请求 npm registry，本地无法构造「有新版本」的场景：把 `package.json` 版本调高再打包，registry 上仍是旧的，`hasUpdate` 恒为 `false`，更新流程一条分支都测不到。需要一个**可切换的本地版本源**，让宿主从本地目录读「最新版本」，从而完整走通检测 → 提示 → 安装 → 成功。
+
+#### 设计
+
+`index.js` · `fetchLatest` 前置一个本地源判定：环境变量 `TOKEN_DASH_UPDATE_SOURCE` 指向一个本地目录时，改读该目录下的 `latest.json`，格式与 npm registry 的 `latest` 响应同构（至少含 `version`），**生产路径完全不变**。
+
+```text
+【生产】fetchLatest → https://registry.npmjs.org/dsh-token-dash/latest
+【本地】TOKEN_DASH_UPDATE_SOURCE=<dir> → <dir>/latest.json  （无网络请求）
+```
+
+- 目录约定：`TOKEN_DASH_UPDATE_SOURCE` 指向目录本身，host 读 `<dir>/latest.json`。
+- 文件缺失 / JSON 非法 / `version` 非字符串 → 与 registry 404 同义处理（`published: false`），不抛错。
+- 记录 `source` 字段（`registry` / `local`）到日志，便于区分测试与生产。
+- 安装包同样走本地：`runPluginUpdate` 调 `dsh plugin add dsh-token-dash@<version>`，本地测试时改为指向 `file:` 形式的 tarball 路径，由 `TOKEN_DASH_UPDATE_PACKAGE` 覆盖 spec。
+
+#### 验收
+
+| # | 项 | 方式 |
+|---|---|---|
+| 1 | 未设环境变量时行为不变 | 现有 `/update` 测试全绿 |
+| 2 | 设 `TOKEN_DASH_UPDATE_SOURCE` 且 `latest.json` 版本更高 → `hasUpdate: true` | 单测 + e2e |
+| 3 | `latest.json` 缺失 / 损坏 → `published: false`，不抛错 | 单测 |
+| 4 | 完整流程：检测到可用 → 确认 → 安装 → 成功提示 | e2e 走一遍 |
+
+#### 隔离约定
+
+- 该开关**只影响本机测试**：不写入 `package.json`、不进 CHANGELOG、不影响打分发包。
+- `scripts/e2e.mjs` 与新增单测使用；`tools/mock/` 不参与（那是假数据，不是假版本源）。
+
 #### 7.4 修复实施
 
 **7.4.1 检测频率（用户确认：4h）**
