@@ -1,6 +1,6 @@
 # P3 四格摘要带与用量趋势柱
 
-> 状态：待验收（重开；已出候选包 `2.2.1-local.1` 并安装到 desktop profile）<br>
+> 状态：实施中（重开；`2.2.1-local.1` 已安装，Issue #6 待修）<br>
 > 完成时间：2026-11-16（`2.2.0`）；2026-11-16 重开处理 Issue #3<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js` · `index.js` · `client.js`）<br>
 > 关联资料：[`ui-design.md`](../../ui-design.md) v3.13 §5.5、[`design.md`](../../design.md)「路由与鉴权」的 `/usage` DTO、Issue 记录见 §八（#1 / #2 已压缩进 §四）
@@ -252,20 +252,61 @@ CL：git 仓 commit `9e935eb`（`feat(p3): 四格摘要带与指标胶囊顺序�
 
 > 关闭口径：用户反馈｜dsh-token-dash 自查修复｜验证：2026-11-16 / Windows + DSH 0.2.2 本地候选包 / `npm test` 通过、`npm run e2e` UI assertions passed｜TAPD 不适用
 
-**根因**：`TrendChart` 的柱子只挂了原生 `title` 属性（`title: ${point.dayKey} · ${fmtMetric(...)}`），没有任何悬停状态。两个后果：一是不存在指示线——原生 tooltip 由操作系统绘制，组件拿不到「当前悬停哪根柱」，也无从画线；二是提示慢——原生 `title` 的显示延迟由宿主决定（Chromium 约 1s），组件侧无法调优。引入点为 2.2.0 首版趋势柱，当时按「无交互状态」的最小实现落地。
+**根因**：`TrendChart` 的柱子只挂了原生 `title` 属性，没有任何悬停状态。两个后果同源：原生 tooltip 由操作系统绘制，组件拿不到「当前悬停哪根柱」→ 无从画线；其显示延迟由宿主决定（Chromium 约 1s）→ 组件侧无法调优。引入点为 2.2.0 首版趋势柱，当时按「无交互状态」的最小实现落地。
 
 ```text
 【起点】柱容器内每根柱 = span（高度按比例），仅带 title 属性
-【★问题根源】悬停信息交给浏览器原生 title：无 hover state → 画不出指示线；显示延迟不可控 → 反应慢
-【触发】鼠标移到柱上 → 等约 1s 系统 tooltip → 才知道是哪天；无任何位置指示
-【对比】同为双入口的指标胶囊走 React 状态，切换即时生效——说明组件层有能力做即时反馈
-【修复】每个等分槽挂 onMouseEnter 写 hover 状态；用虚线 + 圆点 + 自绘浮层替换原生 title，容器 onMouseLeave 清空
+【★问题根源】悬停信息交给浏览器原生 title：无 hover state → 画不出指示线；延迟不可控 → 反应慢
+【触发】鼠标移到柱上 → 等约 1s 系统 tooltip → 才知道是哪天，且无任何位置指示
+【对比】同为双入口的指标胶囊走 React 状态、切换即时生效——证明组件层有能力做即时反馈
+【修复】每个等分槽挂 onMouseEnter 写 hover 状态；虚线 + 圆点 + 自绘浮层替换原生 title，容器 onMouseLeave 清空
 ```
 
-**处理**：`client.js` · `TrendChart` 新增 `hover` 状态（`{ center, ratio, text }`）；每个 `trendSlot` 挂 `onMouseEnter`，柱容器挂 `onMouseLeave` 清空；渲染层新增三件：`trendHoverLine`（1px 虚线，`zIndex 4`，压在柱体 `zIndex 1` 之上）、`trendHoverDot`（柱顶圆点）、`trendTip`（`zIndex 6` 自绘浮层，复用 `T.tooltip` / `T.tooltipText`）；删除柱上的原生 `title`；`metric` / `series` 变化时 `useEffect` 清空悬停态，避免旧柱位残留。零值日同样可悬停——槽位是悬停单位，不看柱高。
+**处理**：`client.js` · `TrendChart` 新增 `hover` 状态（`{ center, ratio, text }`）；`trendSlot` 挂 `onMouseEnter`、柱容器挂 `onMouseLeave`；新增 `trendHoverLine`（1px dashed，`zIndex 4`，压在柱体 `zIndex 1` 之上）、`trendHoverDot`（柱顶圆点）、`trendTip`（`zIndex 6` 自绘浮层，复用 `T.tooltip`）；删除柱上原生 `title`；`metric` / `series` 变化时 `useEffect` 清空悬停态。零值日同样可悬停——悬停单位是等分槽，不看柱高。落地明细见 §三 CHG-30~33。
 
-不变边界：柱区 132px 高度、18px 刻度行、34px 轴宽、柱宽上限 36px 均不动；浮层不加十字准线、不引入新依赖；键盘用户仍通过四格 / 胶囊取数，趋势柱保持 `aria-hidden`，不新增第二套导航。
+不变边界：柱区 132px 高、18px 刻度行、34px 轴宽、柱宽上限 36px 均不动；不加十字准线、不引入图表库；键盘用户仍通过四格 / 胶囊取数，趋势柱保持 `aria-hidden`，不新增第二套导航。
 
-CL：git 仓 commit 见 `docs(plan)` 与 `feat(p3)` 两笔（本轮未发布）
+CL：git 仓 commit `c41b9eb`（`feat(p3): 趋势柱悬停虚线指示线与即时浮层`）
 
-**遗留**：无。悬停位置按「等分槽中心」计算，与柱体居中绘制共用同一槽宽；若后续把 `trendBars` 的内边距（当前 `paddingLeft 34`）改成动态轴宽，`calc()` 里的 34px 需同步替换为变量。
+**遗留**：无。悬停位置按「等分槽中心」计算，与柱体居中绘制共用同一槽宽；若后续把 `trendBars` 的 `paddingLeft: 34` 改成动态轴宽，`calc()` 里的 34px 需同步替换为变量。
+
+### Issue #6 [待修复] 2026-11-16 README 截图里的趋势柱高度几乎一致，看不出走势
+
+#### 复现
+
+- **当前**：`docs/pic/settings.png` / `en/settings.png` 中，P3 趋势柱除少数零值缺口外，柱高基本持平，README 首图看不出「用量趋势」的含义。用户第一眼读到的信息是「每天都一样」，与趋势图存在意义相悖。
+- **期望**：截图里柱子应有明显的起伏（工作日高、周末低、个别尖峰），让人一眼看出这是走势图而非柱状装饰。
+- **影响**：`README.md` / `README.en.md` 首屏主图 + `docs/ui-design.md` 的 P3 展示图。功能本身无问题（真实数据不会等分），属交付物观感缺陷。
+
+#### 根因
+
+`tools/mock/fixtures.mjs` · `seriesFor` 的分摊权重被写死成「等权 + 第 5 天零值」：`weights = days.slice(0, -1).map((_, i) => i === 4 ? 0 : 1 / (days.length - 2))`。除零值日外每个日点拿到完全相同的份额，柱高自然齐平。注释里写的「柱高看起来才均匀」正是问题——均匀是为闭合算法服务的，不是为「看起来像趋势」服务的。末点再承接余量，进一步让最后一根柱偏离，整排看起来更平。
+
+```text
+【起点】seriesFor 需要保证 Σseries 与 total / totals 精确闭合（E2E 与单测都锁这条）
+【★问题根源】闭合靠「前 n-1 天等权分摊、末点吃余量」实现；等权 → 柱高全等 → 图像退化成矩形块
+【触发】shots.mjs 直接消费 fixtures 的 usageFor → 等权序列原样进截图
+【对比】真实采集数据逐日不同，线上不会这样；只在 mock 侧失真
+【修复】权重改为确定性的起伏曲线，保持「Σ 闭合靠末点承接余量」的算法不变
+```
+
+#### 期望修复方向（待实施确认）
+
+1. 权重改为按日索引的确定性曲线（含工作日 / 周末差异与 1–2 个尖峰），**不使用随机数**——截图必须可复现，否则每次 `npm run shots` 产物都在跳。
+2. 保留第 5 天零值（用于展示「零值日不画柱但保留槽位」）与第 6 天 `hitRate: null`（用于展示「无数据」而非 0%）这两个既有演示点。
+3. 闭合算法不动：仍由末点承接余量，`Σseries === total` 的断言继续成立。
+4. 同步 `scripts/e2e.mjs` 内联 fixture 的权重同款曲线（两份 fixture 状态集合必须一致，见 `tools/mock/AGENTS.md` §2），但**不共享代码**（该文件约定两条 fixture 各自独立）。
+5. 复核 `usageFor` 的多范围取数：`today` / `7d` / `30d` / `84d` 四档都要有起伏，84 天按月合并后也不能齐平。
+
+#### 不改的位置与理由
+
+- `client.js` · `TrendChart`：柱高由数据驱动，渲染逻辑无缺陷，本轮不动。
+- 闭合算法（末点承接余量）：E2E 与 `usage.test.mjs` 都锁了「Σ 与 total / totals 闭合」，改算法会牵连口径，收益不足。
+- `src/core.js` · `buildUsage`：真实数据本就逐日不同，不在这里造波动。
+
+#### 验收
+
+- 环境与方式：`npm run shots` 重出后目检 `docs/pic/settings.png`，柱高应有肉眼可辨的起伏；`npm test` 与 `npm run e2e` 全绿（闭合断言不变）。
+- 结果：待实施。
+- 剩余风险：权重要与 `total` 量级自洽，若曲线振幅过大导致末点承接成负值，需回退调整；截图可复现性靠「无随机数 + 固定基准日」保证。
+
