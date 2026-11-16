@@ -218,26 +218,28 @@ const ratio = value === null || value <= floor ? 0 : ((value - floor) / span) * 
 - 前缀：`[TD:vm]`
 - 高价值日志：`/usage` 每次范围查询输出 `range / grain / models / billable / tokens / currencies / points / seriesCurrencies / probeMs / durationMs`；`grain` 与 `points` 可区分「无数据」与「补零过多」。
 
-## 八、Issue 记录（重开）
+## 八、Issue 记录（压缩）
 
-### Issue #3 [已修复] 四格摘要带与右侧指标胶囊顺序不一致
+### Issue #3 [已修复] 2026-11-16 四格摘要带与右侧指标胶囊顺序不一致
 
-- **现象**：P3 摘要带四格固定为「总费用 · 真实 Tokens · 总请求数 · 缓存命中率」，而趋势区块右侧指标胶囊按 `TREND_METRICS` 排列为「Tokens · 请求 · 费用 · 命中率」。两处都是指标选择器、选中态双向同步（`aria-pressed` / `data-td-trend`），但横向顺序不同，用户在同一行视线内要重新找位置。
-- **根因**：四格是为「费用 / Tokens / 请求 / 命中率」的阅读优先级手写的四个 `cell()` 调用（`client.js` · `RangeCards`），未消费 `TREND_METRICS`；胶囊由 `TREND_METRICS.map` 生成。两处顺序各写一份，天然漂移。
-- **最终顺序（用户确认 2026-11-16）**：**真实 Tokens → 总费用 → 缓存命中率 → 总请求数**；右侧胶囊同序。命中率放第 3 是因为它是唯一的非累加型（百分比）指标，夹在两个计数指标中间会被误读为可加总项。
-- **修复方案**：把 `TREND_METRICS` 提为唯一顺序源——数组重排为 `tokens / cost / hitRate / requests`，`RangeCards` 改为遍历 `TREND_METRICS`、由 key 取 label / 主值 / 副值渲染，胶囊继续 `TREND_METRICS.map`；两处从同一数组派生，结构上不再可能分叉。
-- **影响面**：
-  - `client.js` · `TREND_METRICS`（重排）、`RangeCards`（改遍历 + 按 key 取渲染函数）；
-  - `tools/preview/templates/page-p3.html`（四格与胶囊 DOM 顺序，已先行完成）；
-  - `docs/ui-design.md` §5.5 四格 8 条规格中的顺序描述；
-  - `scripts/e2e.mjs` 新增顺序断言（四格 `data-testid` 序列与胶囊按钮序列一致）；
-  - `docs/pic/` 与 `docs/pic/en/` 的 P3 截图重出。
-- **不改**：`summaryHalf` / `summaryBand` 的尺寸与间距；默认 `metric = 'tokens'`（调整后仍在第一格，初值不变）；四格与胶囊的长短标签差异（见 #4）。
-- **验收结果**：`npm run preview page-p3 -- --png` 目检一致；`npm test` 125 通过 / 0 失败；`npm run e2e` UI assertions passed（新增断言：四格 `data-testid` 序列 = `tokens/cost/hitRate/requests`、胶囊文本序列 = `Tokens/费用/命中率/请求`、四格横向 x 递增）；`npm run shots` 重出 6 张图。
-- **窄屏**：2×2 时按新顺序为「Tokens / 费用」上排、「命中率 / 请求数」下排。
+> 关闭口径：用户反馈（截图）｜dsh-token-dash 自查修复｜验证：2026-11-16 / Windows + DSH 0.2.2 本地候选包 / `npm test` 125 通过、`npm run e2e` UI assertions passed｜TAPD 不适用
 
-### Issue #4 [已确认·并入 #3] 指标口径长短标签不一
+**根因**：`client.js` · `RangeCards` 早期四格是按「费用 / Tokens / 请求 / 命中率」的阅读优先级**手写的四个 `cell()` 调用**，而趋势区块胶囊由 `TREND_METRICS.map` 生成——同一组指标在两处各写一份顺序，天然漂移。两处又是同一选择器的双入口（`aria-pressed` / `data-td-trend` 双向同步），顺序不一致时用户要在同一行视线内重新找位置。引入点为 2.2.0 引入四格时未收敛单一顺序源。
 
-- **现象**：四格写「真实 Tokens / 总费用 / 总请求数 / 缓存命中率」，胶囊写「Tokens / 请求 / 费用 / 命中率」，同一指标两种叫法。
-- **结论（用户确认 2026-11-16）**：命名差异**保留**（窄胶囊放不下长标签），只要求**顺序一致**；本项不单开修复，随 #3 一并校验。
-- **反推约束**：新增指标时必须同时决定四格长标签与胶囊短标签，且两个数组顺序永远同源（`TREND_METRICS`），否则本问题复发。
+```text
+【起点】RangeCards 四格（手写顺序）+ TrendChart 胶囊（TREND_METRICS.map）——同一 metric 状态两个入口
+【★问题根源】四格四个 cell() 调用各自写死位置，未消费 TREND_METRICS → 与胶囊顺序无关
+【触发】四格 cost/tokens/requests/hitRate；胶囊 tokens/requests/cost/hitRate
+【对比】选中态同步正确（aria-pressed 双向），说明状态层没问题，差异只在渲染顺序
+【修复】TREND_METRICS 提为唯一顺序源（tokens → cost → hitRate → requests），RangeCards 改为遍历它渲染
+```
+
+**处理**：`client.js` · `TREND_METRICS` 重排为 `tokens / cost / hitRate / requests`；`RangeCards` 由「四个手写 `cell()`」改为遍历 `TREND_METRICS`、按 key 从 `CARDS` 取长标签 / 主值 / 副值，两处同源、结构上不可能再分叉。落地明细见 §三 CHG-22~27。
+
+不变边界：`summaryHalf` / `summaryBand` 尺寸间距不动；默认 `metric = 'tokens'` 仍在第一格；四格长标签与胶囊短标签的差异保留（窄胶囊放不下长标签），只要求顺序一致——这是 #4 的结论，已并入本项。
+
+顺序取舍：命中率排第 3 而非第 4，因为它是四格中唯一的非累加型（百分比）指标，夹在两个计数指标之间会被误读为可加总项。
+
+CL：git 仓 commit `9e935eb`（`feat(p3): 四格摘要带与指标胶囊顺序对齐（2.2.1-local.1）`）
+
+**遗留**：无。新增指标时必须同时定义四格长标签与胶囊短标签，两者顺序永久同源 `TREND_METRICS`，该约束已写入 ui-design.md §5.5。
