@@ -4,6 +4,24 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.1-local.5] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+- 更新检测的测试改为走真实版本服务：不再使用本地伪造的版本文件，检测源、版本比较与安装方式都与线上完全一致。
+- 移除了仅供测试使用的本地版本源开关与其配套逻辑，减少一套需要长期维护的旁路代码。
+
+### English
+
+#### Changes
+
+- The update check is now tested against the real version service: the local stubbed version file is gone, so the check source, version comparison and install path all match production.
+- Removed the test-only local version-source switch and its supporting code, dropping a permanent bypass path from the codebase.
+
 ## [2.2.1-local.4] - 2026-11-16
 
 > 本地构建，未发布

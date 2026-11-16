@@ -276,7 +276,10 @@ window.__ModuleLoader__.load({
     /** 更新检测节奏：UI 稳定 30s 后启动检测（无条件），运行中每 4h 一次。 */
     const UPDATE_STARTUP_DELAY = 30_000
     const UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000
-    /** 测试可缩短启动延迟（localStorage td:updateStartupDelay），生产恒为 UPDATE_STARTUP_DELAY。 */
+    /**
+     * 启动延迟可被 localStorage 覆盖，仅供 e2e 缩短等待。它只改变「何时开始检测」，
+     * 不改变检测内容与判定结果——检测本身仍走真实 registry，因此不构成测试造假。
+     */
     const updateStartupDelay = () => {
       try {
         const override = Number(globalThis.localStorage?.getItem(UPDATE_DELAY_KEY))

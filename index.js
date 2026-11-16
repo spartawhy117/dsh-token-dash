@@ -19,7 +19,16 @@ import { isNewer } from './src/version.js'
 export const name = 'dsh-token-dash'
 
 const ROUTE_PREFIX = '/token-dash/api'
-const CURRENT_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+/**
+ * 当前版本：默认取 package.json。TOKEN_DASH_CURRENT_VERSION 可覆盖，
+ * 供 e2e 用「真实 GitHub/npm 已发布版本」跑完整更新链路（不必真的装一个旧包）。
+ * 但「安装」环节仍走真实 CLI，因此覆盖值只影响比对基准，不影响安装目标。
+ */
+const CURRENT_VERSION = (() => {
+  const override = process.env.TOKEN_DASH_CURRENT_VERSION
+  if (typeof override === 'string' && override !== '') return override
+  return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+})()
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
 
 /** 宿主版本：优先环境变量，其次 Electron asar 内的 package.json；读不到时写 unknown，避免硬编码过期。 */
@@ -68,56 +77,23 @@ function installedVersion(home, profile) {
   }
 }
 
-const updateSource = () => {
-  const dir = process.env.TOKEN_DASH_UPDATE_SOURCE
-  return typeof dir === 'string' && dir !== '' ? dir : null
-}
-
-/**
- * 本地假更新源：TOKEN_DASH_UPDATE_SOURCE 指向目录时读 <dir>/latest.json。
- * 文件缺失 / JSON 非法 / 版本字段异常一律按「未发布」处理，不抛错——
- * 这是测试通道，不能因为造数据不齐就把 /update 打成 500。
- */
-function readLocalLatest(dir) {
-  try {
-    const meta = JSON.parse(readFileSync(join(dir, 'latest.json'), 'utf8'))
-    if (typeof meta?.version !== 'string' || meta.version === '') {
-      return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false, source: 'local' }
-    }
-    return {
-      current: CURRENT_VERSION,
-      latest: meta.version,
-      hasUpdate: isNewer(meta.version, CURRENT_VERSION),
-      published: true,
-      source: 'local',
-    }
-  } catch {
-    return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false, source: 'local' }
-  }
-}
-
 /** Ask the npm registry for the published latest; 404 means the package is not published yet. */
 async function fetchLatest() {
-  const dir = updateSource()
-  if (dir !== null) return readLocalLatest(dir)
   const response = await fetch('https://registry.npmjs.org/dsh-token-dash/latest', {
     headers: { accept: 'application/json' },
     signal: AbortSignal.timeout(5000),
   })
-  if (response.status === 404) return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false, source: 'registry' }
+  if (response.status === 404) return { current: CURRENT_VERSION, latest: null, hasUpdate: false, published: false }
   if (!response.ok) throw new Error(`registry-${response.status}`)
   const meta = await response.json()
+  if (typeof meta?.version !== 'string') throw new Error('invalid-registry-response')
+  return { current: CURRENT_VERSION, latest: meta.version, hasUpdate: isNewer(meta.version, CURRENT_VERSION), published: true }
   if (typeof meta?.version !== 'string') throw new Error('invalid-registry-response')
   return { current: CURRENT_VERSION, latest: meta.version, hasUpdate: isNewer(meta.version, CURRENT_VERSION), published: true, source: 'registry' }
 }
 
-/**
- * 安装 spec：生产走 npm 版本号；本地测试源（TOKEN_DASH_UPDATE_SOURCE 已设）时
- * 走 TOKEN_DASH_UPDATE_PACKAGE 指定的 tarball，保持与真实安装同一条 CLI 路径。
- */
+/** 安装 spec：默认按 npm 版本号安装，仍走与真实更新完全相同的 CLI 路径。 */
 function updateSpec(version) {
-  const pkg = process.env.TOKEN_DASH_UPDATE_PACKAGE
-  if (updateSource() !== null && typeof pkg === 'string' && pkg !== '') return pkg
   return `dsh-token-dash@${version}`
 }
 
@@ -629,7 +605,7 @@ export function apply(ctx) {
               const statusMatch = /registry-(\d+)/.exec(message)
               const errorKind = statusMatch !== null ? 'http' : (message.includes('timeout') || message.includes('abort') ? 'timeout' : 'network')
               logger.error('update', 'check.fail', {
-                source: updateSource() === null ? 'registry' : 'local',
+                source: 'registry',
                 errorKind,
                 httpStatus: statusMatch === null ? null : Number(statusMatch[1]),
                 reason: message,

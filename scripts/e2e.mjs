@@ -223,11 +223,11 @@ let updateRequests = 0
 let usageDelay = 0
 // 本地假更新源：让宿主从 <dir>/latest.json 读「最新版本」，不请求 npm registry。
 // 这样 /update 走真实后端路径，能测到「本地源 → 判定 → 提示 → 安装」整条链路。
-const updateSourceDir = join(tmpRoot, 'e2e-update-source')
-mkdirSync(updateSourceDir, { recursive: true })
-const writeLatest = (version) => writeFileSync(join(updateSourceDir, 'latest.json'), JSON.stringify({ version }))
-rmSync(join(updateSourceDir, 'latest.json'), { force: true })
-const env = { ...process.env, DSH_HOME: home, TOKEN_DASH_UPDATE_SOURCE: updateSourceDir }
+// 更新检测走真实链路：宿主直接请求 npm registry，不注入任何假版本源。
+// TOKEN_DASH_CURRENT_VERSION 把「当前版本」压到 2.1.0，让它对已发布的 2.2.0 判定为有新版本——
+// 这样 e2e 覆盖的是真实的 registry 请求、真实的版本比较、真实的安装 spec，全程没有自造数据。
+const UPDATE_BASELINE_VERSION = '2.1.0'
+const env = { ...process.env, DSH_HOME: home, TOKEN_DASH_CURRENT_VERSION: UPDATE_BASELINE_VERSION }
 let server
 let browser
 try {
@@ -278,24 +278,17 @@ try {
   }
   assert.equal((await fetch(`${base}/token-dash/api/usage?range=bad`)).status, 400)
 
-  // L2: 本地假更新源（TOKEN_DASH_UPDATE_SOURCE）——不请求 npm registry 也能判定更新
-  // refresh=1 只在本地假更新源启用时生效，用来绕过宿主 5min 缓存
-  const readUpdate = async () => (await (await fetch(`${base}/token-dash/api/update?refresh=1`)).json()).data
-  const updateMissing = await readUpdate()
-  assert.equal(updateMissing.published, false, 'missing latest.json should read as unpublished')
-  assert.equal(updateMissing.source, 'local', 'local source must be reported')
-  writeLatest(PKG_VERSION)
-  const updateSame = await readUpdate()
-  assert.equal(updateSame.published, true)
-  assert.equal(updateSame.hasUpdate, false, 'same version should not report an update')
-  writeLatest('9.9.9')
-  const updateNewer = await readUpdate()
-  assert.equal(updateNewer.hasUpdate, true, 'higher local version should report an update')
-  assert.equal(updateNewer.latest, '9.9.9')
-  writeFileSync(join(updateSourceDir, 'latest.json'), '{ broken json')
-  const updateBroken = await readUpdate()
-  assert.equal(updateBroken.published, false, 'broken latest.json should read as unpublished, not throw')
-  rmSync(join(updateSourceDir, 'latest.json'), { force: true })
+  // L2: 更新检测走真实 npm registry。当前版本被压到 2.1.0，2.2.0 已发布 → 必须判定为可更新。
+  const readUpdate = async (refresh = true) =>
+    (await (await fetch(`${base}/token-dash/api/update${refresh ? '?refresh=1' : ''}`)).json()).data
+  const updateFirst = await readUpdate()
+  assert.equal(updateFirst.published, true, 'package is published on npm')
+  assert.equal(updateFirst.current, '2.1.0', 'current version must honour TOKEN_DASH_CURRENT_VERSION')
+  assert.equal(updateFirst.latest, '2.2.0', 'latest must come from the real registry')
+  assert.equal(updateFirst.hasUpdate, true, 'an older current version must report an update')
+  // 不带 refresh 时命中宿主的 5min 缓存：两次结果一致即证明缓存生效
+  const updateCached = await readUpdate(false)
+  assert.deepEqual(updateCached, updateFirst, 'without refresh the host must serve the cached payload')
 
   // L2: export / import round-trip on the real host API.
   const exportData = (await (await fetch(`${base}/token-dash/api/export`)).json()).data
@@ -364,7 +357,7 @@ try {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: usageFor(range) }) })
   })
   // /repo 不再请求：按钮只做跳转，不拦截该路由也能通过。
-  // /update 不再 mock：走宿主的真实实现，由 TOKEN_DASH_UPDATE_SOURCE 提供「最新版本」。
+  // /update 不 mock：走宿主的真实实现，直接请求 npm registry。
   // 这里只统计请求次数，用于断言周期检测是否发生。
   page.on('request', (request) => {
     if (request.url().includes('/token-dash/api/update')) updateRequests += 1
@@ -897,40 +890,34 @@ try {
   const clearedPrefs = (await (await fetch(`${base}/token-dash/api/prefs`)).json()).data
   assert.equal(clearedPrefs.budgets['deepseek-official'].amount, 0)
 
-  // Update control: 无 latest.json 时视为「未发布」，点按钮显示「未发布」
+  // Update control：真实 registry 下 2.1.0 会看到已发布的 2.2.0。
   const updateButton = board.getByTestId('token-dash-update')
   await updateButton.waitFor({ timeout: 5000 })
-  await jsClick(updateButton)
-  await page.waitForTimeout(400)
-  assert.match(await board.innerText(), /未发布/)
-  assert.equal(await updateButton.isEnabled(), true)
   // 手动检测在 hasUpdate 时直接进 confirm 条（自动检测才产生 available）
-  writeLatest('9.9.9')
   await jsClick(updateButton)
-  await page.waitForTimeout(400)
-  assert.equal(await board.getByTestId('token-dash-update-confirm').count(), 1, 'manual check with update available enters confirm')
-  assert.match(await board.getByTestId('token-dash-update-confirm').innerText(), /发现\s*9\.9\.9/)
+  await page.waitForTimeout(600)
+  assert.equal(await board.getByTestId('token-dash-update-confirm').count(), 1, 'manual check with a real update available enters confirm')
+  assert.match(await board.getByTestId('token-dash-update-confirm').innerText(), /发现\s*2\.2\.0/)
   assert.equal(await board.getByRole('button', { name: '立即更新' }).count(), 1)
   await jsClick(board.getByRole('button', { name: '取消' }))
   await page.waitForTimeout(200)
   // available 态：自动检测不弹 confirm，只把按钮转 accent + 常显版本号。
-  // 触发方式：把上次检测时间清掉并派发 visibilitychange，走真实的自动检测分支。
+  // 触发方式：清掉上次检测时间并派发 visibilitychange，走真实的自动检测分支。
   await page.evaluate(() => {
     localStorage.setItem('td:updateCheckedAt', '0')
     document.dispatchEvent(new Event('visibilitychange'))
-    window.dispatchEvent(new Event('visibilitychange'))
   })
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(900)
   assert.equal(await updateButton.count(), 1, 'auto check must not replace the button with a confirm bar')
   assert.equal(await updateButton.getAttribute('data-state'), 'available', 'auto check with update available shows available state')
-  assert.match(await board.getByTestId('token-dash-update-latest').innerText(), /9\.9\.9/, 'version must be visible without hovering')
+  assert.match(await board.getByTestId('token-dash-update-latest').innerText(), /2\.2\.0/, 'version must be visible without hovering')
   const availableStyle = await updateButton.evaluate((node) => {
     const s = getComputedStyle(node)
     return { color: s.color, background: s.backgroundColor, height: Math.round(node.getBoundingClientRect().height) }
   })
   assert.notEqual(availableStyle.background, 'rgba(0, 0, 0, 0)', 'available button must carry an accent tint')
   assert.equal(availableStyle.height, 22, 'button height must stay 22px after component extraction')
-  // 失败分级（Issue #7 §7.6-3）：自动检测失败只给低强度提示，按钮保持 idle 外观不变红。
+  // 失败分级：自动检测失败只给低强度提示，按钮保持 idle 外观不变红。
   // 用独立页签验证，避免与上方的 available 态互相覆盖（同一按钮状态存在竞态）。
   const failPage = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   try {
@@ -952,8 +939,6 @@ try {
   } finally {
     await failPage.close().catch(() => {})
   }
-  // 本地源改为「未发布」，避免影响后续断言
-  rmSync(join(updateSourceDir, 'latest.json'), { force: true })
 
   // Logs / data entries stay reachable from the capsule.
   await jsClick(board.getByTestId('token-dash-log-open'))
@@ -992,8 +977,9 @@ try {
     const range = new URL(route.request().url()).searchParams.get('range') ?? 'today'
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: usageFor(range) }) })
   })
-  await enPage.route('**/token-dash/api/update', (route) => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { published: true, hasUpdate: false, latest: '9.9.9', current: PKG_VERSION } }),
+  // 英文页只验刻度与文案，更新提示会遮挡视线：这里固定回「无更新」，避免干扰
+  await enPage.route('**/token-dash/api/update*', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { published: true, hasUpdate: false, latest: UPDATE_BASELINE_VERSION, current: UPDATE_BASELINE_VERSION } }),
   }))
   await enPage.goto(`${base}/?token=${token}`, { waitUntil: 'domcontentloaded' })
   await enPage.waitForTimeout(2500)
