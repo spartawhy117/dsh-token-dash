@@ -132,5 +132,9 @@
   "命中率": "Hit rate",
   "无数据": "No data",
   "多币种下成本柱不可用，请切换其他指标": "Cost bars unavailable with multiple currencies; switch metric",
-  "万": "K"
+  "万": "K",
+  "发现": "Found",
+  "立即更新": "Update now",
+  "更新中": "Updating",
+  "更新检查失败": "Update check failed"
 }

@@ -618,7 +618,23 @@ export function apply(ctx) {
               json(res, 200, { ok: true, data: updateCache.data })
               return
             }
-            const data = await fetchLatest()
+            let data
+            try {
+              data = await fetchLatest()
+            } catch (error) {
+              // 失败不吞：带 errorKind / httpStatus 落日志，客户端也能据此显示「更新检查失败」
+              const message = String(error?.message ?? error)
+              const statusMatch = /registry-(\d+)/.exec(message)
+              const errorKind = statusMatch !== null ? 'http' : (message.includes('timeout') || message.includes('abort') ? 'timeout' : 'network')
+              logger.error('update', 'check.fail', {
+                source: updateSource() === null ? 'registry' : 'local',
+                errorKind,
+                httpStatus: statusMatch === null ? null : Number(statusMatch[1]),
+                reason: message,
+              })
+              json(res, 502, { ok: false, reason: errorKind })
+              return
+            }
             updateCache = { at: Date.now(), data }
             logger.info('update', 'check.ok', {
               source: data.source ?? 'registry',

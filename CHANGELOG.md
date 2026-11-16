@@ -4,6 +4,34 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.1-local.2] - 2026-11-16
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+- 更新检测改为**启动时检查一次、运行中每 4 小时检查一次**；距上次检查不足 1 小时的启动不会重复检查，避免频繁重启反复请求版本服务。
+- 发现新版本时，更新按钮会整体高亮并直接显示版本号，不需要把鼠标移上去才知道更新了什么。
+
+#### 修改
+
+- 更新按钮的几种状态重新区分：检查中、有新版本可更新、更新中、更新完成、检查失败各自呈现，失败时可直接点击重试。
+- 后台自动检查失败不再毫无提示，会显示「更新检查失败」并在 5 秒后自动消失，按钮本身不变色以免打断当前操作。
+
+### English
+
+#### Added
+
+- Update checks now run once at startup and every 4 hours while running. A restart within an hour of the last check skips the check, so frequent restarts do not keep hitting the version service.
+- When a new version exists, the update button highlights itself and shows the version number directly, so the version is visible without hovering.
+
+#### Changes
+
+- The update button now distinguishes its states clearly: checking, update available, updating, up to date, and check failed. A failed check can be retried directly from the button.
+- A failed background check is no longer silent. It shows "Update check failed" and clears after five seconds, while the button keeps its normal look so the current work is not interrupted.
+
 ## [2.2.1-local.1] - 2026-11-16
 
 > 本地构建，未发布

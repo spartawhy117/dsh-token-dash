@@ -90,6 +90,8 @@ window.__ModuleLoader__.load({
       '已导入 {month} 数据': 'Imported {month} data', '导入失败：{reason}': 'Import failed: {reason}',
       '检查失败': 'Check failed', '未发布': 'Not published', '已是最新': 'Up to date',
       '发现 {version}': 'Found {version}', '更新': 'Update', '取消': 'Cancel',
+      '发现': 'Found', '立即更新': 'Update now', '重试': 'Retry', '更新中': 'Updating',
+      '更新检查失败': 'Update check failed',
       '复制命令': 'Copy command', '命令已复制': 'Command copied', '复制失败': 'Copy failed',
       '设置加载中…': 'Loading settings…', '检查更新': 'Check for updates',
       '更新失败（{reason}）': 'Update failed ({reason})',
@@ -271,18 +273,43 @@ window.__ModuleLoader__.load({
     let updateRequest = null
     let updateResetTimer = null
     let autoUpdateChecked = false
+    /** 更新检测节奏：UI 稳定 30s 后启动补检，运行中每 4h 一次；距上次检测不足 1h 的启动不重复请求。 */
+    const UPDATE_STARTUP_DELAY = 30_000
+    const UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000
+    const UPDATE_MIN_STARTUP_AGE = 60 * 60 * 1000
+    /** 测试可缩短启动延迟（localStorage td:updateStartupDelay），生产恒为 UPDATE_STARTUP_DELAY。 */
+    const updateStartupDelay = () => {
+      try {
+        const override = Number(globalThis.localStorage?.getItem(UPDATE_DELAY_KEY))
+        if (Number.isFinite(override) && override >= 0) return override
+      } catch { /* 隐私模式忽略 */ }
+      return UPDATE_STARTUP_DELAY
+    }
+    /**
+     * 更新检测的时间戳存在 localStorage：apply 时看板组件可能还没挂载，
+     * 拿不到 /prefs 的结果，用 localStorage 才能保证启动补检不依赖组件渲染顺序。
+     */
+    const UPDATE_TS_KEY = 'td:updateCheckedAt'
+    const UPDATE_DELAY_KEY = 'td:updateStartupDelay'
+    const readStoredTs = () => {
+      try { return Number(globalThis.localStorage?.getItem(UPDATE_TS_KEY)) || 0 } catch { return 0 }
+    }
+    const writeStoredTs = (at) => {
+      try { globalThis.localStorage?.setItem(UPDATE_TS_KEY, String(at)) } catch { /* 隐私模式忽略 */ }
+    }
 
     function emitUpdate(patch) {
       updateSnapshot = { ...updateSnapshot, ...patch }
       for (const listener of updateListeners) listener()
     }
 
-    function resetUpdateLater() {
+    function resetUpdateLater(delayMs = 1600) {
       if (updateResetTimer !== null) clearTimeout(updateResetTimer)
       updateResetTimer = setTimeout(() => {
         updateResetTimer = null
-        if (updateSnapshot.phase === 'done') emitUpdate({ phase: 'idle', text: null, latest: null, command: null })
-      }, 1600)
+        if (updateSnapshot.phase === 'done') emitUpdate({ phase: 'idle', text: null, latest: null, command: null, errorKind: null })
+        else if (updateSnapshot.phase === 'autoError') emitUpdate({ phase: 'idle', text: null, errorKind: null })
+      }, delayMs)
     }
 
     function useUpdateSnapshot() {
@@ -315,14 +342,30 @@ window.__ModuleLoader__.load({
           } else {
             emitUpdate({ phase: 'idle', text: null })
           }
-        } catch {
-          if (manual) emitUpdate({ phase: 'error', text: tr('检查失败') })
-          else emitUpdate({ phase: 'idle', text: null })
+        } catch (error) {
+          // 失败分级：手动要强提示（按钮转「重试」），自动只给低强度文字且 5s 自动消失。
+          // 自动路径不能让按钮变红——用户没做任何操作，页面不该忽然报警。
+          const reason = String(error?.message ?? error)
+          const auto = !manual
+          emitUpdate({
+            phase: auto ? 'autoError' : 'error',
+            text: auto ? tr('更新检查失败') : tr('检查失败'),
+            command: null,
+            errorKind: reason,
+          })
+          // 自动检测失败提示留 5s：够看清，又不长期占位
+          if (auto) resetUpdateLater(5000)
         } finally {
           updateRequest = null
+          markUpdateCheckedAt()
         }
       })()
       return updateRequest
+    }
+
+    /** 检测完成（无论成功失败）都记时间戳：失败也计一次，避免失败后立刻又发请求。 */
+    function markUpdateCheckedAt() {
+      writeStoredTs(Date.now())
     }
 
     async function installUpdateRequest() {
@@ -559,6 +602,35 @@ window.__ModuleLoader__.load({
         boxShadow: 'var(--dsw-shadow-lv2, 0 4px 12px rgba(0,0,0,.24))',
       },
       trendTick: { flex: '1 1 0', minWidth: 0, textAlign: 'center', whiteSpace: 'nowrap' },
+      // UpdateButton：8 态矩阵见 docs/ui-design.md §5.7.1；尺寸与既有 ghost 按钮一致，不改变「版本」行排版
+      updateBox: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 },
+      updateButton: {
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+        height: 22, minWidth: 22, padding: '0 6px', boxSizing: 'border-box',
+        borderRadius: 6, border: `1px solid ${T.border}`, background: 'transparent',
+        color: T.text, fontSize: 11, font: 'inherit', cursor: 'pointer',
+        transition: 'background .15s, border-color .15s, color .15s',
+      },
+      updateButtonOn: {
+        borderColor: `color-mix(in srgb, ${T.accent} 42%, transparent)`,
+        background: `color-mix(in srgb, ${T.accent} 16%, transparent)`,
+        color: T.accent, fontWeight: 500,
+      },
+      updateButtonError: {
+        borderColor: `color-mix(in srgb, ${T.over} 42%, transparent)`,
+        background: 'transparent', color: T.over,
+      },
+      updateHint: { fontSize: 11, color: T.accent, fontWeight: 500, whiteSpace: 'nowrap' },
+      updateHintError: { fontSize: 11, color: T.over, whiteSpace: 'nowrap' },
+      updateAction: {
+        height: 22, padding: '0 10px', boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11,
+        cursor: 'pointer', border: `1px solid color-mix(in srgb, ${T.accent} 42%, transparent)`,
+        background: `color-mix(in srgb, ${T.accent} 18%, transparent)`, color: T.accent,
+      },
+      updateDismiss: {
+        height: 22, padding: '0 8px', boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11,
+        cursor: 'pointer', border: '1px solid transparent', background: 'transparent', color: T.muted,
+      },
       trendMsg: { position: 'absolute', inset: '0 0 18px 34px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
       quotaCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
       quotaCard: {
@@ -1047,6 +1119,64 @@ window.__ModuleLoader__.load({
             h('div', { style: styles.summarySub }, card.sub()))
         }))
     }
+
+    /**
+     * UpdateButton：设置区「版本」行右端的更新控件，8 态矩阵见 docs/ui-design.md §5.7.1。
+     * 有更新时按钮整体转 accent 并常显版本号——不用小圆点，避免「看到点但不知道是什么」。
+     * 失败分级：手动失败按钮转 over 色可重试；自动失败只给低强度文字，不动按钮外观。
+     */
+    function UpdateButton({ update, onCheck, onConfirm, onInstall, onCancel, onCopyCommand }) {
+      const phase = update?.phase ?? 'idle'
+      const latest = update?.latest ?? null
+      const busy = phase === 'checking' || phase === 'installing'
+      const available = phase === 'available'
+      const manualError = phase === 'error'
+      const autoError = phase === 'autoError'
+      const done = phase === 'done'
+      if (phase === 'confirm') {
+        return h('span', { style: styles.updateBox, 'data-testid': 'token-dash-update-confirm' },
+          h('span', { style: { fontSize: 12, color: T.text } }, tr('发现'), ' ', h('b', { style: { color: T.accent, fontWeight: 600 } }, latest ?? '')),
+          h('button', { type: 'button', style: styles.updateAction, onClick: () => onInstall?.() }, tr('立即更新')),
+          h('button', { type: 'button', style: styles.updateDismiss, onClick: () => onCancel?.() }, tr('取消')))
+      }
+      const iconName = busy ? 'loader' : (manualError ? 'refresh' : (done ? 'check' : 'download'))
+      const label = available
+        ? tr('发现 {version}，点击更新', { version: latest })
+        : (manualError ? tr('重试') : tr('检查更新'))
+      const buttonStyle = {
+        ...styles.updateButton,
+        ...(available ? styles.updateButtonOn : null),
+        ...(manualError ? styles.updateButtonError : null),
+        ...(busy ? { opacity: 0.55, cursor: 'default' } : null),
+      }
+      const hintText = done ? (update?.text ?? tr('已是最新')) : (autoError ? tr('更新检查失败') : null)
+      const buttonText = phase === 'installing' ? tr('更新中') : (available ? tr('更新') : null)
+      return h('span', { style: styles.updateBox, 'data-testid': 'token-dash-update-box' },
+        manualError && update?.command ? h('button', { type: 'button', style: styles.updateDismiss, onClick: () => onCopyCommand?.() }, tr('复制命令')) : null,
+        h('button', {
+          type: 'button',
+          'data-testid': 'token-dash-update',
+          'data-state': available ? 'available' : (manualError ? 'error' : 'idle'),
+          'aria-label': label,
+          title: label,
+          disabled: busy,
+          style: buttonStyle,
+          onClick: () => { if (available) onConfirm?.(); else onCheck?.() },
+        },
+          h(Icon, { name: iconName, size: 13 }),
+          buttonText !== null ? h('span', null, buttonText) : null),
+        available && latest !== null
+          ? h('span', { style: styles.updateHint, 'data-testid': 'token-dash-update-latest' }, latest)
+          : null,
+        hintText !== null
+          ? h('span', {
+            style: autoError ? styles.updateHintError : { fontSize: 11, color: T.muted },
+            'data-testid': 'token-dash-update-hint',
+          }, hintText)
+          : null)
+    }
+
+
 
     /** P3 趋势柱：连续日/月序列 → flex 柱 + 绝对定位网格线；悬停走原生 title，无交互状态。 */
     function TrendChart({ series, metric, grain = 'day', onMetricChange }) {
@@ -1710,33 +1840,15 @@ window.__ModuleLoader__.load({
       const version = summary?.version ?? ''
       const catalog = summary?.catalog
 
-      let updateControl
-      const updateBusy = update.phase === 'checking' || update.phase === 'installing'
-      const updateAvailable = update.phase === 'available'
-      const updateError = update.phase === 'error'
-      if (update.phase === 'confirm') {
-        updateControl = h('span', { style: styles.rowStart },
-          h('span', { style: styles.muted }, tr('发现 {version}', { version: update.latest })),
-          h('button', { type: 'button', style: styles.button, onClick: installUpdate }, tr('更新')),
-          h('button', { type: 'button', style: styles.button, onClick: () => emitUpdate({ phase: 'idle', latest: null }) }, tr('取消')))
-      } else {
-        updateControl = h('span', { style: styles.rowStart },
-          updateError && update.command
-            ? h('button', { type: 'button', style: styles.button, onClick: copyCommand }, tr('复制命令'))
-            : null,
-          h(IconButton, {
-            label: updateAvailable ? tr('发现 {version}，点击更新', { version: update.latest }) : tr('检查更新'),
-            testid: 'token-dash-update', disabled: updateBusy,
-            dot: updateAvailable || updateError,
-            dotColor: updateError ? T.over : T.accent,
-            onClick: () => {
-              if (updateAvailable) emitUpdate({ phase: 'confirm', latest: update.latest })
-              else checkUpdate()
-            },
-          }, h(Icon, {
-            name: updateBusy ? 'loader' : update.phase === 'done' ? 'check' : 'download', size: 13,
-          })))
-      }
+      const updateControl = h(UpdateButton, {
+        update,
+        onCheck: checkUpdate,
+        onConfirm: () => emitUpdate({ phase: 'confirm', latest: update.latest }),
+        onInstall: installUpdate,
+        onCancel: () => emitUpdate({ phase: 'idle', latest: null }),
+        onCopyCommand: copyCommand,
+      })
+
 
       const statusText = update.text ?? status?.text ?? ''
       return h('div', { 'data-testid': 'token-dash-settings', style: { display: 'grid', minWidth: 0 } },
@@ -2020,7 +2132,7 @@ window.__ModuleLoader__.load({
       }, [active])
 
       const loadPrefs = useCallback(async () => {
-        try { setPrefs(await getJson('/prefs')) } catch { /* keep previous */ }
+        try { const loaded = await getJson('/prefs'); updatePrefsCache = loaded; setPrefs(loaded) } catch { /* keep previous */ }
       }, [])
 
       const loadUsage = useCallback(async () => {
@@ -2051,6 +2163,7 @@ window.__ModuleLoader__.load({
         try {
           const saved = await putPrefs({ ...prefsRef.current, ...patch })
           prefsRef.current = saved
+          updatePrefsCache = saved
           setPrefs(saved)
           setSummary((current) => (current === null ? current : mergeBudgets(current, saved)))
           return { ok: true, prefs: saved }
@@ -2156,8 +2269,33 @@ window.__ModuleLoader__.load({
         if (!autoUpdateChecked) {
           autoUpdateChecked = true
           ctx.effect?.(() => {
-            const timer = setTimeout(() => { void checkForUpdate({ manual: false }) }, 4000)
-            return () => clearTimeout(timer)
+            // 启动补检：UI 稳定 30s 后检测；距上次检测不足 1h 则跳过，
+            // 避免一天重启多次就反复请求 registry。
+            let timer = null
+            let interval = null
+            let cancelled = false
+            const runAuto = () => { if (!cancelled) void checkForUpdate({ manual: false }) }
+            const lastAt = readStoredTs
+            timer = setTimeout(() => {
+              timer = null
+              if (Date.now() - lastAt() >= UPDATE_MIN_STARTUP_AGE) runAuto()
+              interval = setInterval(() => {
+                if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+                runAuto()
+              }, UPDATE_INTERVAL_MS)
+            }, updateStartupDelay())
+
+            const onVisible = () => {
+              if (typeof document === 'undefined' || document.visibilityState !== 'visible') return
+              if (Date.now() - lastAt() >= UPDATE_INTERVAL_MS) runAuto()
+            }
+            if (typeof document !== 'undefined') document.addEventListener?.('visibilitychange', onVisible)
+            return () => {
+              cancelled = true
+              if (timer !== null) clearTimeout(timer)
+              if (interval !== null) clearInterval(interval)
+              if (typeof document !== 'undefined') document.removeEventListener?.('visibilitychange', onVisible)
+            }
           }, 'update:startup')
         }
         ctxRef = typeof ctx === 'object' ? ctx : null

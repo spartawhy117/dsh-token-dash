@@ -77,6 +77,14 @@
 | CHG-35 | 修改 | `tools/mock/fixtures.mjs` · `seriesFor` | `hitRate: null` 的索引由固定 5 改为 `days.length - 3`，四档范围都能演示「无数据」 |
 | CHG-36 | 修改 | `tools/mock/AGENTS.md` | §3 数值与边界补「逐日权重必须确定性且带起伏」约束 |
 | CHG-37 | 修改 | `docs/pic/` · `docs/pic/en/` | 6 张截图重出，趋势柱呈现真实起伏 |
+| CHG-38 | 新增 | `index.js` · `readLocalLatest` | 本地假更新源：`TOKEN_DASH_UPDATE_SOURCE` 指向目录时读 `latest.json`，不请求 registry；缺失 / 损坏按「未发布」处理 |
+| CHG-39 | 修改 | `index.js` · `/update` | 支持 `?refresh=1`（仅本地源生效）绕过 5min 缓存；成功写 `check.ok` 日志，失败写 `check.fail` 带 `errorKind` / `httpStatus` 并返回 502 |
+| CHG-40 | 修改 | `index.js` · `updateSpec` | 本地测试时安装 spec 可指向 tarball（`TOKEN_DASH_UPDATE_PACKAGE`） |
+| CHG-41 | 新增 | `client.js` · `UpdateButton` | 8 态更新控件组件；有更新转 accent + 常显版本号；移除小圆点；手动失败可重试 |
+| CHG-42 | 修改 | `client.js` · `checkForUpdate` | 失败分级：manual → `error`（强提示 + 可重试），auto → `autoError`（低强度文字，5s 消失） |
+| CHG-43 | 修改 | `client.js` · 插件 `apply` | 启动 30s 补检（距上次 <1h 跳过）+ 4h 周期检测 + `visibilitychange` 补偿；时间戳存 localStorage |
+| CHG-44 | 修改 | `client.js` · `styles` / `EN` / `locale` | 新增 `updateButton*` 样式与 5 个词条（138 键中英一致） |
+| CHG-45 | 新增 | `test/unit/update-schedule.test.mjs` | 5 例调度单测 |
 
 > 已落地内容一律回填本表；不保留逐文件 diff。
 
@@ -296,7 +304,7 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 
 **遗留**：长跨度里周末权重相同会让部分柱高巧合相等（30 天视图 29 根非零柱中 22 根互不相同），属可接受的视觉巧合；若将来调大尖峰倍数需复核末点余量不为负。约束已写入 `tools/mock/AGENTS.md` §3。
 
-### Issue #7 [待实施] 2026-11-16 更新检测无周期轮询，且「可更新」信号过弱
+### Issue #7 [已修复] 2026-11-16 更新检测无周期轮询，且「可更新」信号过弱
 
 #### 7.1 复现
 
@@ -401,7 +409,7 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 | 6 | 尺寸未变 | `npm run e2e` 断言按钮高度 22px |
 | 7 | 三处词条同键同占位符 | `npm test` · `locale.test.mjs` |
 
-**结果**：待实施。
+**结果**：通过（2026-11-16）。`npm test` 130 通过 / 0 失败；`npm run e2e` UI assertions passed，新增断言覆盖：本地假更新源四种判定（缺失 / 同版本 / 更高 / 损坏）、手动检测进 confirm 条、自动检测产生 available 态且版本号常显、按钮高度恒 22px、自动失败显示「更新检查失败」且按钮不变红。
 
 #### 7.7 改动清单（预估）
 
@@ -418,3 +426,4 @@ CL：git 仓 commit `682ad0c`（`fix(mock): 趋势序列权重改为确定性起
 | `test/unit/` | 新增检测调度单测 |
 | `docs/ui-design.md` | 已更新（v3.16 §5.7.1） |
 | `tools/preview/drafts/update-button.html` | 已有；定稿后晋升 `templates/` |
+| `test/unit/update-schedule.test.mjs` | 新增 5 例调度单测（启动补检 / 恢复可见 / 周期到期 / 非法时间戳） |

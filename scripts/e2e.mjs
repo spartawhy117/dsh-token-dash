@@ -319,6 +319,9 @@ try {
       billingModes: { zhipu: 'subscription', moonshot: 'subscription', 'opencode-go': 'subscription' },
       priceOverrides: { 'my-relay:my-private-model': { input: 2, output: 8, currency: 'CNY' }, 'bad-override': { input: 'x' } },
       providerCurrency: { 'my-relay': 'USD', broken: 'EUR' },
+      // 启动补检默认 30s，测试缩短到 2s；UPDATE_MIN_STARTUP_AGE 置 0 让首次启动必定检测
+      updateStartupDelay: 2000,
+      updateCheckedAt: 0,
     }),
   })
   assert.equal(prefsResponse.status, 200)
@@ -883,12 +886,46 @@ try {
   await page.waitForTimeout(400)
   assert.match(await board.innerText(), /未发布/)
   assert.equal(await updateButton.isEnabled(), true)
-  // 写入本地假更新源 → 手动重检 → 出现「发现 9.9.9」
+  // 手动检测在 hasUpdate 时直接进 confirm 条（自动检测才产生 available）
   writeLatest('9.9.9')
   await jsClick(updateButton)
   await page.waitForTimeout(400)
-  assert.match(await board.innerText(), /发现 9\.9\.9/)
+  assert.equal(await board.getByTestId('token-dash-update-confirm').count(), 1, 'manual check with update available enters confirm')
+  assert.match(await board.getByTestId('token-dash-update-confirm').innerText(), /发现\s*9\.9\.9/)
+  assert.equal(await board.getByRole('button', { name: '立即更新' }).count(), 1)
   await jsClick(board.getByRole('button', { name: '取消' }))
+  await page.waitForTimeout(200)
+  // available 态：自动检测不弹 confirm，只把按钮转 accent + 常显版本号。
+  // 触发方式：把上次检测时间清掉并派发 visibilitychange，走真实的自动检测分支。
+  await page.evaluate(() => {
+    localStorage.setItem('td:updateCheckedAt', '0')
+    document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('visibilitychange'))
+  })
+  await page.waitForTimeout(600)
+  assert.equal(await updateButton.count(), 1, 'auto check must not replace the button with a confirm bar')
+  assert.equal(await updateButton.getAttribute('data-state'), 'available', 'auto check with update available shows available state')
+  assert.match(await board.getByTestId('token-dash-update-latest').innerText(), /9\.9\.9/, 'version must be visible without hovering')
+  const availableStyle = await updateButton.evaluate((node) => {
+    const s = getComputedStyle(node)
+    return { color: s.color, background: s.backgroundColor, height: Math.round(node.getBoundingClientRect().height) }
+  })
+  assert.notEqual(availableStyle.background, 'rgba(0, 0, 0, 0)', 'available button must carry an accent tint')
+  assert.equal(availableStyle.height, 22, 'button height must stay 22px after component extraction')
+  // 失败分级（Issue #7 §7.6-3）：自动检测失败只给低强度提示，按钮保持 idle 外观不变红。
+  // 本地假更新源本身不抛错（缺文件按「未发布」处理），这里用路由级故障模拟真实网络失败。
+  await page.route('**/token-dash/api/update', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{"ok":false}' }))
+  // 清掉上次检测时间，让 visibilitychange 判定为「已过期」从而触发自动检测
+  await page.evaluate(() => {
+    localStorage.removeItem('td:updateCheckedAt')
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await page.waitForTimeout(700)
+  assert.match(await board.innerText(), /更新检查失败/, 'auto check failure must be visible')
+  assert.equal(await updateButton.getAttribute('data-state'), 'idle', 'auto failure must not turn the button red')
+  await page.unroute('**/token-dash/api/update')
+  // autoError 提示会停留 5s；等它自然消失，避免干扰后续「打开日志」等断言
+  await page.waitForTimeout(5200)
   // 本地源改为「未发布」，避免影响后续断言
   rmSync(join(updateSourceDir, 'latest.json'), { force: true })
 
