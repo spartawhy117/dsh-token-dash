@@ -278,6 +278,17 @@ try {
     content: '[data-testid=token-dash-settings-capsule]{position:static !important}[data-testid=token-dash-board]{zoom:.72}',
   })
   await page.waitForTimeout(300)
+  // 悬停态：取第一根有高度的柱，撑出虚线指示线 + 浮层后再截图（README 需要展示该交互）
+  const hoverSlots = board.locator('[data-testid^=token-dash-trend-slot-]')
+  const slotCount = await hoverSlots.count()
+  // 取靠中段的柱：浮层居中于柱顶时不会压到图区边缘，虚线与浮层同时可见
+  const hoverIndex = Math.min(slotCount - 1, Math.max(0, Math.round(slotCount * 0.55)))
+  const slot = hoverSlots.nth(hoverIndex)
+  if (await slot.count() > 0) {
+    await slot.dispatchEvent('mouseover')
+    await slot.dispatchEvent('mouseenter')
+    await page.waitForTimeout(200)
+  }
   await board.screenshot({ path: join(outDir, 'settings.png') })
   console.log('[shots] settings.png')
 } finally {

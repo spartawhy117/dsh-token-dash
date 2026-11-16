@@ -14,6 +14,7 @@ This file records the **new features** and **changes** of each release in Chines
 
 - P3 范围摘要的四张卡片调整为「真实 Tokens → 总费用 → 缓存命中率 → 总请求数」，与趋势图右侧的指标切换按钮顺序完全一致，对应位置不再需要左右来回找。
 - 四张卡片与指标切换按钮现在共用同一份顺序定义，后续增删指标不会再出现两处顺序不一致。
+- 趋势柱悬停时显示一条垂直虚线标出当前所在的那根柱子，数值提示改为跟随鼠标立即出现，不再需要等待浏览器默认提示的一秒延迟。
 
 ### English
 
@@ -21,6 +22,7 @@ This file records the **new features** and **changes** of each release in Chines
 
 - The four P3 range summary cells now read real tokens → total cost → cache hit rate → total requests, matching the metric switcher on the right of the trend chart so the same metric sits in the same relative position.
 - The summary cells and the metric switcher now share one ordering definition, so adding or removing a metric can no longer desynchronise them.
+- Hovering a trend bar now draws a vertical dashed guide line marking that bar, and the value tooltip appears immediately instead of waiting for the browser's default one-second delay.
 
 ## [2.2.0] - 2026-11-16
 

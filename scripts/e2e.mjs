@@ -623,6 +623,41 @@ try {
   const zeroBox = await board.getByTestId('token-dash-trend-bar-2026-10-31').boundingBox()
   assert.equal(zeroBox === null ? 0 : Math.round(zeroBox.height), 0, 'zero-value day should render no bar')
   assert.match(await board.getByTestId('token-dash-trend-title').innerText(), /使用趋势 · Tokens/)
+  // 悬停：虚线指示线 + 浮层随鼠标出现，不依赖原生 title（Issue #5）
+  const hoverDay = '2026-10-30'
+  assert.equal(await board.getByTestId('token-dash-trend-hover-line').count(), 0, 'no guide line before hover')
+  const hoverSlot = board.getByTestId(`token-dash-trend-slot-${hoverDay}`)
+  assert.equal(await hoverSlot.count(), 1, 'every slot must be hoverable, including zero-value days')
+  const slotBox = await hoverSlot.boundingBox()
+  assert.ok(slotBox !== null)
+  // dispatchEvent 走真实 mouseenter/enter 语义，但不移动视口，避免影响后续 boundingBox 比较
+  await hoverSlot.dispatchEvent('mouseover')
+  await hoverSlot.dispatchEvent('mouseenter')
+  const lineAppeared = await board.getByTestId('token-dash-trend-hover-line')
+    .waitFor({ state: 'visible', timeout: 400 })
+    .then(() => true, () => false)
+  assert.ok(lineAppeared, 'guide line must appear within 400ms of hover, without the native title delay')
+  assert.equal(await board.getByTestId('token-dash-trend-bar-2026-10-30').getAttribute('title'), null, 'native title must be removed')
+  assert.match(await board.getByTestId('token-dash-trend-hover-tip').innerText(), /2026-10-30 · /)
+  // 虚线为虚线且垂直
+  const lineStyle = await board.getByTestId('token-dash-trend-hover-line')
+    .evaluate((node) => {
+      const s = getComputedStyle(node)
+      const r = node.getBoundingClientRect()
+      return { style: s.borderLeftStyle, width: s.width, height: s.height, left: s.left, z: s.zIndex, opacity: s.opacity, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }, color: s.borderLeftColor }
+    })
+
+  assert.equal(lineStyle.style, 'dashed', 'guide line must be dashed')
+  assert.equal(Math.round(parseFloat(lineStyle.width)), 1, 'guide line must be 1px wide')
+  assert.ok(parseFloat(lineStyle.height) > 100, 'guide line must span the plot height')
+  // 移出后消失
+  await trend.locator('[data-testid^=token-dash-trend-slot-]').first().evaluate((node) => {
+    node.parentElement.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }))
+    node.parentElement.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, relatedTarget: document.body }))
+  })
+  await page.waitForTimeout(120)
+  assert.equal(await board.getByTestId('token-dash-trend-hover-line').count(), 0, 'guide line must clear on mouse leave')
+  assert.equal(await board.getByTestId('token-dash-trend-hover-tip').count(), 0, 'tooltip must clear on mouse leave')
   // 点摘要带切指标：标题、选中态、胶囊与图表一起变
   await jsClick(board.getByTestId('token-dash-card-requests'))
   await page.waitForTimeout(120)

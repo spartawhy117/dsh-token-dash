@@ -69,6 +69,10 @@
 | CHG-27 | 修改 | `docs/pic/` · `docs/pic/en/` | P3 截图重出（`panel-api` / `panel-sub-2` / `panel-sub-3` / `settings` 及英文同名 4 张） |
 | CHG-28 | 修改 | `docs/ui-design.md` | 升 v3.14，变更记录加一行；§5.5 补四格顺序与「同源」约束 |
 | CHG-29 | 配置 | `package.json` / `CHANGELOG.md` | 版本 `2.2.1-local.1`，CHANGELOG 顶部 local 块（中英各两条） |
+| CHG-30 | 修改 | `client.js` · `TrendChart` | 新增 `hover` 状态与 `onMouseEnter` / `onMouseLeave`；删除柱上原生 `title`；新增虚线指示线 + 柱顶圆点 + 自绘浮层 |
+| CHG-31 | 修改 | `client.js` · `styles` | 新增 `trendHoverLine` / `trendHoverDot` / `trendTip`；`trendBars` 补 `zIndex: 1` 让虚线压到柱上 |
+| CHG-32 | 修改 | `docs/ui-design.md` §5.5 | 悬停规格由「原生 title」改为「虚线 + 圆点 + 自绘浮层」 |
+| CHG-33 | 修改 | `scripts/e2e.mjs` / `tools/mock/shots.mjs` | 新增 5 项悬停断言；截图脚本补悬停态取图 |
 
 > 已落地内容一律回填本表；不保留逐文件 diff。
 
@@ -243,3 +247,25 @@ const ratio = value === null || value <= floor ? 0 : ((value - floor) / span) * 
 CL：git 仓 commit `9e935eb`（`feat(p3): 四格摘要带与指标胶囊顺序对齐（2.2.1-local.1）`）
 
 **遗留**：无。新增指标时必须同时定义四格长标签与胶囊短标签，两者顺序永久同源 `TREND_METRICS`，该约束已写入 ui-design.md §5.5。
+
+### Issue #5 [已修复] 2026-11-16 柱状图悬停无虚线指示线，数值提示出现慢
+
+> 关闭口径：用户反馈｜dsh-token-dash 自查修复｜验证：2026-11-16 / Windows + DSH 0.2.2 本地候选包 / `npm test` 通过、`npm run e2e` UI assertions passed｜TAPD 不适用
+
+**根因**：`TrendChart` 的柱子只挂了原生 `title` 属性（`title: ${point.dayKey} · ${fmtMetric(...)}`），没有任何悬停状态。两个后果：一是不存在指示线——原生 tooltip 由操作系统绘制，组件拿不到「当前悬停哪根柱」，也无从画线；二是提示慢——原生 `title` 的显示延迟由宿主决定（Chromium 约 1s），组件侧无法调优。引入点为 2.2.0 首版趋势柱，当时按「无交互状态」的最小实现落地。
+
+```text
+【起点】柱容器内每根柱 = span（高度按比例），仅带 title 属性
+【★问题根源】悬停信息交给浏览器原生 title：无 hover state → 画不出指示线；显示延迟不可控 → 反应慢
+【触发】鼠标移到柱上 → 等约 1s 系统 tooltip → 才知道是哪天；无任何位置指示
+【对比】同为双入口的指标胶囊走 React 状态，切换即时生效——说明组件层有能力做即时反馈
+【修复】每个等分槽挂 onMouseEnter 写 hover 状态；用虚线 + 圆点 + 自绘浮层替换原生 title，容器 onMouseLeave 清空
+```
+
+**处理**：`client.js` · `TrendChart` 新增 `hover` 状态（`{ center, ratio, text }`）；每个 `trendSlot` 挂 `onMouseEnter`，柱容器挂 `onMouseLeave` 清空；渲染层新增三件：`trendHoverLine`（1px 虚线，`zIndex 4`，压在柱体 `zIndex 1` 之上）、`trendHoverDot`（柱顶圆点）、`trendTip`（`zIndex 6` 自绘浮层，复用 `T.tooltip` / `T.tooltipText`）；删除柱上的原生 `title`；`metric` / `series` 变化时 `useEffect` 清空悬停态，避免旧柱位残留。零值日同样可悬停——槽位是悬停单位，不看柱高。
+
+不变边界：柱区 132px 高度、18px 刻度行、34px 轴宽、柱宽上限 36px 均不动；浮层不加十字准线、不引入新依赖；键盘用户仍通过四格 / 胶囊取数，趋势柱保持 `aria-hidden`，不新增第二套导航。
+
+CL：git 仓 commit 见 `docs(plan)` 与 `feat(p3)` 两笔（本轮未发布）
+
+**遗留**：无。悬停位置按「等分槽中心」计算，与柱体居中绘制共用同一槽宽；若后续把 `trendBars` 的内边距（当前 `paddingLeft 34`）改成动态轴宽，`calc()` 里的 34px 需同步替换为变量。
