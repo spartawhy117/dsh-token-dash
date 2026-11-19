@@ -224,7 +224,7 @@ let usageDelay = 0
 // 本地假更新源：让宿主从 <dir>/latest.json 读「最新版本」，不请求 npm registry。
 // 这样 /update 走真实后端路径，能测到「本地源 → 判定 → 提示 → 安装」整条链路。
 // 更新检测走真实链路：宿主直接请求 npm registry，不注入任何假版本源。
-// TOKEN_DASH_CURRENT_VERSION 把「当前版本」压到 2.1.0，让它对已发布的 2.2.0 判定为有新版本——
+// TOKEN_DASH_CURRENT_VERSION 把「当前版本」压到 2.1.0，让它对 registry 上的最新版判定为有新版本——
 // 这样 e2e 覆盖的是真实的 registry 请求、真实的版本比较、真实的安装 spec，全程没有自造数据。
 const UPDATE_BASELINE_VERSION = '2.1.0'
 const env = { ...process.env, DSH_HOME: home, TOKEN_DASH_CURRENT_VERSION: UPDATE_BASELINE_VERSION }
@@ -278,7 +278,7 @@ try {
   }
   assert.equal((await fetch(`${base}/token-dash/api/usage?range=bad`)).status, 400)
 
-  // L2: 更新检测走真实 npm registry。当前版本被压到 2.1.0，2.2.0 已发布 → 必须判定为可更新。
+  // L2: 更新检测走真实 npm registry。当前版本被压到 2.1.0，registry 最新版更高 → 必须判定为可更新。
   const readUpdate = async (refresh = true) =>
     (await (await fetch(`${base}/token-dash/api/update${refresh ? '?refresh=1' : ''}`)).json()).data
   const updateFirst = await readUpdate()
@@ -925,7 +925,7 @@ try {
   const clearedPrefs = (await (await fetch(`${base}/token-dash/api/prefs`)).json()).data
   assert.equal(clearedPrefs.budgets['deepseek-official'].amount, 0)
 
-  // Update control：真实 registry 下 2.1.0 会看到已发布的 2.2.0。
+  // Update control：真实 registry 下 2.1.0 会看到比它更高的最新版。
   const updateButton = board.getByTestId('token-dash-update')
   await updateButton.waitFor({ timeout: 5000 })
   // 先让自动检测建立 available 态（点击前必须能看到版本号）

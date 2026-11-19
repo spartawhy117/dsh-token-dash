@@ -1269,7 +1269,7 @@ window.__ModuleLoader__.load({
       const step = Math.max(1, Math.ceil(points.length / 6))
       const emptyMessage = costBlocked
         ? tr('多币种下成本柱不可用，请切换其他指标')
-        : (points.length === 0 || known.length === 0 ? tr('该范围内暂无消耗') : null)
+        : (points.length === 0 || known.length === 0 ? tr('范围内暂无消耗') : null)
       const axisTicks = emptyMessage === null ? trendAxisTicks({ floor, max, metric, currency: costCurrency }) : []
       // 轴宽随最长刻度自适应：字号 11px 下中文≈11px、其余≈6.2px，再留 6px 与柱体的间距
       // 轴列宽度由内容自适应（grid auto 列），这里只保证空态时左侧不塌陷
