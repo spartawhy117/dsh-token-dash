@@ -615,7 +615,11 @@ window.__ModuleLoader__.load({
       trendSpacer: { flex: '1 1 auto' },
       trendPlot: { position: 'relative', height: 132, minWidth: 0 },
       trendGrid: { position: 'absolute', left: 0, right: 0, height: 1, background: T.border, pointerEvents: 'none' },
-      trendAxis: { position: 'absolute', left: 0, color: T.weak, fontSize: 11, fontVariantNumeric: 'tabular-nums' },
+      // Y 轴刻度右对齐到留白右缘：原 left:0 会压在柱体上（c41b9eb 删渲染后一直没被暴露）
+      trendAxis: {
+        position: 'absolute', right: 0, color: T.weak, fontSize: 11, lineHeight: '14px',
+        fontVariantNumeric: 'tabular-nums', textAlign: 'right', whiteSpace: 'nowrap', pointerEvents: 'none',
+      },
       trendBars: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'flex-end', gap: 2, paddingLeft: 34, zIndex: 1 },
       // 每根柱独占一个等分槽并在槽内居中：只对柱体设 maxWidth 会让所有柱挤到一侧
       trendSlot: { flex: '1 1 0', minWidth: 1, height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
@@ -662,7 +666,8 @@ window.__ModuleLoader__.load({
         height: 22, padding: '0 8px', boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11,
         cursor: 'pointer', border: '1px solid transparent', background: 'transparent', color: T.muted,
       },
-      trendMsg: { position: 'absolute', inset: '0 0 18px 34px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
+      // 空态文案：左侧留白由渲染时按 axisPad 覆盖（无刻度时回落到 34）
+      trendMsg: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
       quotaCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
       quotaCard: {
         border: `1px solid ${T.border}`, borderRadius: 8, background: T.section, padding: 16,
@@ -1071,6 +1076,24 @@ window.__ModuleLoader__.load({
       return fmtTrendTokens(value)
     }
 
+    /**
+     * 趋势图 Y 轴刻度：上 / 中 / 下三档。
+     * 底部档只在坐标下限不为 0（命中率轴）时出现——否则底部档与「0」重复，白白多一行字。
+     * 中部档取下限与上限的中点，与中间那条网格线一一对应。
+     */
+    function trendAxisTicks({ floor, max, metric, currency = 'CNY' }) {
+      const low = Number(floor) || 0
+      const high = Math.max(Number(max) || 0, low)
+      const mid = low + (high - low) / 2
+      const ticks = [
+        { key: 'top', top: 0, text: fmtAxisMetric(high, metric, currency) },
+        { key: 'mid', top: '50%', text: fmtAxisMetric(mid, metric, currency) },
+      ]
+      // 下限为 0 时底部档恒为「0」，与中部档区分度低且挤占高度，省略
+      if (low > 0) ticks.push({ key: 'bottom', top: null, text: fmtAxisMetric(low, metric, currency) })
+      return ticks
+    }
+
     /** 命中率轴下限：命中率普遍在 90% 以上，从 0 起画柱子几乎等高；最低值往下留余量并取整到 5%。 */
     function hitRateFloor(values) {
       const known = values.filter((value) => value !== null)
@@ -1232,6 +1255,14 @@ window.__ModuleLoader__.load({
       const emptyMessage = costBlocked
         ? tr('多币种下成本柱不可用，请切换其他指标')
         : (points.length === 0 || known.length === 0 ? tr('该范围内暂无消耗') : null)
+      const axisTicks = emptyMessage === null ? trendAxisTicks({ floor, max, metric, currency: costCurrency }) : []
+      // 轴宽随最长刻度自适应：字号 11px 下中文≈11px、其余≈6.2px，再留 6px 与柱体的间距
+      const axisWidth = axisTicks.reduce((widest, tick) => {
+        let px = 0
+        for (const char of tick.text) px += /[\u4e00-\u9fff]/.test(char) ? 11 : 6.2
+        return Math.max(widest, px)
+      }, 0)
+      const axisPad = axisTicks.length === 0 ? 34 : Math.max(28, Math.ceil(axisWidth) + 6)
       return h('div', { 'data-testid': 'token-dash-trend', 'data-td-trend': metric, style: styles.trendBox },
         h('div', { style: styles.trendHead },
           h('b', { 'data-testid': 'token-dash-trend-title', style: styles.trendTitle },
@@ -1243,8 +1274,20 @@ window.__ModuleLoader__.load({
             options: TREND_METRICS.map(([value, label]) => ({ value, label: tr(label) })),
           })),
         h('div', { style: styles.trendPlot },
+          // 网格与 Y 轴：三条横线对齐三档刻度；无数据时只保留网格，不画刻度文字
+          emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: 0 } }) : null,
+          emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: '50%' } }) : null,
+          emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, bottom: 18 } }) : null,
+          ...axisTicks.map((tick) => h('span', {
+            key: tick.key,
+            'data-testid': `token-dash-trend-axis-${tick.key}`,
+            'aria-hidden': true,
+            style: tick.top === null
+              ? { ...styles.trendAxis, bottom: 18, right: `calc(100% - ${axisPad}px)` }
+              : { ...styles.trendAxis, top: tick.top, right: `calc(100% - ${axisPad}px)`, transform: tick.top === '50%' ? 'translateY(-50%)' : undefined },
+          }, tick.text)),
           emptyMessage === null ? h('div', {
-            style: styles.trendBars,
+            style: { ...styles.trendBars, paddingLeft: axisPad },
             onMouseLeave: () => setHover(null),
           },
             ...points.map((point, index) => {
@@ -1265,27 +1308,27 @@ window.__ModuleLoader__.load({
                   'data-testid': `token-dash-trend-bar-${point.dayKey}`,
                   style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
                 }))
-            })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: styles.trendMsg }, emptyMessage),
+            })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: { ...styles.trendMsg, left: axisPad } }, emptyMessage),
           emptyMessage === null && hover !== null ? h('span', {
             'data-testid': 'token-dash-trend-hover-line',
             'aria-hidden': true,
-            style: { ...styles.trendHoverLine, left: `calc(34px + (100% - 34px) * ${hover.center / 100})` },
+            style: { ...styles.trendHoverLine, left: `calc(${axisPad}px + (100% - ${axisPad}px) * ${hover.center / 100})` },
           }) : null,
           emptyMessage === null && hover !== null ? h('span', {
             'data-testid': 'token-dash-trend-hover-dot',
             'aria-hidden': true,
             style: {
               ...styles.trendHoverDot,
-              left: `calc(34px + (100% - 34px) * ${hover.center / 100})`,
+              left: `calc(${axisPad}px + (100% - ${axisPad}px) * ${hover.center / 100})`,
               bottom: `calc(18px + (132px - 18px) * ${hover.ratio / 100})`,
             },
           }) : null,
-          emptyMessage === null ? h('div', { style: styles.trendTicks },
+          emptyMessage === null ? h('div', { style: { ...styles.trendTicks, left: axisPad } },
             ...points.map((point, index) => h('span', { key: point.dayKey, style: styles.trendTick },
               index % step === 0 || index === points.length - 1 ? tickOf(point.dayKey) : ''))) : null,
           emptyMessage === null && hover !== null ? h('div', {
             'data-testid': 'token-dash-trend-hover-tip',
-            style: { ...styles.trendTip, left: `calc(34px + (100% - 34px) * ${hover.center / 100})` },
+            style: { ...styles.trendTip, left: `calc(${axisPad}px + (100% - ${axisPad}px) * ${hover.center / 100})` },
           }, hover.text) : null))
     }
 

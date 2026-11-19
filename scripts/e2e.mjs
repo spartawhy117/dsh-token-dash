@@ -672,6 +672,17 @@ try {
   const zeroBox = await board.getByTestId('token-dash-trend-bar-2026-10-31').boundingBox()
   assert.equal(zeroBox === null ? 0 : Math.round(zeroBox.height), 0, 'zero-value day should render no bar')
   assert.match(await board.getByTestId('token-dash-trend-title').innerText(), /使用趋势 · Tokens/)
+  // Y 轴：上 / 中两档（下限为 0 时不出底部档），刻度必须落在柱区左侧且不压柱
+  const axisTop = board.getByTestId('token-dash-trend-axis-top')
+  const axisMid = board.getByTestId('token-dash-trend-axis-mid')
+  assert.equal(await axisTop.count(), 1, 'Y axis must render a top tick')
+  assert.equal(await axisMid.count(), 1, 'Y axis must render a mid tick')
+  assert.equal(await board.getByTestId('token-dash-trend-axis-bottom').count(), 0, 'no bottom tick when floor is 0')
+  const axisText = await axisTop.innerText()
+  assert.ok(axisText.trim().length > 0, 'top tick must carry a formatted value')
+  const [axisBox, firstBarBox] = await Promise.all([axisTop.boundingBox(), board.getByTestId('token-dash-trend-bar-2026-11-01').boundingBox().catch(() => null)])
+  assert.ok(axisBox !== null, 'axis tick must be laid out')
+  if (firstBarBox !== null) assert.ok(axisBox.x + axisBox.width <= firstBarBox.x + 1, 'axis tick must not overlap the bars')
   // 悬停：虚线指示线 + 浮层随鼠标出现，不依赖原生 title（Issue #5）
   const hoverDay = '2026-10-30'
   assert.equal(await board.getByTestId('token-dash-trend-hover-line').count(), 0, 'no guide line before hover')
@@ -714,6 +725,13 @@ try {
   assert.equal(await board.getByTestId('token-dash-card-requests').getAttribute('aria-pressed'), 'true')
   assert.equal(await board.getByTestId('token-dash-card-tokens').getAttribute('aria-pressed'), 'false')
   assert.equal(await trend.getAttribute('data-td-trend'), 'requests')
+  // 命中率轴：下限非 0 时补出底部档，且三档格式均为百分比
+  await jsClick(board.getByTestId('token-dash-card-hitRate'))
+  await page.waitForTimeout(120)
+  assert.equal(await trend.getAttribute('data-td-trend'), 'hitRate')
+  const axisKeys = await board.locator('[data-testid^=token-dash-trend-axis-]').count()
+  assert.ok(axisKeys >= 2, 'hit rate axis must render at least two ticks')
+  assert.match(await board.getByTestId('token-dash-trend-axis-top').innerText(), /%$/, 'hit rate ticks carry a percent sign')
   // 多币种下费用指标禁用，不静默取首个币种
   await jsClick(board.getByTestId('token-dash-card-cost'))
   await page.waitForTimeout(120)

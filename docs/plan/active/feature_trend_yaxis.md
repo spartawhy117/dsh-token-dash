@@ -1,6 +1,6 @@
 # P3 趋势图 Y 轴恢复
 
-> 状态：草案<br>
+> 状态：待验收<br>
 > 创建时间：2026-11-19<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
 > 关联资料：`docs/ui-design.md` §5.5、`docs/checklist/active/trend-chart-yaxis-build-checklist.md`
@@ -76,12 +76,12 @@
 
 | ID | 类型 | 文件 | 开发改动说明 |
 |---|---|---|---|
-| CHG-01 | 新增 | `client.js` · `trendAxisTicks` | 纯函数产出 2-3 档刻度（含底部档的条件） |
-| CHG-02 | 修改 | `client.js` · `TrendChart` | 恢复 3 条 `trendGrid` + Y 轴刻度渲染 |
-| CHG-03 | 修改 | `client.js` · `styles.trendAxis` | 定位由 `left: 0` 改为右对齐留白右缘 |
-| CHG-04 | 修改 | `test/unit/` | 新增 `trendAxisTicks` 边界用例 |
-| CHG-05 | 修改 | `scripts/e2e.mjs` | 断言 Y 轴 3 档存在、随指标变化、英文无「万 / 亿」 |
-| CHG-06 | 修改 | `docs/ui-design.md` §5.5 | 补变更注记（v3.15 误删，v3.17 恢复） |
+| CHG-01 | 已落地 | `client.js` · `trendAxisTicks` | 纯函数产出 2-3 档刻度（`floor > 0` 时补底部档）；单测 5 例 |
+| CHG-02 | 已落地 | `client.js` · `TrendChart` | 恢复 3 条 `trendGrid` + 三档刻度渲染，带 `data-testid=token-dash-trend-axis-*` |
+| CHG-03 | 已落地 | `client.js` · `styles.trendAxis` + `axisPad` | 右对齐到 `axisPad`，轴宽按最长刻度估算（中文 11px/字、其余 6.2px/字，下限 28px）；柱区 / 日期刻度 / 悬停层 / 空态同步跟随 |
+| CHG-04 | 已落地 | `test/unit/trend-axis.test.mjs` | 7 例：两档/三档、全零、max<floor、非数值、渲染点存在、axisPad 生效 |
+| CHG-05 | 已落地 | `scripts/e2e.mjs` | 断言上/中档存在、floor=0 时无底部档、刻度不压柱、命中率刻度带 `%` |
+| CHG-06 | 已落地 | `docs/ui-design.md` §5.5 | Y 轴条目改为自适应宽度 + 底部档条件，并记 v3.15 误删 / v3.17 恢复 |
 
 ### 3.1 改动清单
 
@@ -106,11 +106,11 @@
 
 | 项 | 来源 | 验证方式 | 结果 |
 |---|---|---|---|
-| Y 轴显示 3 档且随指标变化 | REQ-01 / REQ-03 | `npm run e2e` | 待验证 |
-| 三条网格线可见 | REQ-02 | 目检 + E2E | 待验证 |
-| 命中率底部档出现 | REQ-04 | 单测 + E2E | 待验证 |
-| 刻度不重叠 | REQ-05 | 目检截图 | 待验证 |
-| 无回归 | BND-01~03 | `npm test` + `npm run e2e` | 待验证 |
+| Y 轴显示 3 档且随指标变化 | REQ-01 / REQ-03 | `npm run e2e` | 通过 |
+| 三条网格线可见 | REQ-02 | 目检 + E2E | 通过（`settings.png` 目录可见三条横线） |
+| 命中率底部档出现 | REQ-04 | 单测 + E2E | 通过 |
+| 刻度不重叠 | REQ-05 | 目检截图 + E2E 位置断言 | 通过 |
+| 无回归 | BND-01~03 | `npm test` + `npm run e2e` | 通过（137 pass / 1 预期 skip，E2E 全绿） |
 
 ## 九、自测反馈台
 

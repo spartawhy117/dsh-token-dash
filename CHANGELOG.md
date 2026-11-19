@@ -4,6 +4,32 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.3.1-local.1] - 2026-11-19
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+**趋势图恢复 Y 轴刻度**
+
+- 整页看板的「使用趋势」区块重新显示纵坐标：顶部最大值、中部中位值两档，命中率指标额外补出下限档。
+- 恢复上 / 中 / 下三条横向网格线，与刻度对齐。
+- 刻度宽度改为自适应：按最长刻度文字自动让出空间，不再固定 34px，长数字（如「1.6千万」）不会被挤断。
+- 修复 `v3.15` 悬停改造时误删刻度渲染、导致柱区左侧长期空出一块留白的问题。
+
+### English
+
+#### Changes
+
+**Trend chart Y axis restored**
+
+- The dashboard trend chart shows vertical axis labels again: max at the top, midpoint in the middle, plus a floor label for the hit-rate metric.
+- Restored the three horizontal grid lines, aligned with the ticks.
+- The axis width is now adaptive instead of a fixed 34px, so long values such as `1.6千萬` are never clipped.
+- Fixes the regression introduced by the v3.15 hover rework, which dropped the axis rendering and left an empty gutter.
+
 ## [2.3.0] - 2026-11-16
 
 ### 中文

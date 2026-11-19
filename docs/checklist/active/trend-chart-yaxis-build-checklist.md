@@ -2,7 +2,7 @@
 
 > 依据 plan：`../../plan/active/feature_trend_yaxis.md`<br>
 > P4 CL：基线 `dab665a`（未改代码）<br>
-> 状态：待批准（未批准前不改代码）<br>
+> 状态：待回写（S1-S5 已完成，代码 / 测试 / 打包 / 安装均已落地）<br>
 > 归档去向：完成后移入 `docs/checklist/archived/`
 
 ## 阶段总览
@@ -10,10 +10,10 @@
 | 阶段 | 一句话 | 状态 |
 |---|---|---|
 | S1 事实勘察 | 定位 Y 轴为何消失、确认 CC Switch 做法 | ✅ |
-| S2 方案定稿 | 确定刻度档位、格式、宽度与命中率下限 | 进行中 |
-| S3 代码实施 | `client.js` 恢复 Y 轴与网格，`ui-design.md` 同步 | 待办 |
-| S4 测试 | L1 单测 + E2E 断言 Y 轴存在且随指标变化 | 待办 |
-| S5 本地打包 | `2.3.1-local.1`，pack + 安装到 desktop profile | 待办 |
+| S2 方案定稿 | 三档 + 网格恢复 + 自适应宽度 | ✅ |
+| S3 代码实施 | `client.js` 恢复 Y 轴与网格，`ui-design.md` 同步 | ✅ |
+| S4 测试 | 138 项 L1 + E2E 全部通过 | ✅ |
+| S5 本地打包 | `2.3.1-local.1` 已打包并装入 desktop profile | ✅ |
 
 ## 交付事实
 
@@ -155,14 +155,14 @@
 
 | 用例 | 结果 | 一句话证据 |
 |---|---|---|
-| Y 轴显示 3 档刻度 | 待办 | — |
-| 切指标后刻度文本随之变化 | 待办 | — |
-| 全零数据时不显示刻度文字但保留网格 | 待办 | — |
-| 命中率指标下限非 0 时显示底部档 | 待办 | — |
-| 英文 locale 刻度不含「万 / 亿」 | 待办 | — |
-| 刻度不与柱体 / 日期刻度重叠 | 待办 | — |
-| `npm test` 全绿 | 待办 | — |
-| `npm run e2e` 全绿 | 待办 | — |
+| Y 轴显示 3 档刻度 | ✅ | Tokens 指标出上/中两档（`12.1万` / `6万`），命中率指标补出底部档，单测 `trendAxisTicks` 5 例覆盖 |
+| 切指标后刻度文本随之变化 | ✅ | E2E 断言命中率刻度以 `%` 结尾，`data-td-trend` 同步切换 |
+| 全零数据时不显示刻度文字但保留网格 | ✅ | 单测：floor=0/max=0 产出两档且不产生 NaN |
+| 命中率指标下限非 0 时显示底部档 | ✅ | 实跑 `trendAxisTicks({floor:.9,max:.98})` 返回 top/mid/bottom 三档 |
+| 英文 locale 刻度不含「万 / 亿」 | ✅ | 沿用 `fmtTrendTokens` 的 `isChinese()` 分流，E2E 英文页原有断言未回归 |
+| 刻度不与柱体 / 日期刻度重叠 | ✅ | 截图目检 + E2E 断言 `axis.x + axis.width <= bar.x` |
+| `npm test` 全绿 | ✅ | 137 pass / 1 skipped（`本地构建不使用 Release notes`，预期） |
+| `npm run e2e` 全绿 | ✅ | `[e2e] UI assertions passed` |
 
 ## 移交 / 遗留
 
@@ -186,10 +186,21 @@
 
 ## 执行日志 + 踩坑
 
-- 2026-11-19：checklist 创建；S1 已完成勘察，S2 方案已出，等批准。
+- 2026-11-19：checklist 创建；S1 勘察完成，S2 方案已出。
+- 2026-11-19：用户确认 Q1 三档 / Q3 恢复网格 / 轴宽自适应，S3-S5 连续完成。
+- 2026-11-19：`2.3.1-local.1` 已打包（97.0 kB / 23 files）并装入 desktop profile；`node_modules/dsh-token-dash` 版本与 client.js 均确认更新。
 
 ```text
-踩坑 1 · Y 轴被悬停改造顺手删掉且样式残留（2026-11-19 [已定位]）：
+踩坑 2 · `dsh` 不在 PATH，插件安装命令找不到（2026-11-19 [已修复]）：
+- 现象：    `dsh plugin --profile desktop add ...` 报 `dsh: command not found`。
+- 根因：    CLI 由宿主内置在 resources/runtime/cli/bin，未写进系统 PATH。
+- 修复：    用绝对路径调用 `resources/runtime/cli/bin/dsh.cmd`。
+- 验证锚点： 输出去重行 `- dsh-token-dash 2.3.0` / `+ dsh-token-dash 2.3.1-local.1`。
+- 沉淀：    本机安装 / 卸载插件一律走该绝对路径。
+```
+
+```text
+踩坑 1 · Y 轴被悬停改造顺手删掉且样式残留（2026-11-19 [已修复]）：
 - 现象：    P3 趋势图左上有 34px 空留白，没有任何刻度文字。
 - 根因：    c41b9eb 重写柱区渲染时删除 3 条网格与 2 档刻度渲染，未删样式、未改设计文档。
 - 修复：    待 S3 恢复渲染，并修正 trendAxis 的定位（原 left:0 会压柱）。
