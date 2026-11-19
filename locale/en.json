@@ -124,6 +124,8 @@
   "范围内全部模型": "All models in range",
   "创建 {a} · 命中 {b}": "Created {a} · hit {b}",
   "趋势指标": "Trend metric",
+  "模型明细": "Model breakdown",
+  "范围按当前时间范围统计": "Scoped to the selected range",
   "使用趋势 · {metric}": "Trend · {metric}",
   "按天": "Daily",
   "按月": "Monthly",

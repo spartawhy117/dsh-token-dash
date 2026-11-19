@@ -4,6 +4,32 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.3.1-local.2] - 2026-11-19
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+**趋势图 Y 轴移到绘图区外，明细表加分区标题**
+
+- 纵坐标刻度从柱状图内部移到了图外侧独立一列：刻度与柱体不再挤在同一区域，读数更清楚。
+- 命中率指标的顶部刻度固定为 100%，不再显示 99.6% 这类因数据最高值而来的零碎数字。
+- 单个 0% 的日期不再把整条命中率轴拉回 0，中间刻度不会再出现 49.8% 这种没有参考价值的值。
+- 柱状图与模型明细表之间新增「模型明细」区块标题（含范围说明），两块的边界一眼可辨，不再是只有一条细线。
+
+### English
+
+#### Changes
+
+**Trend chart axis moved outside the plot; model table gains a section heading**
+
+- The vertical axis labels now occupy their own column outside the plot, so ticks and bars no longer share the same area.
+- Hit-rate axes are pinned to 100% at the top instead of showing incidental values like 99.6%.
+- A single 0% day no longer drags the whole hit-rate axis back to zero, so the midpoint tick stops landing on meaningless values such as 49.8%.
+- Added a "Model breakdown" section heading (with a range note) between the chart and the table, making the boundary between the two obvious instead of a single hairline.
+
 ## [2.3.1-local.1] - 2026-11-19
 
 > 本地构建，未发布

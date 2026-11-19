@@ -125,6 +125,7 @@ window.__ModuleLoader__.load({
       '{n} 个币种': '{n} currencies', '范围内全部模型': 'All models in range',
       '创建 {a} · 命中 {b}': 'Created {a} · hit {b}',
       '趋势指标': 'Trend metric', '使用趋势 · {metric}': 'Trend · {metric}',
+      '模型明细': 'Model breakdown', '范围按当前时间范围统计': 'Scoped to the selected range',
       '按天': 'Daily', '按月': 'Monthly',
       '与上方卡片同口径': 'Same scope as cards above',
       '命中率': 'Hit rate', '无数据': 'No data',
@@ -607,24 +608,28 @@ window.__ModuleLoader__.load({
       },
       rangeHead: { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap', gap: 16 },
       rangeMeta: { color: T.weak, fontSize: 11 },
-      detailWrap: { overflowX: 'auto', borderTop: `1px solid ${T.border}`, paddingTop: 12 },
+      detailHead: { display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${T.border}`, minWidth: 0 },
+      detailHint: { color: T.weak, fontSize: 11 },
+      detailWrap: { overflowX: 'auto', paddingTop: 8 },
       trendBox: { display: 'flex', flexDirection: 'column', gap: 8, borderTop: `1px solid ${T.border}`, paddingTop: 12, minWidth: 0 },
       trendHead: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 },
       trendTitle: { fontSize: 13, fontWeight: 600 },
       trendHint: { color: T.weak, fontSize: 11 },
       trendSpacer: { flex: '1 1 auto' },
-      trendPlot: { position: 'relative', height: 132, minWidth: 0 },
-      trendGrid: { position: 'absolute', left: 0, right: 0, height: 1, background: T.border, pointerEvents: 'none' },
-      // Y 轴刻度右对齐到留白右缘：原 left:0 会压在柱体上（c41b9eb 删渲染后一直没被暴露）
+      // 轴与绘图区两列：轴在绘图区之外（与 CC Switch 的 <YAxis> 同构），绘图区自己承担网格与柱
+      trendPlot: { display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', height: 132, minWidth: 0 },
+      trendAxisCol: { position: 'relative', minWidth: 0, paddingRight: 6 },
       trendAxis: {
-        position: 'absolute', right: 0, color: T.weak, fontSize: 11, lineHeight: '14px',
+        position: 'absolute', right: 6, color: T.weak, fontSize: 11, lineHeight: '14px',
         fontVariantNumeric: 'tabular-nums', textAlign: 'right', whiteSpace: 'nowrap', pointerEvents: 'none',
       },
-      trendBars: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'flex-end', gap: 2, paddingLeft: 34, zIndex: 1 },
+      trendPlotArea: { position: 'relative', minWidth: 0 },
+      trendGrid: { position: 'absolute', left: 0, right: 0, height: 1, background: T.border, pointerEvents: 'none' },
+      trendBars: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'flex-end', gap: 2, zIndex: 1 },
       // 每根柱独占一个等分槽并在槽内居中：只对柱体设 maxWidth 会让所有柱挤到一侧
       trendSlot: { flex: '1 1 0', minWidth: 1, height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
       trendBar: { width: '100%', maxWidth: 36, borderRadius: '3px 3px 0 0', background: T.accent },
-      trendTicks: { position: 'absolute', left: 34, right: 0, bottom: 0, height: 18, display: 'flex', alignItems: 'center', gap: 2, color: T.weak, fontSize: 11 },
+      trendTicks: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 18, display: 'flex', alignItems: 'center', gap: 2, color: T.weak, fontSize: 11 },
       // 虚线要压在柱体之上：柱容器 zIndex 1，指示线 zIndex 4，浮层 5
       trendHoverLine: {
         position: 'absolute', top: 0, bottom: 18, width: 1, marginLeft: -0.5, pointerEvents: 'none',
@@ -666,7 +671,7 @@ window.__ModuleLoader__.load({
         height: 22, padding: '0 8px', boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11,
         cursor: 'pointer', border: '1px solid transparent', background: 'transparent', color: T.muted,
       },
-      // 空态文案：左侧留白由渲染时按 axisPad 覆盖（无刻度时回落到 34）
+      // 空态文案：绘图区内居中（轴已在左列，无需再让出留白）
       trendMsg: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
       quotaCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
       quotaCard: {
@@ -1083,7 +1088,9 @@ window.__ModuleLoader__.load({
      */
     function trendAxisTicks({ floor, max, metric, currency = 'CNY' }) {
       const low = Number(floor) || 0
-      const high = Math.max(Number(max) || 0, low)
+      // 命中率轴上限恒为 100%：数据最高点往往差一点点（99.6%），按数据取值会让顶档变成
+      // 「99.6%」这种既不好看也不对称的刻度；其余指标上限仍取数据最大值。
+      const high = metric === 'hitRate' ? Math.max(1, low) : Math.max(Number(max) || 0, low)
       const mid = low + (high - low) / 2
       const ticks = [
         { key: 'top', top: 0, text: fmtAxisMetric(high, metric, currency) },
@@ -1098,9 +1105,17 @@ window.__ModuleLoader__.load({
     function hitRateFloor(values) {
       const known = values.filter((value) => value !== null)
       if (known.length === 0) return 0
-      const min = Math.min(...known)
+      // 单个 0% 日（当次请求全未命中）会把整条轴拽回 0，导致中档落在 49.8% 这种无意义刻度。
+      // 命中率轴的目的是看「差别有多大」，因此按去掉离群低点后的最低值定下限；
+      // 离群点低于下限时柱高归零，与「下限非 0 时柱高按 (v-floor)/span 归一」的既有算法一致。
+      const sorted = [...known].sort((a, b) => a - b)
+      const outliers = sorted.filter((value) => value <= 0)
+      const usable = sorted.filter((value) => value > 0)
+      const min = usable.length > 0 ? usable[0] : (outliers.length > 0 ? 0 : 0)
       const padded = min - Math.max((1 - min) / 2, 0.02)
       const floor = Math.floor(padded * 20 + 1e-9) / 20
+      // 有真实数据时下限不低于 50%：低于此值时柱高差异已无意义，直接回落为 0
+      if (usable.length === 0) return 0
       return floor < 0.5 ? 0 : floor
     }
 
@@ -1257,6 +1272,7 @@ window.__ModuleLoader__.load({
         : (points.length === 0 || known.length === 0 ? tr('该范围内暂无消耗') : null)
       const axisTicks = emptyMessage === null ? trendAxisTicks({ floor, max, metric, currency: costCurrency }) : []
       // 轴宽随最长刻度自适应：字号 11px 下中文≈11px、其余≈6.2px，再留 6px 与柱体的间距
+      // 轴列宽度由内容自适应（grid auto 列），这里只保证空态时左侧不塌陷
       const axisWidth = axisTicks.reduce((widest, tick) => {
         let px = 0
         for (const char of tick.text) px += /[\u4e00-\u9fff]/.test(char) ? 11 : 6.2
@@ -1274,62 +1290,65 @@ window.__ModuleLoader__.load({
             options: TREND_METRICS.map(([value, label]) => ({ value, label: tr(label) })),
           })),
         h('div', { style: styles.trendPlot },
-          // 网格与 Y 轴：三条横线对齐三档刻度；无数据时只保留网格，不画刻度文字
-          emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: 0 } }) : null,
-          emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: '50%' } }) : null,
-          emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, bottom: 18 } }) : null,
-          ...axisTicks.map((tick) => h('span', {
-            key: tick.key,
-            'data-testid': `token-dash-trend-axis-${tick.key}`,
-            'aria-hidden': true,
-            style: tick.top === null
-              ? { ...styles.trendAxis, bottom: 18, right: `calc(100% - ${axisPad}px)` }
-              : { ...styles.trendAxis, top: tick.top, right: `calc(100% - ${axisPad}px)`, transform: tick.top === '50%' ? 'translateY(-50%)' : undefined },
-          }, tick.text)),
-          emptyMessage === null ? h('div', {
-            style: { ...styles.trendBars, paddingLeft: axisPad },
-            onMouseLeave: () => setHover(null),
-          },
-            ...points.map((point, index) => {
-              const value = values[index]
-              const ratio = value === null || value <= floor ? 0 : Math.max(0, Math.min(100, ((value - floor) / span) * 100))
-              // 悬停即渲染虚线与浮层：不挂原生 title，避免系统 tooltip 的 ~1s 延迟
-              return h('span', {
-                key: point.dayKey,
-                'data-testid': `token-dash-trend-slot-${point.dayKey}`,
-                style: styles.trendSlot,
-                onMouseEnter: () => setHover({
-                  center: ((index + 0.5) / points.length) * 100,
-                  ratio,
-                  text: `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`,
-                }),
-              },
-                h('span', {
-                  'data-testid': `token-dash-trend-bar-${point.dayKey}`,
-                  style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
-                }))
-            })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: { ...styles.trendMsg, left: axisPad } }, emptyMessage),
-          emptyMessage === null && hover !== null ? h('span', {
-            'data-testid': 'token-dash-trend-hover-line',
-            'aria-hidden': true,
-            style: { ...styles.trendHoverLine, left: `calc(${axisPad}px + (100% - ${axisPad}px) * ${hover.center / 100})` },
-          }) : null,
-          emptyMessage === null && hover !== null ? h('span', {
-            'data-testid': 'token-dash-trend-hover-dot',
-            'aria-hidden': true,
-            style: {
-              ...styles.trendHoverDot,
-              left: `calc(${axisPad}px + (100% - ${axisPad}px) * ${hover.center / 100})`,
-              bottom: `calc(18px + (132px - 18px) * ${hover.ratio / 100})`,
+          // 左列：Y 轴（在绘图区之外，与 CC Switch 的 <YAxis> 同构）
+          h('div', { 'data-testid': 'token-dash-trend-axis-col', style: { ...styles.trendAxisCol, minWidth: axisPad } },
+            ...axisTicks.map((tick) => h('span', {
+              key: tick.key,
+              'data-testid': `token-dash-trend-axis-${tick.key}`,
+              'aria-hidden': true,
+              style: tick.top === null
+                ? { ...styles.trendAxis, bottom: 18 }
+                : { ...styles.trendAxis, top: tick.top, transform: tick.top === '50%' ? 'translateY(-50%)' : undefined },
+            }, tick.text))),
+          // 右列：绘图区（网格 / 柱 / 悬停层都只在这里活动）
+          h('div', { 'data-testid': 'token-dash-trend-plot-area', style: styles.trendPlotArea },
+            emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: 0 } }) : null,
+            emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, top: '50%' } }) : null,
+            emptyMessage === null ? h('span', { 'aria-hidden': true, style: { ...styles.trendGrid, bottom: 18 } }) : null,
+            emptyMessage === null ? h('div', {
+              style: styles.trendBars,
+              onMouseLeave: () => setHover(null),
             },
-          }) : null,
-          emptyMessage === null ? h('div', { style: { ...styles.trendTicks, left: axisPad } },
-            ...points.map((point, index) => h('span', { key: point.dayKey, style: styles.trendTick },
-              index % step === 0 || index === points.length - 1 ? tickOf(point.dayKey) : ''))) : null,
-          emptyMessage === null && hover !== null ? h('div', {
-            'data-testid': 'token-dash-trend-hover-tip',
-            style: { ...styles.trendTip, left: `calc(${axisPad}px + (100% - ${axisPad}px) * ${hover.center / 100})` },
-          }, hover.text) : null))
+              ...points.map((point, index) => {
+                const value = values[index]
+                const ratio = value === null || value <= floor ? 0 : Math.max(0, Math.min(100, ((value - floor) / span) * 100))
+                // 悬停即渲染虚线与浮层：不挂原生 title，避免系统 tooltip 的 ~1s 延迟
+                return h('span', {
+                  key: point.dayKey,
+                  'data-testid': `token-dash-trend-slot-${point.dayKey}`,
+                  style: styles.trendSlot,
+                  onMouseEnter: () => setHover({
+                    center: ((index + 0.5) / points.length) * 100,
+                    ratio,
+                    text: `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`,
+                  }),
+                },
+                  h('span', {
+                    'data-testid': `token-dash-trend-bar-${point.dayKey}`,
+                    style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
+                  }))
+              })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: styles.trendMsg }, emptyMessage),
+            emptyMessage === null && hover !== null ? h('span', {
+              'data-testid': 'token-dash-trend-hover-line',
+              'aria-hidden': true,
+              style: { ...styles.trendHoverLine, left: `${hover.center}%` },
+            }) : null,
+            emptyMessage === null && hover !== null ? h('span', {
+              'data-testid': 'token-dash-trend-hover-dot',
+              'aria-hidden': true,
+              style: {
+                ...styles.trendHoverDot,
+                left: `${hover.center}%`,
+                bottom: `calc(18px + (132px - 18px) * ${hover.ratio / 100})`,
+              },
+            }) : null,
+            emptyMessage === null ? h('div', { style: styles.trendTicks },
+              ...points.map((point, index) => h('span', { key: point.dayKey, style: styles.trendTick },
+                index % step === 0 || index === points.length - 1 ? tickOf(point.dayKey) : ''))) : null,
+            emptyMessage === null && hover !== null ? h('div', {
+              'data-testid': 'token-dash-trend-hover-tip',
+              style: { ...styles.trendTip, left: `${hover.center}%` },
+            }, hover.text) : null)))
     }
 
     function MiniBar({ ratio = 0, neutral = false, stretch = false }) {
@@ -2305,6 +2324,10 @@ window.__ModuleLoader__.load({
               h('button', { type: 'button', style: styles.button, onClick: () => { void loadUsage() } }, tr('重试'))) : null,
             h(RangeCards, { usage, metric, onMetricChange: setMetric }),
             h(TrendChart, { series: usage?.series, metric, grain: usage?.grain, onMetricChange: setMetric }),
+            // 明细表独立分区标题：柱状图与表格之间需要视觉断点，否则只有一条 1px 线难以区分
+            h('div', { style: styles.detailHead },
+              h('b', { 'data-testid': 'token-dash-detail-title', style: styles.sectionTitle }, tr('模型明细')),
+              h('span', { style: styles.detailHint }, tr('范围按当前时间范围统计'))),
             h('div', { style: styles.detailWrap }, h(DetailTable, {
               rows: models,
               providerNames: Object.fromEntries(providers.map((provider) => [provider.id, provider.name])),

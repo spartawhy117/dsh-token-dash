@@ -680,9 +680,17 @@ try {
   assert.equal(await board.getByTestId('token-dash-trend-axis-bottom').count(), 0, 'no bottom tick when floor is 0')
   const axisText = await axisTop.innerText()
   assert.ok(axisText.trim().length > 0, 'top tick must carry a formatted value')
-  const [axisBox, firstBarBox] = await Promise.all([axisTop.boundingBox(), board.getByTestId('token-dash-trend-bar-2026-11-01').boundingBox().catch(() => null)])
-  assert.ok(axisBox !== null, 'axis tick must be laid out')
+  // 轴必须在绘图区之外（与 CC Switch 的 <YAxis> 同构），不压柱
+  const [axisBox, plotBox, firstBarBox] = await Promise.all([
+    axisTop.boundingBox(),
+    board.getByTestId('token-dash-trend-plot-area').boundingBox(),
+    board.getByTestId('token-dash-trend-bar-2026-11-01').boundingBox().catch(() => null),
+  ])
+  assert.ok(axisBox !== null && plotBox !== null, 'axis and plot area must both be laid out')
+  assert.ok(axisBox.x + axisBox.width <= plotBox.x + 1, 'axis must sit outside the plot area, not inside it')
   if (firstBarBox !== null) assert.ok(axisBox.x + axisBox.width <= firstBarBox.x + 1, 'axis tick must not overlap the bars')
+  // 明细表有独立分区标题
+  assert.equal(await board.getByTestId('token-dash-detail-title').innerText(), '模型明细', 'detail table needs its own section heading')
   // 悬停：虚线指示线 + 浮层随鼠标出现，不依赖原生 title（Issue #5）
   const hoverDay = '2026-10-30'
   assert.equal(await board.getByTestId('token-dash-trend-hover-line').count(), 0, 'no guide line before hover')
