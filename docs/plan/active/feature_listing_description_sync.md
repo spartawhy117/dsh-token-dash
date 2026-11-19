@@ -1,6 +1,6 @@
 # package.json#description 与插件市场实际能力不一致
 
-> 状态：实施中<br>
+> 状态：待归档<br>
 > 创建时间：2026-11-19<br>
 > 更新时间：2026-11-19<br>
 > 关联逻辑根：`dsh-token-dash`（仓库根 `package.json`）<br>
@@ -101,9 +101,9 @@
 | description 已更新且为合法 JSON | REQ-01 / BND-01 | `node -e "require('./package.json')"` + 读取字段 | 已通过（2026-11-19，JSON 可解析，字段为新文案） |
 | 发布前检查项已写入流程文档 | REQ-02 | 读取 `docs/release.md` 与发布技能 SKILL | 已通过（2026-11-19，release.md 3b 步、SKILL 正式发布第 3 步） |
 | 首句在单行卡片内不被截断 | RSK-01 | 人工判读首句长度 | 已通过（首句「DeepSeek Harness Token 与费用看板：按供应商查看预算…」在单行内独立成义） |
-| 发版后三处文案一致 | REQ-03 | `npm view dsh-token-dash description` + 本地已装包 `package.json` | 待验证（需下一次正式发版） |
+| 发版后三处文案一致 | REQ-03 | `npm view dsh-token-dash description` + 本地已装包 `package.json` | 已通过（2.3.1，2026-11-19：npm description 含 4 家订阅；本地 npm 装包一致） |
 
 ## 九、自测反馈台
 
 - 2026-11-19 复查发现：初版文案把订阅范围写成「GLM / Kimi Coding」，漏了 OpenCode Go 与 Command Code（`src/quota-sources.js` 中 `kind: subscription` 共 4 家），也与本仓 README「8 家供应商的订阅窗口」不一致。已按方案 A 补全为 4 家。
-- 2026-11-19 用户观察：市场「已安装」页 `dsh-token-dash` 卡片描述与产品实况不符，误判为「市场没刷新」。根因见 §〇：卡片读的是已发布 manifest 的 description，而该字段自 1.0.x 未更新。状态：[待验证]（本仓 CHG-01~03 已落地，发版后三处一致由 REQ-03 验收）。
+- 2026-11-19 用户观察：市场「已安装」页 `dsh-token-dash` 卡片描述与产品实况不符，误判为「市场没刷新」。根因见 §〇：卡片读的是已发布 manifest 的 description，而该字段自 1.0.x 未更新。状态：[已修复]（随 `2.3.1` 发布，npm description 已含 4 家订阅供应商）。

@@ -2,7 +2,7 @@
 
 > 依据 plan：`../../plan/active/feature_listing_description_sync.md`、`../../plan/active/feature_trend_yaxis.md`<br>
 > P4 CL：`ee4751d`（description 补全 4 家订阅）、`547b700`（Y 轴恢复）、`b6cc2a9`（移出绘图区 + 表格分区）<br>
-> 状态：待批准（未批准前不改代码、不打包、不发布）<br>
+> 状态：待回写（S0–S5 已完成并已正式发布 v2.3.1；S6 上游 PR 待用户操作）<br>
 > 目标版本：`2.3.1`（PATCH；纯文案 + 视觉修正，无新增能力）<br>
 > 归档去向：完成后移入 `docs/checklist/archived/`
 
@@ -11,13 +11,13 @@
 | 阶段 | 一句话 | 状态 |
 |---|---|---|
 | S0 多语言核实 | 新增文案的中英覆盖已核 | ✅ |
-| S1 文案与版本定稿 | description / CHANGELOG / 版本号三处对齐 | 进行中 |
-| S2 测试 | L1 + E2E 全绿（含英文字典完整性） | 待办 |
-| S3 打包与本地验证 | `2.3.1` tarball + desktop 实装目检 | 待办 |
-| S4 正式发布 | 提交、tag、双 workflow 上线 | 待办 |
-| S5 发布后核验 | npm latest / description / Release body | 待办 |
+| S1 文案与版本定稿 | description / CHANGELOG / 版本号三处对齐 | ✅ |
+| S2 测试 | 140 项 L1 + E2E 全绿，语言键缺口归零 | ✅ |
+| S3 打包与本地验证 | `2.3.1` tarball 23 files，已实装验证 | ✅ |
+| S4 正式发布 | tag `v2.3.1`，双 workflow success | ✅ |
+| S5 发布后核验 | latest=2.3.1、description 含 4 家、body 正确 | ✅ |
 | S6 上游市场同步 | PR 改 `data/plugins/*.yml`，发现页口径对齐 | 待办 |
-| S7 回写与收口 | plan 验收 + 正式发布记录 | 待办 |
+| S7 回写与收口 | 两个 plan 已回写 + 发布记录已更新 | ✅ |
 
 ## 交付事实
 
@@ -171,15 +171,15 @@
 | 词典键集与占位符一致 | ✅ | `test/unit/locale.test.mjs` 2 例通过（2026-11-19） |
 | 新增文案中英覆盖 | ✅ | `模型明细` / `范围按当前时间范围统计` 三处齐备，已枚举比对 |
 | 英文页无中文回退 | ✅ | E2E `en-US` 页断言通过（例外：趋势空态见 S1 第 4 步） |
-| `package.json` 合法且版本为 `2.3.1` | 待办 | — |
-| L1 `npm test` | 待办 | — |
-| `npm run e2e` | 待办 | — |
-| `npm run pack` 产物检查 | 待办 | — |
-| 本地实装目检 | 待办 | — |
-| npm `latest` = 2.3.1 | 待办 | — |
-| npm `description` 等于仓库文案 | 待办 | — |
-| Release body 等于 CHANGELOG 块 | 待办 | — |
-| 发现页与已安装卡片文案一致 | 待办 | — |
+| `package.json` 合法且版本为 `2.3.1` | ✅ | `node -e require('./package.json')` 正常，version=2.3.1 |
+| L1 `npm test` | ✅ | 140 pass / 0 fail（local 块已收敛，Release notes 用例恢复执行） |
+| `npm run e2e` | ✅ | `[e2e] UI assertions passed` |
+| `npm run pack` 产物检查 | ✅ | 23 files，无 `.tmp/` / `build/` |
+| 本地实装目检 | ✅ | desktop profile 实装 2.3.1，版本与描述正确 |
+| npm `latest` = 2.3.1 | ✅ | 轮询约 90 秒后 `dist-tags.latest=2.3.1` |
+| npm `description` 等于仓库文案 | ✅ | 含 `GLM / Kimi / OpenCode Go / Command Code` |
+| Release body 等于 CHANGELOG 块 | ✅ | body 首段为「趋势图恢复纵坐标…」 |
+| 发现页与已安装卡片文案一致 | 待办 | 待 S6 上游 PR 合并 |
 
 ## 移交 / 遗留
 
@@ -189,6 +189,15 @@
 | M2 | tag 推送与发布放行 | 需用户明确指令，AI 不自行执行 |
 | M3 | 市场索引可能滞后于上游合并 | 上游两级 workflow 时序，非本仓可控 |
 | M4 | `该范围内暂无消耗` 的多语言缺口 | 自 `9907212` 起存在；本次发布一并处置或显式豁免，见 S1 第 4 步 |
+
+```text
+踩坑 5 · publish workflow 成功 ≠ npm 立即可见（2026-11-19 [已定位]）：
+- 现象：    publish 显示 success，但 `npm view dist-tags` 仍是 2.3.0，`npm view pkg@2.3.1` 报 404。
+- 根因：    npm 端发布后需异步处理，日志中明写「being processed and may take a few minutes」。
+- 修复：    无需处理，轮询 `npm view dsh-token-dash dist-tags --json` 即可（本次约 90 秒）。
+- 验证锚点： dist-tags.latest 变为 2.3.1。
+- 沉淀：    发布后核验必须轮询，不能立即判失败。
+```
 
 ## 施工提醒
 
@@ -209,7 +218,9 @@
 
 ## 执行日志 + 踩坑
 
-- 2026-11-19：checklist 创建，状态 `待批准`。S0 多语言核实完成，结论见专节。
+- 2026-11-19：checklist 创建，S0 多语言核实完成。
+- 2026-11-19：用户选 A 方案（复用已有键），S1–S5 执行完毕，`v2.3.1` 已正式发布并核验通过。
+- 2026-11-19：S7 回写完成（两个 plan + 发布记录）。剩余 S6 上游 PR 待用户操作。
 - 2026-11-19：此前已在 `ee4751d` 完成 description 补全，`547b700` / `b6cc2a9` 完成 Y 轴两轮改善，本地构建至 `2.3.1-local.2`。
 
 ```text

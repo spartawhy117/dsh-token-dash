@@ -1,6 +1,6 @@
 # P3 趋势图 Y 轴恢复
 
-> 状态：待归档<br>
+> 状态：待归档（已随 `2.3.1` 正式发布，2026-11-19）<br>
 > 创建时间：2026-11-19<br>
 > 关联逻辑根：`dsh-token-dash`（`client.js`）<br>
 > 关联资料：`docs/ui-design.md` §5.5、`docs/checklist/archived/trend-chart-yaxis-build-checklist.md`（已归档）
