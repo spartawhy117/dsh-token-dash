@@ -12,7 +12,7 @@
 
 - 本仓 `package.json#description` 当前为「DeepSeek Harness Token 看板：月度预算与订阅配额、账户余额、时间范围费用与真实 Tokens 明细，支持本地 JSON 导出 / 导入备份。」，自 `1.0.x` 起未改动过（来源：`git log -p -- package.json`，description 仅出现在首次提交）。
 - 同一文案在 `v2.3.0` tag 内仍存在（来源：`git show v2.3.0:package.json`），即 npm registry `dsh-token-dash@2.3.0` 对外发布的也是这版旧文案（来源：registry.npmjs.org/dsh-token-dash）。
-- DSH 插件管理器的 `pluginInventory.list` / `pluginManager.listBundles` 返回的是 **manifest descriptions**（来源：DSH `0.2.2-rc.5` 内 `packages/boot/plugin-manager/src/index.ts:500` 的 schema 说明）。
+- DSH 插件管理器的 `pluginInventory.list` / `pluginManager.listBundles` 返回的是 **manifest descriptions**（来源：DSH `0.2.2-rc.5` 内 `packages/boot/plugin-manager/src/index.ts` 中 `pluginManager/listBundles` 的 schema 说明）。
 - 官方市场「已安装」卡片的数据链为：Host `listBundles` → `packageView()` 透出 `bundle.description` → 卡片直接渲染，**不读取市场索引 description**（来源：DSH `0.2.2-rc.5` 客户端 `@deepseek-ai/dsh-client-ui-plugin-market` 的 `InstalledStore.read()` 与 `packageView()`）。
 - 市场「发现」页走另一条链：`parseMarketIndex` → `plugin()` 中的 `optional(object, "description", …)`，即索引 JSON 声明的 description（来源：同上 `parseMarketIndex` 实现）。
 - Awesome DSH Plugin 索引（`dsh-plugin-catalog@2026.1118.23310` 的 `index.json` / `plugins.json`，jsDelivr 线上同版）里 `dsh-token-dash` 的 `description.zh` 已是新版卖点文案，但长度为 159 字符并以 `可导出 /…` 截断（来源：`plugins.json` 与线上 `index.json` 对读）。
@@ -34,7 +34,7 @@
 
 ## 二、设计方案
 
-### 2.1 描述字段的取值来源
+### 2.1 结构：描述字段的取值来源
 
 ```text
 现状
