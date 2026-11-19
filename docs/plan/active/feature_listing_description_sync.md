@@ -105,4 +105,5 @@
 
 ## 九、自测反馈台
 
+- 2026-11-19 复查发现：初版文案把订阅范围写成「GLM / Kimi Coding」，漏了 OpenCode Go 与 Command Code（`src/quota-sources.js` 中 `kind: subscription` 共 4 家），也与本仓 README「8 家供应商的订阅窗口」不一致。已按方案 A 补全为 4 家。
 - 2026-11-19 用户观察：市场「已安装」页 `dsh-token-dash` 卡片描述与产品实况不符，误判为「市场没刷新」。根因见 §〇：卡片读的是已发布 manifest 的 description，而该字段自 1.0.x 未更新。状态：[待验证]（本仓 CHG-01~03 已落地，发版后三处一致由 REQ-03 验收）。
