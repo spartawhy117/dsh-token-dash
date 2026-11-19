@@ -2,9 +2,9 @@
 
 > 依据 plan：`../../plan/active/feature_listing_description_sync.md`、`../../plan/active/feature_trend_yaxis.md`<br>
 > P4 CL：`ee4751d`（description 补全 4 家订阅）、`547b700`（Y 轴恢复）、`b6cc2a9`（移出绘图区 + 表格分区）<br>
-> 状态：待回写（S0–S5 已完成并已正式发布 v2.3.1；S6 上游 PR 待用户操作）<br>
+> 状态：已归档（S0–S7 完成；`v2.3.1` 已发布；S6 上游 PR #16877 已提交待评审；用户 2026-11-19 指令归档）<br>
 > 目标版本：`2.3.1`（PATCH；纯文案 + 视觉修正，无新增能力）<br>
-> 归档去向：完成后移入 `docs/checklist/archived/`
+> 归档去向：`docs/checklist/archived/listing-description-release-build-checklist.md`（2026-11-19 归档）
 
 ## 阶段总览
 
