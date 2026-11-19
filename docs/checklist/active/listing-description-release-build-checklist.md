@@ -1,153 +1,185 @@
-# 2.3.1 发布：description 口径修正 + 市场文案对齐
+# 2.3.1 正式发布：description 口径修正 + 趋势图改善
 
-> 依据 plan：`../../plan/active/feature_listing_description_sync.md`<br>
-> P4 CL：`ee4751d`（description 补全 4 家订阅供应商）、`49d301c`、`62d7c1a`<br>
-> 状态：待批准（未批准前不执行任何发布动作）<br>
+> 依据 plan：`../../plan/active/feature_listing_description_sync.md`、`../../plan/active/feature_trend_yaxis.md`<br>
+> P4 CL：`ee4751d`（description 补全 4 家订阅）、`547b700`（Y 轴恢复）、`b6cc2a9`（移出绘图区 + 表格分区）<br>
+> 状态：待批准（未批准前不改代码、不打包、不发布）<br>
+> 目标版本：`2.3.1`（PATCH；纯文案 + 视觉修正，无新增能力）<br>
 > 归档去向：完成后移入 `docs/checklist/archived/`
 
 ## 阶段总览
 
 | 阶段 | 一句话 | 状态 |
 |---|---|---|
-| S1 文案定稿 | 三个展示面的文案口径统一为「4 家订阅」 | 进行中 |
-| S2 CHANGELOG | 写 2.3.1 正式块（中英双语），预览待确认 | 待办 |
-| S3 测试与打包 | L1 + E2E 全绿，pack 出 tarball | 待办 |
-| S4 提交与 tag | 提交发布、推 tag、双 workflow 上线 | 待办 |
-| S5 核验 | npm latest / description / Release body 三项核验 | 待办 |
-| S6 上游市场 | 提 PR 改 `data/plugins/*.yml`，让发现页同步 | 待办 |
-| S7 回写与收口 | plan 验收回填 + 正式发布记录更新 | 待办 |
+| S0 多语言核实 | 新增文案的中英覆盖已核 | ✅ |
+| S1 文案与版本定稿 | description / CHANGELOG / 版本号三处对齐 | 进行中 |
+| S2 测试 | L1 + E2E 全绿（含英文字典完整性） | 待办 |
+| S3 打包与本地验证 | `2.3.1` tarball + desktop 实装目检 | 待办 |
+| S4 正式发布 | 提交、tag、双 workflow 上线 | 待办 |
+| S5 发布后核验 | npm latest / description / Release body | 待办 |
+| S6 上游市场同步 | PR 改 `data/plugins/*.yml`，发现页口径对齐 | 待办 |
+| S7 回写与收口 | plan 验收 + 正式发布记录 | 待办 |
 
 ## 交付事实
 
 | 事实 | 依据 |
 |---|---|
-| 订阅供应商恰为 4 家：zhipu / moonshot / opencode-go / command-code | `src/quota-sources.js` 的 `PROVIDER_SOURCES` 中 `kind: subscription`（2026-11-19 实跑枚举） |
+| 订阅供应商恰为 4 家：zhipu / moonshot / opencode-go / command-code | `src/quota-sources.js` 的 `PROVIDER_SOURCES` 中 `kind: subscription`（实跑枚举） |
 | 本仓 README 已声明 8 家供应商、订阅窗口含 5h/周/月 | `README.md` 供应商表 |
 | 市场「已安装」卡片读已发布 manifest 的 description | DSH `0.2.2-rc.5` `pluginManager.listBundles` schema + `packageView()` |
-| 市场「发现」页读上游 `README.zh.md`，源头是 `data/plugins/*.yml` | 上游 `scripts/build-site.mjs` 的 `parseReadme()`；本条目文件 `data/plugins/spartawhy117__dsh-token-dash.yml` |
-| 上游不读本仓 `package.json`；YAML 内无任何指向 npm manifest 的字段 | 已读取该 YAML 全文 |
-| 上游 `dsh-plugin-catalog` npm 包自动生成、不接受 PR；真正源仓库是 `awesome-dsh-plugin/awesome-dsh-plugin` | 该包 README 自述 |
-| 上游合并后需 `sync-readme.yml` → `build-site.yml` 两级 workflow 才生效 | 两个 workflow 的触发条件 |
+| 市场「发现」页读上游 `data/plugins/*.yml` → README → build-site，与 npm manifest 无关 | 上游 `scripts/build-site.mjs` 的 `parseReadme()` |
+| 上游需 `sync-readme.yml` → `build-site.yml` 两级 workflow 才生效 | 两个 workflow 的触发条件 |
 | 当前正式版 `2.3.0`，tag `v2.3.0`，2026-11-16 发布 | `references/official-release-version.md` |
+| 本地构建累计到 `2.3.1-local.2`，含 Y 轴 + 表格分区两项用户可见改善 | `CHANGELOG.md` local 块 |
 
 ## 决策记录
 
 | # | 问题 | 定案 |
 |---|---|---|
-| Q1 | description 的订阅范围怎么写 | 方案 A：列全 4 家（`GLM / Kimi / OpenCode Go / Command Code`），接受文案变长 |
-| Q2 | 是否仅为文案单独发版 | 发。理由：能力口径对外错报 2 家，属对外信息失准，非排版问题 |
-| Q3 | 版本号 | `2.3.1`（PATCH；纯文案 / 元数据，无功能改动） |
+| Q1 | description 的订阅范围怎么写 | 方案 A：列全 4 家（`GLM / Kimi / OpenCode Go / Command Code`），接受文案变长（159 字符） |
+| Q2 | 是否仅为文案单独发版 | 发。原判断「不影响留存可不发」已**推翻**——订阅口径错报影响的是拉新转化；且现已积累两项用户可见改善 |
+| Q3 | 版本号 | `2.3.1`（PATCH；纯文案 + 视觉修正） |
 | Q4 | 是否直接改上游 README | 不改。上游 README 为生成物，只提 `data/plugins/*.yml` 的 PR |
-| Q5 | 早期判断「发版不影响留存可直接不发」 | 已推翻：订阅口径错误影响的是拉新转化，不是留存 |
+| Q5 | 是否把 Y 轴改善并入本次发布 | 并入。`2.3.1-local.1` / `local.2` 的改动一并进正式版，不为视觉修正单独再发 |
+| Q6 | CHANGELOG 的 local 块如何处置 | 按发布流程聚合进 `## [2.3.1]` 正式块后删除 local 块，最终历史不保留 `-local` |
+
+## S0 多语言核实结论
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 新增键「模型明细」 | ✅ 三处齐备 | `client.js` EN dict `Model breakdown`；`locale/zh.json` / `en.json` 同键同值 |
+| 新增键「范围按当前时间范围统计」 | ✅ 三处齐备 | `client.js` EN dict `Scoped to the selected range`；两个 json 同步 |
+| 三轮新增文案（Y 轴 / 表格分区 / 刷新提示） | ✅ 全部走 `tr()` | 无硬编码中文字面量进入渲染路径 |
+| 词典键集一致性 | ✅ | `test/unit/locale.test.mjs` 两例通过（键集与占位符同步） |
+| 英文页无中文回退 | ✅ | E2E `en-US` 页断言标题为 `Trend · …`、刻度不含「万 / 亿」 |
+| **遗留缺口** | ⚠ 1 处 | `该范围内暂无消耗`（趋势图空态）在 `client.js` / `locale/*.json` 均无对应键——`tr()` 找不到时回退为键本身，英文界面会显示中文。**该问题自 `9907212` 起存在，非本轮引入**，见 S1 处置 |
 
 ## 阶段详情
 
-### S1 文案定稿（进行中）
+### S0 多语言核实（✅ 已完成）
 
 **AI 先行**
 
-1. `package.json#description` 已更新为 4 家订阅版本（`ee4751d`）。
-2. 核对 `README.md` / `README.en.md` 顶部一句话与供应商表，确认与 4 家订阅一致。
-3. 核对 `docs/pic/` 市场截图（`panel-sub-2.png` / `panel-sub-3.png`）是否已反映 4 家订阅卡片。
-4. 输出三处文案的最终对照表供审阅。
+1. 枚举 `client.js` 全部 135 个 `tr()` 键，与 `locale/zh.json`、`locale/en.json`、`client.js` 内置 `EN` 词典三方比对。
+2. 结论：仅 1 个键三方皆缺（`该范围内暂无消耗`），其余全部覆盖。
+3. 确认 `tr()` 未命中时回退为键本身（`activeTranslate` 的 `ZH[key] ?? key`），因此该键在英文界面显示中文。
 
 **你收尾**
 
-1. 确认 description 文案可用（长度 159 字符是否接受）。
-2. 确认截图是否需要重拍。
-3. 回复暗号：`S1 定稿，进入 S2`。
+1. 确认该缺口是否本次一并修（见 S1 第 4 步）。
 
-### S2 CHANGELOG（待办）
+### S1 文案与版本定稿（进行中）
 
 **AI 先行**
 
-1. 在 `CHANGELOG.md` 顶部新增 `## [2.3.1] - YYYY-MM-DD`，中英双语。
-2. 只写真实变更：description 口径修正、补全 4 家订阅、e2e 断言不再钉死历史版本号。
-3. 输出正式块全文预览，**停下**等确认。
+1. `package.json`：`version` 由 `2.3.1-local.2` 改为 `2.3.1`；`description` 保持已定稿的 4 家订阅版本。
+2. `CHANGELOG.md`：把 `2.3.1-local.1` 与 `2.3.1-local.2` 两个 local 块聚合为 `## [2.3.1] - YYYY-MM-DD` 正式块，删除 local 块；**只写真实变更**，不夸大。
+3. `scripts/e2e.mjs`：同步 `UPDATE_BASELINE_VERSION` 相关注释与两处版本 fixture（`baseSummary.version` 若存在、update mock 的 `current`）。
+4. **多语言缺口处置（待你拍板）**：把 `该范围内暂无消耗` 统一为已有键 `范围内暂无消耗`（含 en `No usage in this range`），或新增该键到三处词典。前者改动更小、语义等价。
+5. 输出正式块全文与版本对照，**停下**等确认。
 
 **你收尾**
 
-1. 审阅正式块措辞，确认无夸大。
+1. 审阅正式块措辞，确认无夸大、无未发生的能力描述。
+2. 对第 4 步缺口处置给出选择。
+3. 回复暗号：`S1 通过，进入 S2`。
+
+### S2 测试（待办）
+
+**AI 先行**
+
+1. `npm test`（L1），确认 139 项（含 locale 键集一致性）全绿。
+2. `npm run e2e` 全绿；若 S1 处置了多语言缺口，补一条英文页断言：趋势空态文案不得出现中文。
+3. 记录两项结果与一句话证据。
+
+**你收尾**
+
+1. 确认测试全绿。
 2. 回复暗号：`S2 通过，进入 S3`。
 
-### S3 测试与打包（待办）
+### S3 打包与本地验证（待办）
 
 **AI 先行**
 
-1. 同步 `scripts/e2e.mjs` 需要跟版本的地方（`UPDATE_BASELINE_VERSION` 与相关注释）。
-2. 运行 `npm test`（L1）与 `npm run e2e`。
-3. `npm run pack`，确认 `build/dsh-token-dash-2.3.1.tgz` 内容不含 `.tmp/`、`build/`。
+1. `npm run pack`，确认 `build/dsh-token-dash-2.3.1.tgz` 内容与文件数（预期 23 files，无 `.tmp/`、无 `build/`）。
+2. 停止，等你授权安装。
 
 **你收尾**
 
-1. 确认 tarball 大小与文件清单。
-2. 回复暗号：`S3 通过，进入 S4`。
+1. 授权后装入 desktop profile（用绝对路径 `resources/runtime/cli/bin/dsh.cmd`，`dsh` 不在 PATH）。
+2. 目检：趋势图轴在绘图区外、明细表有分区标题、设置页版本号显示 `2.3.1`。
+3. 回复暗号：`S3 目检通过，进入 S4`。
 
-### S4 提交与 tag（待办）
+### S4 正式发布（待办）
 
 **AI 先行**
 
-1. 整理提交清单（文件级），准备 `chore: release 2.3.1` 的提交信息。
+1. 整理提交清单（文件级），准备 `chore: release 2.3.1` 提交信息。
 2. 推送 `main` 后**停下**，等你放行 tag。
 
 **你收尾**
 
 1. 手工执行或授权：`git tag -a v2.3.1 -m "2.3.1" && git push origin v2.3.1`。
-2. 回复暗号：`tag 已推，进入 S5`。
+2. 等 `release.yml` 与 `publish.yml` 两个 workflow 成功。
+3. 回复暗号：`tag 已推且 workflow 通过，进入 S5`。
 
-### S5 核验（待办）
+### S5 发布后核验（待办）
 
 **AI 先行**
 
 1. `npm view dsh-token-dash dist-tags --json` 的 `latest` 必须是 `2.3.1`。
-2. `npm view dsh-token-dash description` 必须等于仓库新文案。
-3. `gh release view v2.3.1 --json body,assets`：body 等于 CHANGELOG 块，assets 含 tarball。
-4. body 缺失时用 `scripts/release-notes.mjs` 修复。
+2. `npm view dsh-token-dash description` 必须等于仓库新文案（含 4 家订阅）。
+3. `gh release view v2.3.1 --json body,assets`：body 等于 CHANGELOG 正式块，assets 含 `dsh-token-dash-2.3.1.tgz`。
+4. body 缺失或不一致时用 `scripts/release-notes.mjs` 修复。
 
 **你收尾**
 
-1. 确认 npm 页面文案已更新。
+1. 确认 npm 页面文案与描述已更新。
 2. 回复暗号：`S5 核验通过，进入 S6`。
 
-### S6 上游市场（待办）
+### S6 上游市场同步（待办）
 
 **AI 先行**
 
-1. 按 4 家订阅口径改写 `data/plugins/spartawhy117__dsh-token-dash.yml` 的 `en` / `zh` 两段。
+1. 按 4 家订阅口径改写 `data/plugins/spartawhy117__dsh-token-dash.yml` 的 `en` / `zh`。
 2. 控制 `zh` 在 155 字符内，避开上游 `clampMeta` 截断。
-3. 输出完整 YAML 供你复制。
+3. 输出完整 YAML 供复制。
 
 **你收尾**
 
-1. 到 `awesome-dsh-plugin/awesome-dsh-plugin` 提 PR，只改上述一个文件。
-2. 合并后等两级 workflow 跑完，确认发现页文案更新。
+1. 到 `awesome-dsh-plugin/awesome-dsh-plugin` 提 PR，只改该文件（勿改 README，那是生成物）。
+2. 合并后等 `sync-readme` → `build-site` 两级 workflow，确认发现页文案更新。
 3. 回复暗号：`S6 PR 已提`。
 
 ### S7 回写与收口（待办）
 
 **AI 先行**
 
-1. 回写 plan：REQ-03 验收结果、状态转 `待归档`。
-2. 更新 `references/official-release-version.md`（版本、tag、日期、Release URL、workflow id）。
-3. 单独提交并推送。
+1. 回写 `feature_listing_description_sync.md`：REQ-03 验收结果、状态转 `待归档`。
+2. 回写 `feature_trend_yaxis.md`：确认随 `2.3.1` 发布。
+3. 更新 `references/official-release-version.md`（版本、tag、日期、Release URL、workflow id）。
+4. 单独提交并推送。
 
 **你收尾**
 
-1. 确认无需归档 plan（或给出归档指令）。
+1. 给出归档指令。
 2. 回复暗号：`S7 完成`。
 
 ## 测试 / 走查表
 
 | 用例 | 结果 | 一句话证据 |
 |---|---|---|
-| `package.json` 合法且为新文案 | 待办 | — |
+| 词典键集与占位符一致 | ✅ | `test/unit/locale.test.mjs` 2 例通过（2026-11-19） |
+| 新增文案中英覆盖 | ✅ | `模型明细` / `范围按当前时间范围统计` 三处齐备，已枚举比对 |
+| 英文页无中文回退 | ✅ | E2E `en-US` 页断言通过（例外：趋势空态见 S1 第 4 步） |
+| `package.json` 合法且版本为 `2.3.1` | 待办 | — |
 | L1 `npm test` | 待办 | — |
 | `npm run e2e` | 待办 | — |
 | `npm run pack` 产物检查 | 待办 | — |
+| 本地实装目检 | 待办 | — |
 | npm `latest` = 2.3.1 | 待办 | — |
 | npm `description` 等于仓库文案 | 待办 | — |
-| GitHub Release body 等于 CHANGELOG 块 | 待办 | — |
-| 发现页 / 已安装卡片文案一致 | 待办 | — |
+| Release body 等于 CHANGELOG 块 | 待办 | — |
+| 发现页与已安装卡片文案一致 | 待办 | — |
 
 ## 移交 / 遗留
 
@@ -156,24 +188,29 @@
 | M1 | 上游 PR 的提交与评审 | 用户手工操作；AI 只出稿 |
 | M2 | tag 推送与发布放行 | 需用户明确指令，AI 不自行执行 |
 | M3 | 市场索引可能滞后于上游合并 | 上游两级 workflow 时序，非本仓可控 |
+| M4 | `该范围内暂无消耗` 的多语言缺口 | 自 `9907212` 起存在；本次发布一并处置或显式豁免，见 S1 第 4 步 |
 
 ## 施工提醒
 
 1. 发版前文案必须定稿：一旦发布，description 无法修改，只能再发一版。
-2. `docs/release.md` 与 `release` skill 已加入 description 核对项，本阶段必须逐条走。
-3. CHANGELOG 正式块只按 tag 版本提取，不按文件第一块提取。
-4. 本地 8 处 `2.2.0` / `2.1.0` 字样多为 e2e 基线版本，改动前先确认是断言还是注释。
-5. 发布前确认 `-local` 块已清空，正式块已聚合。
+2. `docs/release.md` 与 release skill 的正式发布第 3 步已含 description 核对项，必须逐条走。
+3. CHANGELOG 正式块按 tag 版本提取，不按文件第一块提取。
+4. 本地构建 `2.3.1-local.1` / `local.2` 必须聚合成正式块后删除，最终历史不保留 `-local`。
+5. `dsh` 不在 PATH，插件安装一律用 `resources/runtime/cli/bin/dsh.cmd` 绝对路径。
+6. 测试期间 npm registry 可能返回 `429` 限流，E2E 失败先用 `curl` 探 registry 再判代码。
+7. 提交前用 `grep -qU $'\r'` 复核换行符，避免整文件 CRLF 造成 diff 噪声。
 
 ## plan 回写候选
 
-1. `feature_listing_description_sync.md` §五：REQ-01 / REQ-02 / REQ-03 验收结果回填。
-2. 同上 §〇：补充「上游目录由 `data/plugins/*.yml` 驱动、需两级 workflow」这一事实。
-3. 同上头部状态：`实施中` → `待验收` → `待归档`。
+1. `feature_listing_description_sync.md` §五：REQ-03 验收结果回填，状态 `待验证` → `待归档`。
+2. `feature_listing_description_sync.md` §〇：补「上游目录由 `data/plugins/*.yml` 驱动、需两级 workflow」事实。
+3. `feature_trend_yaxis.md`：确认随 `2.3.1` 正式发布，状态 `待归档`。
+4. `docs/ui-design.md` §5.5：v3.18 规格已在 `b6cc2a9` 落地，无需再改，仅需核验引用版本号。
 
 ## 执行日志 + 踩坑
 
-- 2026-11-19：checklist 创建，状态 `待批准`。此前已在 `ee4751d` 完成 description 补全 4 家订阅。
+- 2026-11-19：checklist 创建，状态 `待批准`。S0 多语言核实完成，结论见专节。
+- 2026-11-19：此前已在 `ee4751d` 完成 description 补全，`547b700` / `b6cc2a9` 完成 Y 轴两轮改善，本地构建至 `2.3.1-local.2`。
 
 ```text
 踩坑 1 · 市场文案与 package.json 不是同一来源（2026-11-19 [已定位]）：
@@ -181,14 +218,32 @@
 - 根因：    发现页读上游 data/plugins/*.yml → README → build-site，与 npm manifest 无关。
 - 修复：    需分别改：本仓 package.json（发版生效）+ 上游 YAML PR（重建生效）。
 - 验证锚点： 上游 PR 合并并跑完 sync-readme + build-site 后，发现页显示 4 家订阅。
-- 沉淀：    plan §〇 已记录该数据链；checklist 交付事实表同步。
+- 沉淀：    plan §〇 已记录该数据链。
 ```
 
 ```text
 踩坑 2 · description 初版把订阅范围写窄（2026-11-19 [已修复]）：
-- 现象：    初版文案写「GLM / Kimi Coding」，与小节事实不符。
+- 现象：    初版文案写「GLM / Kimi Coding」，与代码事实不符。
 - 根因：    照抄了过时的上游目录文案，未回代码核对。
 - 修复：    src/quota-sources.js 实跑枚举确认 4 家后改写为 A 方案。
 - 验证锚点： package.json description 含 OpenCode Go 与 Command Code。
-- 沉淀：    文案类改动一律先回代码/配置枚举事实，不抄现成描述。
+- 沉淀：    文案类改动一律先回代码 / 配置枚举事实，不抄现成描述。
+```
+
+```text
+踩坑 3 · tr() 未命中静默回退为键本身（2026-11-19 [待处置]）：
+- 现象：    '该范围内暂无消耗' 在英文界面显示中文。
+- 根因：    client.js EN dict 与 locale/*.json 均无该键；activeTranslate 为 `ZH[key] ?? key`，不报错。
+- 修复：    统一为已有键「范围内暂无消耗」，或补全三处词典（S1 第 4 步择一）。
+- 验证锚点： 英文页触发趋势空态时不再出现中文。
+- 沉淀：    新增 tr() 键必须同时进 client.js EN dict 与两个 locale json，否则静默降级。
+```
+
+```text
+踩坑 4 · npm registry 429 导致 E2E 假失败（2026-11-19 [已定位]）：
+- 现象：    e2e 报 `Cannot read properties of undefined (reading 'published')`。
+- 根因：    registry.npmjs.org 对本机 IP 返回 429，更新检测拿不到 latest；在干净 HEAD 上同样失败。
+- 修复：    无需改码；等待限流恢复后重跑即绿。
+- 验证锚点： `curl -o /dev/null -w '%{http_code}' registry.npmjs.org/dsh-token-dash/latest` 返回 200。
+- 沉淀：    e2e 失败先探 registry 状态，再判定是否代码问题。
 ```
