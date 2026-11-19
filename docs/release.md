@@ -18,6 +18,7 @@
 1. **版本基准**：读 `.agents/skills/dsh-token-dash-release/references/official-release-version.md`，用 `npm view dsh-token-dash dist-tags --json` 与 `gh release view vX.Y.Z` 核验；不一致时停止。版本号由用户确认。
 2. **合并 local 块**：把自上次正式版以来的全部 `-local` 块按时间聚合进新的 `## [X.Y.Z]` 正式块，然后删除这些 local 块；CHANGELOG 最终只保留完整正式历史，不出现 `-local` 或“本地构建”条目。
 3. **版本号**：`package.json` 改为 `X.Y.Z`；`index.js` 的 `CURRENT_VERSION` 自动生效；同步 `scripts/e2e.mjs` 两处 fixture。
+3b. **description 核对**：`package.json#description` 必须是当前版本能力的准确描述（新增能力后最容易漏改；市场「已安装」卡片读取的正是这个字段，不读市场索引）。发版后用 `npm view dsh-token-dash description` 与本地已装包 `node_modules/dsh-token-dash/package.json` 两处对读，必须与仓库一致。
 4. **CHANGELOG 预览**：输出正式块完整 `新增 / 修改` 预览，等用户确认后再继续。
 5. **测试**：`npm test`（L1）+ `npm run e2e` 全绿。
 6. **提交**：`git add -A && git commit -m "chore: release X.Y.Z" && git push`；确认无 `.tmp/`、`build/`、凭证。

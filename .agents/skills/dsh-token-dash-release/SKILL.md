@@ -66,13 +66,14 @@ description: 管理 dsh-token-dash 的本地构建草稿（CHANGELOG local 块�
 
 1. 确认工作区只有本次发布相关改动（`.tmp/`、`build/` 不入库）。
 2. 确认 CHANGELOG 顶部已无 `-local` 块，正式块已聚合全部变更。
-3. 运行 `npm test` 与 `npm run e2e`；全绿后 `npm run pack`，确认 `build/dsh-token-dash-<version>.tgz`。
-4. 提交：`git add -A && git commit -m "chore: release <version>"`，推送 `main`。
-5. 创建并推送 tag：`git tag -a v<version> -m "<version>" && git push origin v<version>`。
-6. 等待两个 workflow 成功：`gh run watch <id> --exit-status`（`release` 与 `publish`）。
-7. 核验 npm：`npm view dsh-token-dash dist-tags --json` 的 `latest` 必须是 <version>；npm 处理可能延迟数分钟，轮询而非立即判定失败。
-8. 核验 GitHub Release：`gh release view v<version> --json body,assets`。body 必须等于 CHANGELOG 对应正式块；assets 必须含 `dsh-token-dash-<version>.tgz`。
-9. body 为空、缺失或与 CHANGELOG 不一致时立即修复：
+3. 核对 `package.json#description` 仍是当前版本能力的准确描述——市场「已安装」卡片读取的就是这个字段（不读市场索引），新增能力后最容易漏改。
+4. 运行 `npm test` 与 `npm run e2e`；全绿后 `npm run pack`，确认 `build/dsh-token-dash-<version>.tgz`。
+5. 提交：`git add -A && git commit -m "chore: release <version>"`，推送 `main`。
+6. 创建并推送 tag：`git tag -a v<version> -m "<version>" && git push origin v<version>`。
+7. 等待两个 workflow 成功：`gh run watch <id> --exit-status`（`release` 与 `publish`）。
+8. 核验 npm：`npm view dsh-token-dash dist-tags --json` 的 `latest` 必须是 <version>；npm 处理可能延迟数分钟，轮询而非立即判定失败。
+9. 核验 GitHub Release：`gh release view v<version> --json body,assets`。body 必须等于 CHANGELOG 对应正式块；assets 必须含 `dsh-token-dash-<version>.tgz`。
+10. body 为空、缺失或与 CHANGELOG 不一致时立即修复：
 
 ```bash
 node scripts/release-notes.mjs <version> --out build/release-notes-<version>.md
@@ -80,7 +81,7 @@ gh release edit v<version> --notes-file build/release-notes-<version>.md
 gh release view v<version> --json body
 ```
 
-10. 发布成功后更新 `references/official-release-version.md`（版本、tag、日期、Release URL），单独提交并推送。
+11. 发布成功后更新 `references/official-release-version.md`（版本、tag、日期、Release URL），单独提交并推送。
 
 ## 阻断条件
 

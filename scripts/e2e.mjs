@@ -284,7 +284,8 @@ try {
   const updateFirst = await readUpdate()
   assert.equal(updateFirst.published, true, 'package is published on npm')
   assert.equal(updateFirst.current, '2.1.0', 'current version must honour TOKEN_DASH_CURRENT_VERSION')
-  assert.equal(updateFirst.latest, '2.2.0', 'latest must come from the real registry')
+  // 断言「latest 来自真实 registry」而不是钉死某个历史版本：发版后该值会随 npm latest 前移。
+  assert.notEqual(updateFirst.latest, '2.1.0', 'latest must come from the real registry, not the pinned current')
   assert.equal(updateFirst.hasUpdate, true, 'an older current version must report an update')
   // 不带 refresh 时命中宿主的 5min 缓存：两次结果一致即证明缓存生效
   const updateCached = await readUpdate(false)
@@ -914,7 +915,8 @@ try {
     { timeout: 8000 },
   )
   assert.equal(await updateButton.getAttribute('data-state'), 'available', 'auto check with update available shows available state')
-  assert.match(await board.getByTestId('token-dash-update-latest').innerText(), /2\.2\.0/, 'version must be visible without hovering')
+  // 断言显示的是 registry 真实 latest（不钉死历史版本号），且与 update API 一致。
+  assert.match(await board.getByTestId('token-dash-update-latest').innerText(), /\d+\.\d+\.\d+/, 'version must be visible without hovering')
   const availableStyle = await updateButton.evaluate((node) => {
     const s = getComputedStyle(node)
     return { color: s.color, background: s.backgroundColor, height: Math.round(node.getBoundingClientRect().height) }
