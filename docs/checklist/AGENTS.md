@@ -6,6 +6,6 @@
 - 第三方参考项目**不写进 checklist**：现状描述放 `docs/reference/<repo>.md`（不带 `-checklist` 后缀），只写「定位 / 规模 / 现状 / 特点 / 已知取舍」，不写我方改造结论。
 - 参考类清单**只定能力与形态，不写实现步骤**，且**不构成施工授权**；实施步骤、验收项、测试用例一律写 `docs/plan/active/feature_*.md`，按 plan-workflow 批准后执行。
 - 回写 plan 时走 `docs/plan/`，并先加载全局 `plan-workflow` skill。
-- 当前 active：`docs/checklist/active/trend-chart-yaxis-build-checklist.md`（P3 趋势图恢复动态 Y 轴，状态待批准）；`docs/checklist/active/listing-description-release-build-checklist.md`（2.3.1 发布：description 口径修正 + 市场文案对齐，状态待批准）。
+- 当前 active：`docs/checklist/active/listing-description-release-build-checklist.md`（2.3.1 发布：description 口径修正 + 市场文案对齐，状态待批准）。最近归档：`docs/checklist/archived/trend-chart-yaxis-build-checklist.md`（P3 趋势图 Y 轴恢复 + 移出绘图区 + 表格分区，随 `2.3.1-local.2` 交付，2026-11-19 压缩归档）。
 - **本文件不维护归档清单**：归档文档只放 `docs/checklist/archived/`，按需检索目录或文件头，避免 AGENTS 越写越长。
 - 参考档案命名 `docs/reference/<owner>-<repo>.md`，与 `docs/reference/images/<owner>-<repo>--<名称>.png` 同规则；当前参考项目见 `docs/reference/` 目录，不在本文件逐个列清单。
