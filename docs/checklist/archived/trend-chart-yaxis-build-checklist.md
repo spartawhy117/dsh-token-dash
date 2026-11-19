@@ -1,7 +1,7 @@
 # 趋势图 Y 轴恢复施工稿（S1–S6）
 
 > 状态：已归档（S1–S6 全部落地，测试通过；用户 2026-11-19 指令压缩归档）<br>
-> 上游方案：[`feature_trend_yaxis.md`](../../plan/active/feature_trend_yaxis.md)<br>
+> 上游方案：[`feature_2.3.1_visual_and_listing.md`](../../plan/archived/feature_2.3.1_visual_and_listing.md)（原 `feature_trend_yaxis.md` 已合并归档）<br>
 > 关联契约：[`ui-design.md`](../../ui-design.md) §5.5（v3.18）<br>
 > 目标版本：`2.3.1-local.2`（本地构建，不 tag、不发布）<br>
 > P4 CL：`547b700`（首版 Y 轴）/ `b6cc2a9`（移出绘图区 + 表格分区）

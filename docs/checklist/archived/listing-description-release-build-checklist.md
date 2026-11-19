@@ -1,6 +1,6 @@
 # 2.3.1 正式发布：description 口径修正 + 趋势图改善
 
-> 依据 plan：`../../plan/active/feature_listing_description_sync.md`、`../../plan/active/feature_trend_yaxis.md`<br>
+> 依据 plan：`../../plan/archived/feature_2.3.1_visual_and_listing.md`（两份 active plan 已合并归档）<br>
 > P4 CL：`ee4751d`（description 补全 4 家订阅）、`547b700`（Y 轴恢复）、`b6cc2a9`（移出绘图区 + 表格分区）<br>
 > 状态：已归档（S0–S7 完成；`v2.3.1` 已发布；S6 上游 PR #16877 已提交待评审；用户 2026-11-19 指令归档）<br>
 > 目标版本：`2.3.1`（PATCH；纯文案 + 视觉修正，无新增能力）<br>
