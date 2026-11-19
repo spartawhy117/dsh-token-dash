@@ -84,14 +84,15 @@ Screenshots use mock data so the full layout is visible at once.
 - Subscription windows use three slots: first left, second center, third right; two windows occupy the first two slots.
 - Model column is capped at 150; Tokens / requests / hit rate are right-aligned.
 
-**P3 · Full dashboard**: cards for 8 providers, a four-cell summary (cost / real tokens / requests / cache hit rate), usage trend bars, 8-column model breakdown and a settings capsule; the page owns its scrollbar at the window edge.
+**P3 · Full dashboard**: cards for 8 providers, a four-cell summary (cost / real tokens / requests / cache hit rate), usage trend bars with a labeled vertical axis and grid lines, a model breakdown section and a settings capsule; the page owns its scrollbar at the window edge.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/settings.png" alt="Full dashboard" />
 </p>
 
 - API usage card: budget input, planned balance, real balance, month-to-date spend; subscription card: one ring per window with remaining percentage and countdown.
-- Breakdown: model / Tokens / input / cache / output / requests / hit rate / cost; everything except the model column is right-aligned.
+- Trend chart: the vertical axis takes its own column outside the plot, with three ticks that follow the selected metric; three grid lines line up with those ticks; the hit-rate axis is pinned to 100% at the top, and a single 0% day cannot drag its floor back to zero.
+- Breakdown: its own section heading, then model / Tokens / input / cache / output / requests / hit rate / cost; everything except the model column is right-aligned.
 - Settings capsule: refresh interval + account-balance toggle; logs, export/import, price table and version below.
 - The settings section has an external "Settings and data" title above the capsule; the capsule itself keeps the refresh interval, logs/data controls and version row.
 - Spacing uses only 4 / 8 / 12 / 16 / 24 / 32; P2 and P3 share the same tokens.
