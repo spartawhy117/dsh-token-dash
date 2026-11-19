@@ -16,7 +16,7 @@
 | S3 打包与本地验证 | `2.3.1` tarball 23 files，已实装验证 | ✅ |
 | S4 正式发布 | tag `v2.3.1`，双 workflow success | ✅ |
 | S5 发布后核验 | latest=2.3.1、description 含 4 家、body 正确 | ✅ |
-| S6 上游市场同步 | YAML 改写稿已出，待用户提 PR | 进行中 |
+| S6 上游市场同步 | PR [#16877](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/16877) 已提，待评审合并 | 进行中 |
 | S7 回写与收口 | 两个 plan 已回写 + 发布记录已更新 | ✅ |
 
 ## 交付事实
@@ -221,7 +221,8 @@
 - 2026-11-19：checklist 创建，S0 多语言核实完成。
 - 2026-11-19：用户选 A 方案（复用已有键），S1–S5 执行完毕，`v2.3.1` 已正式发布并核验通过。
 - 2026-11-19：S7 回写完成（两个 plan + 发布记录）。
-- 2026-11-19：S6 YAML 改写稿已产出（`.tmp/upstream-entry.yml`，YAML 解析通过，en 301 / zh 160 字符），补充「第三方 API Key」表述；待用户复制提交 PR。
+- 2026-11-19：S6 已用 gh CLI 提 PR [#16877](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/16877)，仅改 `data/plugins/spartawhy117__dsh-token-dash.yml`，mergeable=MERGEABLE，等待 pr-check 与评审。
+- 核实上游门槛：`pr-gate` 只对**新增**条目判 repo age / commit count，修改已有条目豁免；`pr-guard` 禁止 PR 触碰 `.github/`——本次均未触及。
 - 2026-11-19：此前已在 `ee4751d` 完成 description 补全，`547b700` / `b6cc2a9` 完成 Y 轴两轮改善，本地构建至 `2.3.1-local.2`。
 
 ```text
