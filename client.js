@@ -11,6 +11,36 @@ window.__ModuleLoader__.load({
 
     const API = '/token-dash/api'
     const PKG = 'dsh-token-dash'
+
+    // 客户端事件上报：走宿主 /log 落到本机日志。三层限流防止「增强本身变成故障源」。
+    const CLIENT_LOG_PER_EVENT = 20
+    const CLIENT_LOG_PER_HOUR = 100
+    const clientLogState = { seen: new Set(), perEvent: new Map(), windowStart: 0, total: 0 }
+
+    function reportClientLog(module, event, meta) {
+      try {
+        const now = Date.now()
+        const state = clientLogState
+        if (now - state.windowStart > 3600_000) {
+          state.windowStart = now
+          state.perEvent.clear()
+          state.seen.clear()
+          state.total = 0
+        }
+        const key = `${event}|${meta?.message ?? ''}|${meta?.path ?? ''}`
+        if (state.seen.has(key)) return
+        if ((state.perEvent.get(event) ?? 0) >= CLIENT_LOG_PER_EVENT) return
+        if (state.total >= CLIENT_LOG_PER_HOUR) return
+        state.seen.add(key)
+        state.perEvent.set(event, (state.perEvent.get(event) ?? 0) + 1)
+        state.total += 1
+        void fetch(`${API}/log`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ module, event, meta }),
+        }).catch(() => {})
+      } catch { /* 日志失败绝不影响渲染 */ }
+    }
     const PAGE_ID = 'token-dash'
     const REPO_URL = 'https://github.com/spartawhy117/dsh-token-dash'
     const SUB_CRITICAL = 90
@@ -44,6 +74,9 @@ window.__ModuleLoader__.load({
       '30秒': '30s', '1分钟': '1m', '5分钟': '5m',
       '社区': 'Community', '内置兜底': 'Built-in fallback',
       '查询失败': 'Query failed', '套餐查询失败': 'Quota query failed',
+      '金额说明': 'Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.',
+  '本月估算': 'Est. this month',
+      '订阅不计价，估算值仅作参考': 'Subscription is not billed; the estimate is for reference only',
       '周': 'Week', '月': 'Month', '重置': 'Reset',
       'API 用量': 'API usage', '订阅': 'Subscription', '账户套餐': 'Account plan',
       '预算': 'Budget', '未设置': 'Not set', '今日 {value}': 'Today {value}',
@@ -571,7 +604,7 @@ window.__ModuleLoader__.load({
       apiCard: {
         flex: '1 1 220px', maxWidth: 260, minWidth: 220, boxSizing: 'border-box',
         border: `1px solid ${T.border}`, borderRadius: 8, background: T.section, padding: 16,
-        display: 'grid', gap: 8, alignContent: 'start',
+        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, alignContent: 'start',
       },
       apiCardHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 },
       apiCardName: { fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
@@ -673,13 +706,16 @@ window.__ModuleLoader__.load({
       },
       // 空态文案：绘图区内居中（轴已在左列，无需再让出留白）
       trendMsg: { position: 'absolute', inset: '0 0 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 11 },
-      quotaCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
+      // 订阅卡与按量卡同一套宽度规则：flex 等分 + 上限 260，单家时不再铺满
+      quotaCards: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'start', gap: 12 },
       quotaCard: {
         border: `1px solid ${T.border}`, borderRadius: 8, background: T.section, padding: 16,
-        display: 'grid', gap: 12, alignContent: 'start', minWidth: 0,
+        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12, alignContent: 'start', minWidth: 0,
+        flex: '1 1 220px', maxWidth: 260, boxSizing: 'border-box',
       },
       quotaWindows: { display: 'grid', gap: 12, minWidth: 0 },
-      cardCaption: { color: T.weak, fontSize: 11, textAlign: 'center', marginTop: 4, whiteSpace: 'nowrap' },
+      // 说明行可能很长（周期 / 限流 / 渠道用量叠加），必须允许换行，否则会把卡片撑宽（Issue #4）
+      cardCaption: { color: T.weak, fontSize: 11, textAlign: 'center', marginTop: 4, whiteSpace: 'normal', overflowWrap: 'anywhere' },
       rangeCapsule: { width: '100%', minWidth: 0 },
     }
     styles.button['--td-accent'] = T.accent
@@ -691,6 +727,35 @@ window.__ModuleLoader__.load({
     }
     styles.ghost = { ...styles.button, color: T.accent, borderColor: 'transparent', background: 'transparent' }
     styles.outline = { ...styles.button, color: T.text, borderColor: T.border, background: 'transparent' }
+
+    /** 看板渲染兜底：异常时给可读文案 + 重试，而不是整块空白；并把 componentStack 上报落盘。 */
+    class BoardBoundary extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = { failed: false }
+      }
+
+      static getDerivedStateFromError() { return { failed: true } }
+
+      componentDidCatch(error, info) {
+        reportClientLog('board', 'render.error', {
+          message: String(error?.message ?? error).slice(0, 200),
+          stack: String(info?.componentStack ?? '').slice(0, 400),
+        })
+      }
+
+      render() {
+        if (this.state.failed) {
+          return h('div', { 'data-testid': 'token-dash-board-error', style: styles.cardBox },
+            h('div', { style: styles.empty }, tr('数据渲染失败')),
+            h('button', {
+              type: 'button', style: styles.button,
+              onClick: () => this.setState({ failed: false }),
+            }, tr('重试')))
+        }
+        return this.props.children
+      }
+    }
 
     function Icon({ name, size = 14, style }) {
       const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, style }
@@ -988,8 +1053,9 @@ window.__ModuleLoader__.load({
     /** P3 明细表：八列，费用只对 API 计价行展示。 */
     function DetailTable({ rows, providerNames = {} }) {
       if (rows.length === 0) return h('div', { style: styles.empty }, tr('范围内暂无消耗'))
-      const headCell = (text, align = 'right') => h('span', {
+      const headCell = (text, align = 'right', title) => h('span', {
         role: 'columnheader',
+        ...(title === undefined ? {} : { title }),
         style: { color: T.weak, fontSize: 11, textAlign: align, paddingBottom: 8, borderBottom: `1px solid ${T.border}` },
       }, text)
       const cell = { padding: '4px 0', borderBottom: TABLE_BORDER, fontSize: 13, minWidth: 0 }
@@ -998,7 +1064,9 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'contents' } },
           headCell(tr('模型'), 'left'),
           headCell('Tokens'), headCell(tr('输入')), headCell(tr('缓存')), headCell(tr('输出')),
-          headCell(tr('请求')), headCell(tr('命中')), headCell(tr('费用'))),
+          headCell(tr('请求')), headCell(tr('命中')),
+          headCell(h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+            tr('费用'), h(Icon, { name: 'info', size: 11 })), 'right', tr('金额说明'))),
         ...rows.map((row) => h('div', {
           key: `${row.providerId}:${row.modelId}`,
           role: 'row',
@@ -1027,11 +1095,17 @@ window.__ModuleLoader__.load({
                 : undefined,
             style: { ...styles.cellNum, ...cell, textAlign: 'right' },
           },
-            row.kind !== 'api' || row.priced === 'empty'
-              ? '—'
-              : row.priced === false
-                ? tr('未定价')
-                : `${row.approximate === true ? '≈' : ''}${fmtMoney(row.cost, row.currency)}`)))))
+            row.kind !== 'api'
+              ? (row.estimatedPriced === undefined
+                ? '—'
+                : row.estimatedPriced === true
+                  ? `≈${fmtMoney(row.estimatedCost, row.currency)}`
+                  : tr('未定价'))
+              : row.priced === 'empty'
+                ? '—'
+                : row.priced === false
+                  ? tr('未定价')
+                  : `≈${fmtMoney(row.cost, row.currency)}`)))))
     }
 
     /** P3 趋势指标：唯一顺序源——四格摘要带与右侧胶囊都从这里派生，禁止各自维护顺序。 */
@@ -2154,7 +2228,11 @@ window.__ModuleLoader__.load({
               }, windows.map((plan) => h(QuotaCell, {
                 key: plan.key, providerId: provider.id, plan, windowKey: plan.key,
               }))),
-            h('div', { style: styles.cardCaption }, `${windows.length} ${tr('窗')}`))
+            h('div', { style: styles.cardCaption },
+              `${windows.length} ${tr('窗')}`,
+              Number(provider.usage?.monthEstimate) > 0
+                ? ` · ${tr('本月估算')} ${fmtMoney(provider.usage.monthEstimate, provider.currency)}`
+                : null))
         }))
     }
 
@@ -2216,6 +2294,7 @@ window.__ModuleLoader__.load({
           setError(false)
         } catch {
           setError(true)
+          reportClientLog('board', 'fetch.error', { path: 'summary' })
         }
       }, [active])
 
@@ -2230,6 +2309,7 @@ window.__ModuleLoader__.load({
           setUsageError(false)
         } catch {
           setUsageError(true)
+          reportClientLog('board', 'fetch.error', { path: 'usage' })
         }
       }, [range])
 
@@ -2272,8 +2352,15 @@ window.__ModuleLoader__.load({
       const updated = fmtClock(summary?.updatedAt)
       const degraded = summary?.providersDegraded === true
       const emptyAll = summary !== null && api.length === 0 && subscriptions.length === 0
+      // 空态快照：确认「空白」到底是走了空态分支还是渲染异常
+      if (api.length + subscriptions.length === 0) {
+        reportClientLog('board', 'render.empty', {
+          api: api.length, subscriptions: subscriptions.length,
+          degraded, emptyAll, hasSummary: summary !== null,
+        })
+      }
 
-      return h('div', { 'data-testid': 'token-dash-board-scroll', style: styles.boardScroll },
+      return h(BoardBoundary, null, h('div', { 'data-testid': 'token-dash-board-scroll', style: styles.boardScroll },
         h('div', { 'data-testid': 'token-dash-board', style: styles.board },
         h('style', null, TD_CSS),
         h('div', { style: styles.boardHead },
@@ -2344,7 +2431,7 @@ window.__ModuleLoader__.load({
                 style: styles.settingsHint,
               }, tr('语言跟随DSH设置；当前仅中文/English，其他语言回退英文')))),
           h('div', { 'data-testid': 'token-dash-settings-capsule', style: styles.capsule },
-            h(SettingsRows, { summary, prefs, onSave: savePrefs, onRefresh: refresh, onRefreshSubs: refreshSubs })))))
+            h(SettingsRows, { summary, prefs, onSave: savePrefs, onRefresh: refresh, onRefreshSubs: refreshSubs }))))))
     }
 
     return {

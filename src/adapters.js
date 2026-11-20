@@ -428,7 +428,13 @@ export async function readProviders(ctx, prefs, cache = new Map()) {
       failures.push({ id, error: errorDetail(result.reason) })
       return
     }
-    if (result.value === null) { misses.push(`${id}:none`); return }
+    if (result.value === null) {
+      // 声明式源返回 null 即凭据未命中；并入 failures 以便 detect.fail 归因（不改变 :none 契约）
+      const refs = PROVIDER_SOURCES[index].credential?.refs ?? []
+      misses.push(`${id}:none`)
+      if (refs.length > 0) failures.push({ id, error: { kind: 'missing-credential', refs } })
+      return
+    }
     if (visibleEntry(result.value, prefs) !== true) { misses.push(`${id}:hidden`); return }
     const value = result.value
     value.currency = value.currency ?? providerCurrency(normalizeProvider(value.id))
@@ -552,6 +558,7 @@ export function logAdapterFailures(log, failures = []) {
     const error = item.error ?? { kind: 'network' }
     log.warn(module, 'detect.fail', {
       errorKind: error.kind,
+      ...(Array.isArray(error.refs) ? { refs: error.refs } : {}),
       ...(error.status === undefined ? {} : { httpStatus: error.status }),
       ...(error.upstream === true ? { upstream: true } : {}),
     })

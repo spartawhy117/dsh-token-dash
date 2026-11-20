@@ -41,13 +41,14 @@ Only the official endpoints listed below are called. Any other provider is still
 | Kimi Coding | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`, optional `MOONSHOT_API_KEY` | `GET api.kimi.com/coding/v1/usages`; falls back to `GET api.moonshot.cn/v1/users/me/balance` | Subscription / API usage | 5h + weekly/monthly windows; falls back to balance |
 | OpenRouter | `OPENROUTER_API_KEY` | `GET openrouter.ai/api/v1/credits` | API usage | Credits (USD) |
 | Qwen | `DASHSCOPE_API_KEY` (CNY) / `DASHSCOPE_INTL_API_KEY` (USD) | No balance endpoint | API usage | Local usage only; balance unsupported |
-| OpenCode Go | `OPENCODE_GO_API_KEY` | `GET opencode.ai/zen/go/v1/usage`, falls back to `GET opencode.ai/api/v1/usage` | Subscription | 5h / weekly / monthly windows (USD) |
+| OpenCode Go | `OPENCODE_API_KEY` / `OPENCODE_GO_API_KEY` | `GET opencode.ai/zen/go/v1/usage`, falls back to `GET opencode.ai/api/v1/usage` | Subscription | 5h / weekly / monthly windows (USD) |
 | Command Code | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | `GET api.commandcode.ai/alpha/billing/credits` (with `orgId`) | Subscription | 5h + weekly windows, credits (CNY) |
 | Ollama Cloud | `OLLAMA_API_KEY` | `GET ollama.com/api/balance`; `GET ollama.com/api/usage?range=30d` | API usage | Plan + purchased credits (USD), plan usage, cycle, 30-day channel usage |
 | Any other provider (self-hosted, relay, local Ollama) | None | No endpoint | API usage | Priced by model name only; unpriced rows can be backfilled |
 
 - Save keys under the names above in DSH's credential settings; the plugin reads them through the host `credentials` service, not environment variables or local login files.
 - Ollama is added through DSH's custom OpenAI-compatible provider: the route id must be `ollama` (the key reference is derived as `<ROUTE>_API_KEY` → `OLLAMA_API_KEY`). Any other id will not resolve the key and the balance card will not appear.
+- OpenCode Go reads `OPENCODE_API_KEY`, the same name pi-ai uses for its routes, so configuring the LLM route is enough; `OPENCODE_GO_API_KEY` remains accepted. The `<ROUTE>_API_KEY` derivation applies to custom providers only — built-in providers get their names from the pi-ai catalog.
 - Keys are detected automatically; GLM / Kimi / OpenCode Go / Command Code can be re-detected from the dashboard footer.
 - Subscription models count toward Tokens but not cost; billing mode is pinned per key instead of following quota flakiness.
 - Balance, quota and usage are separate; a balance failure never resets today's Token ledger to zero.

@@ -13,7 +13,7 @@ import { logAdapterEvents, logAdapterFailures, missSignature, readProviders, rea
 import { PROVIDER_SOURCES } from './src/quota-sources.js'
 import { catalogInfo, configurePricing, loadCommunityPricing, loadRouterPricing } from './src/pricing.js'
 import { providerCurrency } from './src/providers.js'
-import { clearLog, createLogger, exportLog } from './src/diagnostics.js'
+import { clearLog, createLogger, exportLog, pruneLogs } from './src/diagnostics.js'
 import { isNewer } from './src/version.js'
 
 export const name = 'dsh-token-dash'
@@ -52,7 +52,7 @@ function hostVersion() {
 }
 let updateCache = { at: 0, data: null }
 /** 允许 client 上报日志的模块白名单：只放已知来源，避免任意日志注入。 */
-const CLIENT_LOG_MODULES = new Set(['slot', 'update'])
+const CLIENT_LOG_MODULES = new Set(['slot', 'update', 'board'])
 
 /** Locate the bundled dsh CLI (same layout scripts/e2e.mjs relies on). */
 function findDshCli() {
@@ -223,6 +223,11 @@ export function apply(ctx) {
   const dir = dataDir(ctx)
   const logDir = logsDir(ctx)
   const logger = createLogger({ dir: logDir, version: CURRENT_VERSION, dshVersion: hostVersion() })
+  // 启动即按保留策略清理：等价于「更新后清理一次旧目录」，之后每次启动持续生效
+  try {
+    const pruned = pruneLogs({ dir: logDir, activeFile: logger.file })
+    if (pruned.removed > 0) logger.info('diag', 'prune', pruned)
+  } catch { /* 日志治理失败不影响插件 */ }
   let prefs
   let state
   let providerCache = new Map()
@@ -368,7 +373,17 @@ export function apply(ctx) {
     const refreshProviderCache = async () => {
       if (providerRefresh !== null) return providerRefresh
       providerRefresh = (async () => {
+        const probeStartedAt = Date.now()
         const data = await readProviders(scoped, prefs, providerCache)
+        const probeElapsed = Date.now() - probeStartedAt
+        // 慢刷新：一次探测超过 5s 会连带阻塞排队中的请求，单独留痕便于定位是哪一轮、哪些源拖慢
+        if (probeElapsed > 5000) {
+          logger.warn('provider', 'slow', {
+            probeMs: probeElapsed,
+            misses: (data.misses ?? []).length,
+            failures: (data.failures ?? []).map((item) => item.id),
+          })
+        }
         const hadProviders = providerCacheMeta.hadProviders === true || data.length > 0
         providerCacheMeta = {
           ...providerCacheMeta,
@@ -384,11 +399,15 @@ export function apply(ctx) {
           })
         }
         logAdapterEvents(logger, data)
-        logAdapterFailures(logger, data.failures)
+        // 缺凭据是稳定状态，并入下方「清单变化才记」的去重口径，避免每轮探测刷屏；其余失败照常每次记录
+        const failures = data.failures ?? []
+        const isMissingCredential = (item) => item.error?.kind === 'missing-credential'
+        logAdapterFailures(logger, failures.filter((item) => !isMissingCredential(item)))
         // 只在探测清单变化时记一次：启动首轮必打，之后配 Key / 断网导致清单变动才再打，避免每轮刷屏
         const signature = missSignature(data)
         if (signature !== providerCacheMeta.missSignature) {
           providerCacheMeta = { ...providerCacheMeta, missSignature: signature }
+          logAdapterFailures(logger, failures.filter(isMissingCredential))
           logger.info('provider', 'cache.state', {
             entries: providerCache.size,
             providers: data.length,
@@ -553,7 +572,9 @@ export function apply(ctx) {
               json(res, 400, { ok: false, reason: 'invalid-log' })
               return
             }
-            logger.info(body.module, body.event, typeof body.meta === 'object' && body.meta !== null ? body.meta : {})
+            // level 仅接受 warn，其余一律 info；非法值不报错，避免客户端因日志失败而重试
+            const write = body.level === 'warn' ? logger.warn : logger.info
+            write(body.module, body.event, typeof body.meta === 'object' && body.meta !== null ? body.meta : {})
             json(res, 200, { ok: true, data: { logged: true } })
             return
           }

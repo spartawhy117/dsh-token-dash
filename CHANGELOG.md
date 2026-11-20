@@ -4,6 +4,178 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.3.1-local.5] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+**日志占用封顶，并可清理历史日志**
+
+- 诊断日志此前只按单日轮转、旧文件从不删除，占用会一直增长（约每月 1MB 以上）。现在保留最近 14 天、总量不超过 20MB、单文件 2MB 保留 2 份，超了自动删最旧的；正在写入的当前日志永远不会被删。
+- 升级后第一次启动就会按新规则清理一次历史目录，之后每次启动持续生效。
+
+**卡住时不再是一片空白**
+
+- 看板渲染出错时会显示「数据渲染失败」和重试按钮，不再是空白；同时把错误记录到本机日志，方便排查。
+- 看板拉取数据失败、以及出现「没有任何供应商」的空态时，也会各留一条记录，用于区分「真的没数据」和「渲染出错」。
+- 一次数据探测超过 5 秒会单独留一条警告，带耗时与失败的供应商，便于定位卡顿来源。
+- 上述客户端记录走本机回环，不出这台机器，并且有每小时上限（每种事件 20 条、总计 100 条），不会把日志刷满。
+
+#### 修改
+
+**费用列统一标注为估算**
+
+- 模型明细的费用列不再区分「带 ≈ / 不带 ≈ / 带预估前缀」三种写法，API 与订阅一律显示 `≈¥x`。
+- 费用列表头多了 `ⓘ`，悬停说明：金额由本地按目录价估算，不是供应商账单；缓存读按缓存价计，命中率高的行每 token 成本显著更低，不同行不能直接按 token 数比较；不同币种需自行换算。
+
+### English
+
+#### Added
+
+**Diagnostic logs are capped and old ones are pruned**
+
+- Logs previously rotated daily but older files were never removed, so usage grew indefinitely. They now keep 14 days, at most 20 MB in total, with 2 MB files kept two deep — the oldest go first, and the file currently being written is never deleted.
+- The first launch after this update prunes the existing log directory, and every later launch keeps enforcing the same policy.
+
+**A stuck dashboard no longer turns blank**
+
+- A render failure now shows “Render failed” with a retry button instead of an empty panel, and records the error to the local log.
+- Failed data fetches and the “no providers” state each leave a record too, so an empty board can be told apart from a broken one.
+- A provider probe taking longer than 5 seconds logs a warning with the duration and the failing providers.
+- These client-side records go over the loopback interface, never leave the machine, and are rate limited (20 per event per hour, 100 per hour overall).
+
+#### Changes
+
+**Cost column now marks every amount as an estimate**
+
+- The model breakdown no longer mixes `≈`, plain amounts and an “Est.” prefix: API and subscription rows both read `≈$x`.
+- The cost header gained an `ⓘ` tooltip explaining that amounts are estimated locally from catalog prices, that cached reads use the cache price so rows with a higher hit rate cost much less per token, and that currencies are not converted.
+
+## [2.3.1-local.4] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+**订阅估算价改为同一行显示**
+
+- 模型明细里订阅行的费用不再分成上下两行（上一版是「—」在上、「$0.78」在下），改为同一行显示「预估 ¥0.78」，行高与其他行一致。
+- 就是明确写出「预估」两个字，不用再靠上下两行去猜第二行是什么。
+- 价格来自社区价目表时显示为「预估 ≈¥1.08」；查不到价格时显示「预估 未定价」；旧数据没有估算值时仍显示「—」。
+
+### English
+
+#### Changes
+
+**Subscription estimate now sits on one line**
+
+- Subscription rows in the model breakdown no longer split the cost cell into two lines (`—` on top, `$0.78` below); it now reads `Est. $0.78` on a single line, matching the row height of every other entry.
+- The word “Est.” makes it explicit that the figure is an estimate.
+- Estimates from the community price list read `Est. ≈$1.15`; models without a price read `Est. Not priced`; rows recorded before this feature still show `—`.
+
+## [2.3.1-local.3] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+**模型明细显示订阅用量的估算 API 价格**
+
+- 订阅制供应商（OpenCode Go / GLM Coding / Kimi Coding 等）的模型行，费用列继续显示「—」表示不计价，其下新增一行小字估算，例如「≈ ¥3.42」，表示这些 token 若按 API 单价计大约值多少钱。
+- 订阅卡底部说明行同步显示「本月估算 ¥x」，一眼看出这家订阅这个月大概用掉多少额度。
+- 估算只是参考：不计入总费用、不影响趋势图的费用指标，也不参与任何汇总，费用口径与之前完全一致。
+- 目录里查不到价格的模型显示「未定价」，不会显示成 ¥0.00。
+- 价格取自社区价目表时前面带「≈」，表示是按公开价推算的近似值。
+
+### English
+
+#### Added
+
+**Estimated API price for subscription usage in the model breakdown**
+
+- Subscription providers (OpenCode Go, GLM Coding, Kimi Coding and so on) keep `—` in the cost column because they are not billed per token, and gain a second line underneath with a small estimate such as `≈ $0.48` — roughly what those tokens would cost at API rates.
+- The subscription card caption also shows `Est. this month $x`, so the monthly value of a plan is visible at a glance.
+- The estimate is reference only: it never enters total cost, never affects the cost metric in the trend chart, and never feeds any aggregate — billing semantics are unchanged.
+- Models without a catalog price show `Not priced` instead of `$0.00`.
+- Estimates derived from the community price list carry `≈`, marking them as approximations.
+
+## [2.3.1-local.2] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+**缺凭据日志不再刷屏**
+
+- 未配置 Key 的供应商此前每轮探测都会写一条日志，长时间挂机后日志会被同一句话填满。现在只在供应商清单发生变化时记录一次，配置 Key 后也会立刻重新出现。
+- 网络类、限流类等真正的临时故障仍照常每次记录，排障不受影响。
+
+### English
+
+#### Changes
+
+**Missing-credential logging no longer floods the log**
+
+- Providers without a key used to write a log line on every probe round, filling the log with the same message over a long session. It is now written once per provider-list change, and reappears immediately once a key is configured.
+- Genuine transient failures (network, rate limit) are still logged every round, so troubleshooting is unaffected.
+
+## [2.3.1-local.1] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+**OpenCode Go 订阅配额恢复**
+
+- 只要在 DSH 里配好 `OPENCODE_API_KEY`（配置模型路由时用的同一个名字），订阅卡就能直接显示窗口，不必再为配额另存一份 `OPENCODE_GO_API_KEY`；旧名字继续可用。
+- 5 小时窗口此前一直不显示（接口字段已改名，旧解析没跟上），现在 5h / 周 / 月三个窗口都能正常出。
+
+**订阅卡不再铺满整行**
+
+- 只有一家订阅时，卡片宽度跟随按量卡规则封顶，不再横向铺满整段、把两个环推到屏幕两端。
+- 家数变多时按行换行：1 家 260px、2–3 家各 260px、4 家 229px，7–8 家折成两行，不会出现横向滚动。
+
+**看板不再横向溢出**
+
+- 带周期 / 限流 / 渠道用量等长说明的卡片（如 Ollama）此前会把内容顶出看板右侧被裁掉，现在说明行自动换行，信息完整显示在卡内。
+
+**缺凭据时日志可直接归因**
+
+- 探测不到凭据时，日志会写出查找过的凭据名，不再只剩一句「套餐查询失败」需要从界面反推。
+
+### English
+
+#### Changes
+
+**OpenCode Go subscription quota restored**
+
+- A single `OPENCODE_API_KEY` — the same name the model route uses — is enough for the subscription card; no second `OPENCODE_GO_API_KEY` entry is required, and the old name still works.
+- The 5-hour window now appears; the endpoint had renamed the field and the parser had not followed.
+
+**Subscription cards no longer span the full row**
+
+- With one provider the card caps its width like the usage cards instead of stretching edge to edge and pushing the two rings apart.
+- More providers wrap onto new rows: 260px for one to three, 229px for four, two rows at seven or eight, with no horizontal scrolling.
+
+**No more horizontal overflow on the dashboard**
+
+- Cards with long captions (cycle, rate limit, channel usage — e.g. Ollama) used to push content past the right edge; the caption now wraps and stays inside the card.
+
+**Missing credentials are now diagnosable from the log**
+
+- When a credential cannot be resolved, the log names the references it looked for instead of leaving only a failed card on screen.
+
 ## [2.3.1] - 2026-11-19
 
 ### 中文

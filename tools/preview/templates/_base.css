@@ -28,7 +28,8 @@ section { margin-bottom: 28px; }
 .grid { display: grid; gap: var(--layout-gap); align-items: start; justify-content: center; }
 .grid.api { display: flex; flex-wrap: wrap; justify-content: center; }
 .grid.api .cell { flex: 1 1 var(--card-min); max-width: var(--card-max); }
-.grid.sub { grid-template-columns: repeat(auto-fit, minmax(var(--card-min), 1fr)); }
+.grid.sub { display: flex; flex-wrap: wrap; justify-content: center; }
+.grid.sub .cell { flex: 1 1 var(--card-min); max-width: var(--card-max); }
 .cell { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .cap { display: block; font-size: 11px; color: var(--weak); text-align: center; }
 

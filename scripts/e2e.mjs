@@ -114,8 +114,8 @@ const EMPTY_TOKENS = { input: 0, cacheRead: 0, cacheWrite: 0, cache: 0, output: 
 const models = [
   model('deepseek-official', 'DeepSeek', 'deepseek-flash', 'DeepSeek-V4.1-Flash', 'api', 'CNY', 12.34),
   model('openrouter', 'OpenRouter', 'deepseek-flash', 'DeepSeek-V4.1-Flash', 'api', 'USD', 4.68),
-  model('zhipu', 'GLM Coding', 'glm-5.3', 'GLM-5.3', 'subscription', 'CNY', 0),
-  model('moonshot', 'Kimi Coding', 'kimi-k3', 'Kimi K3', 'subscription', 'CNY', 0),
+  model('zhipu', 'GLM Coding', 'glm-5.3', 'GLM-5.3', 'subscription', 'CNY', 0, { estimatedCost: 3.42, estimatedPriced: true }),
+  model('moonshot', 'Kimi Coding', 'kimi-k3', 'Kimi K3', 'subscription', 'CNY', 0, { estimatedCost: 1.08, estimatedPriced: true, approximate: true }),
   // 模糊命中：带 ≈ 前缀
   model('tencent', 'tencent', 'deepseek-v4.1-flash-ioa', 'deepseek-v4.1-flash', 'api', 'CNY', 1.24, { approximate: true }),
   // 精确命中：不带 ≈
@@ -634,6 +634,39 @@ try {
   assert.match(await board.getByTestId('token-dash-quota-cell-opencode-go-month').innerText(), /58\.0%|58%/)
   assert.match(await board.getByTestId('token-dash-quota-rel-opencode-go-month').innerText(), /天后|小时后|分钟后/)
   assert.match(await board.getByTestId('token-dash-quota-abs-opencode-go-month').innerText(), /\d{2}-\d{2} \d{2}:\d{2}/)
+  // 费用列统一 ≈：订阅行与 api 行同一形态，且不再出现「预估」（订阅估算 Issue #2）
+  for (const [id, expectText] of [
+    ['token-dash-detail-row-zhipu-glm-5.3', '≈¥3.42'],
+    ['token-dash-detail-row-moonshot-kimi-k3', '≈¥1.08'],
+    ['token-dash-detail-row-deepseek-official-deepseek-flash', '≈¥12.34'],
+  ]) {
+    const cell = board.getByTestId(id).getByTestId('token-dash-detail-cost')
+    const text = (await cell.innerText()).replace(/\s+/g, ' ').trim()
+    assert.ok(text.includes(expectText), `${id} cost cell should read '${expectText}', received '${text}'`)
+    assert.equal(text.includes('\n'), false, `${id} estimate must stay on one line`)
+  }
+  // 订阅卡宽度：与按量卡同源，封顶 260，不得随容器铺满（Issue #4）
+  const quotaCardWidths = await board.locator('[data-testid^=token-dash-quota-row-]').evaluateAll((nodes) =>
+    nodes.map((node) => node.getBoundingClientRect().width))
+  const quotaTableBox = await board.getByTestId('token-dash-quota-table').boundingBox()
+  assert.ok(quotaTableBox !== null)
+  for (const width of quotaCardWidths) {
+    assert.ok(width <= 260.5, `subscription card width ${width} must not exceed the 260 cap`)
+    assert.ok(width < quotaTableBox.width, 'subscription card must not stretch to the table width')
+  }
+  // 全表不得再出现「预估」字样；费用表头必须带估算说明（Issue #2）
+  const detailText = await board.getByTestId('token-dash-detail-table').innerText()
+  assert.equal(detailText.includes('预估'), false, 'cost column must not use the 预估 prefix any more')
+  const costHead = board.getByTestId('token-dash-detail-table').locator('[role=columnheader]').last()
+  assert.ok((await costHead.getAttribute('title')) !== null, 'cost column header must carry an estimate tooltip')
+  // 两套卡片网格都必须靠换行承载任意家数，不得退化成横向滚动容器
+  for (const testid of ['token-dash-budget-table', 'token-dash-quota-table']) {
+    const metrics = await board.getByTestId(testid).evaluate((node) => ({ scroll: node.scrollWidth, client: node.clientWidth }))
+    assert.ok(
+      metrics.scroll <= metrics.client + 1,
+      `${testid} must wrap new rows instead of scrolling horizontally (${metrics.scroll} > ${metrics.client})`,
+    )
+  }
   // Summary band: four halves inside one bordered band, above the detail table.
   const cardCost = board.getByTestId('token-dash-card-cost')
   const cardTokens = board.getByTestId('token-dash-card-tokens')
@@ -755,11 +788,11 @@ try {
   assert.equal(await board.getByTestId('token-dash-board-head-refresh').count(), 1)
   assert.match(await board.locator('[data-testid^=token-dash-detail-row-]').first().innerText(), /·/)
 
-  // 费用列四态：≈ / 精确 / 未定价 / 零消耗 —
+  // 费用列四态（v3.20 起统一）：金额一律 ≈ / 未定价 / 零消耗 —
   const approxRow = board.getByTestId('token-dash-detail-row-tencent-deepseek-v4.1-flash-ioa')
   assert.match(await approxRow.innerText(), /≈¥1\.24/, 'fuzzy hit should carry ≈')
   const exactCell = board.getByTestId('token-dash-detail-row-siliconflow-deepseek-v4.1-flash').getByTestId('token-dash-detail-cost')
-  assert.equal((await exactCell.innerText()).trim(), '¥1.24', 'exact hit must not carry ≈')
+  assert.equal((await exactCell.innerText()).trim(), '≈¥1.24', 'estimate marker is unified: every amount carries ≈')
   const unpricedCell = board.getByTestId('token-dash-detail-row-my-relay-my-private-model').getByTestId('token-dash-detail-cost')
   assert.equal((await unpricedCell.innerText()).trim(), '未定价')
   assert.match(await unpricedCell.getAttribute('title'), /无匹配价目/, 'unpriced cell should explain why')

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>订阅卡宽度对照：现状 vs 方案 1</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+
+  /* —— 本稿自带，仅用于对照，不进定稿 —— */
+  .scenario { margin-bottom: 28px; }
+  .scenario-title {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 12px; color: var(--muted); margin-bottom: 8px;
+  }
+  .scenario-title b { color: var(--text); font-weight: 600; }
+  .tag {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--border); color: var(--weak);
+  }
+  .tag.now { color: var(--warn); border-color: var(--warn); }
+  .tag.fix { color: var(--ok); border-color: var(--ok); }
+  .measure { font-size: 11px; color: var(--weak); margin-top: 6px; text-align: center; }
+  .note { font-size: 11px; color: var(--weak); margin-top: 4px; text-align: center; }
+
+  /* 方案 1：与按量卡 .grid.api 同一套 flex + 上限（即 CHG-22） */
+  .grid.sub-fixed { display: flex; flex-wrap: wrap; justify-content: center; }
+  .grid.sub-fixed .cell { flex: 1 1 var(--card-min); max-width: var(--card-max); }
+
+  /* 订阅卡内的「N 窗」说明行（与 client.js cardCaption 同款） */
+  .card-caption { color: var(--weak); font-size: 11px; text-align: center; margin-top: 4px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="page">
+  <section>
+    <h2>现状：.grid.sub = repeat(auto-fit, minmax(220px, 1fr))，无 max-width</h2>
+    <div id="now"></div>
+  </section>
+
+  <section>
+    <h2>方案 1：flex 1 1 220px + max-width 260px（与按量卡同源，即 CHG-22）</h2>
+    <div id="fixed"></div>
+  </section>
+</div>
+
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const G = window.__SPEC__.gauge
+
+  const gauge = (label, percent, state) => {
+    const empty = state === 'empty' || percent === null
+    return `
+      <div class="gauge">
+        <div class="ring">
+          ${ringSvg(G.ring, G.stroke, percent, empty ? 'empty' : state)}
+          <span class="ring-label">${label}</span>
+        </div>
+        <div class="pct ${empty ? 'empty' : state}">${empty ? '—' : percent.toFixed(1) + '%'}</div>
+        <div class="line">${empty ? '—' : '剩余 ' + Math.round(100 - percent) + '%'}</div>
+        <div class="line">${empty ? '—' : '3 小时后'}</div>
+        <div class="line">${empty ? '—' : '22:51'}</div>
+      </div>`
+  }
+
+  const card = (name, windows) => `
+    <div class="card">
+      <div class="head"><span class="name">${name}</span><span class="chip">[ 订阅 ]</span></div>
+      <div class="windows" style="grid-template-columns: repeat(${windows.length}, minmax(0, 1fr))">
+        ${windows.map((w) => gauge(w.label, w.percent, w.state)).join('')}
+      </div>
+      <div class="card-caption">${windows.length} 窗</div>
+    </div>`
+
+  const DATA = [
+    { name: 'OpenCode Go', windows: [
+      { label: '周', percent: 0, state: 'normal' },
+      { label: '月', percent: 85, state: 'warn' },
+    ] },
+    { name: 'GLM Coding', windows: [
+      { label: '5h', percent: 42.5, state: 'normal' },
+      { label: '周', percent: 18.2, state: 'normal' },
+      { label: '月', percent: 3, state: 'normal' },
+    ] },
+    { name: 'Kimi Coding', windows: [
+      { label: '5h', percent: 96, state: 'critical' },
+      { label: '周', percent: 61, state: 'normal' },
+      { label: '月', percent: 22, state: 'normal' },
+    ] },
+    { name: 'Command Code', windows: [
+      { label: '5h', percent: 12, state: 'normal' },
+      { label: '周', percent: 34, state: 'normal' },
+    ] },
+  ]
+
+  const block = (host, variant, count) => {
+    const names = DATA.slice(0, count).map((p) => p.name).join(' + ')
+    const wrap = document.createElement('div')
+    wrap.className = 'scenario'
+    wrap.innerHTML = `
+      <div class="scenario-title">
+        <b>${count} 家</b><span>${names}</span>
+        <span class="tag ${variant === 'now' ? 'now' : 'fix'}">${variant === 'now' ? '现状' : '方案 1'}</span>
+      </div>
+      <div class="grid ${variant === 'now' ? 'sub' : 'sub-fixed'}"></div>
+      <div class="measure"></div>`
+    const grid = wrap.querySelector('.grid')
+    grid.innerHTML = DATA.slice(0, count).map((p) => `<div class="cell">${card(p.name, p.windows)}</div>`).join('')
+    host.appendChild(wrap)
+    return wrap
+  }
+
+  const nowHost = document.getElementById('now')
+  const fixHost = document.getElementById('fixed')
+  for (const count of [1, 2, 3, 4]) {
+    block(nowHost, 'now', count)
+    block(fixHost, 'fix', count)
+  }
+
+  // 量出真实卡宽，直接写在图上
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.scenario').forEach((wrap) => {
+      const widths = [...wrap.querySelectorAll('.cell')].map((c) => Math.round(c.getBoundingClientRect().width))
+      wrap.querySelector('.measure').textContent = '每卡宽 ' + widths.join(' / ') + ' px'
+    })
+  })
+</script>
+</body>
+</html>

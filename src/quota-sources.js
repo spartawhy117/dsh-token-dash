@@ -37,7 +37,10 @@ export function parseWindow(raw, key) {
     if (used !== null && limit !== null && limit > 0) percent = (used / limit) * 100
   }
   if (percent === null) return null
-  const resetAt = pickNumber(raw.resetAt, raw.reset_at, raw.resetTime, raw.reset_time, raw.nextResetTime, raw.next_reset_time)
+  const resetRaw = raw.resetAt ?? raw.reset_at ?? raw.resetTime ?? raw.reset_time
+    ?? raw.nextResetTime ?? raw.next_reset_time ?? raw.resetsAt ?? raw.resets_at
+  const resetParsed = typeof resetRaw === 'string' ? Date.parse(resetRaw) : Number(resetRaw)
+  const resetAt = Number.isFinite(resetParsed) ? resetParsed : null
   const usedPercent = clampPercent(percent)
   return { key, usedPercent: usedPercent === null ? null : Math.round(usedPercent * 100) / 100, resetAt: resetAt ?? undefined, source: 'official' }
 }
@@ -61,7 +64,7 @@ export function parseOpenCodeUsage(body) {
   const data = body?.data ?? body
   const usage = data?.usage ?? data
   const windows = collectFromMap(usage, {
-    '5h': ['fiveHour', 'five_hour', 'fiveHourWindow', '5h'],
+    '5h': ['fiveHour', 'five_hour', 'fiveHourWindow', '5h', 'rolling'],
     week: ['weekly', 'week', 'weekWindow'],
     month: ['monthly', 'month', 'monthWindow'],
   })
@@ -200,7 +203,8 @@ export const PROVIDER_SOURCES = [
     id: 'opencode-go',
     kind: 'subscription',
     currency: 'USD',
-    credential: { type: 'bearer', refs: ['OPENCODE_GO_API_KEY'] },
+    // OPENCODE_API_KEY 为 pi-ai 对 opencode / opencode-go 的共用名；旧名保留兼容既有配置
+    credential: { type: 'bearer', refs: ['OPENCODE_API_KEY', 'OPENCODE_GO_API_KEY'] },
     quota: { url: OPENCODE_USAGE, fallbackUrl: OPENCODE_USAGE_FALLBACK, parse: parseOpenCodeUsage },
   },
   {

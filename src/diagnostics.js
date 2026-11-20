@@ -2,12 +2,12 @@
  * Diagnostic JSONL log: module prefixes, redaction, rotation and export.
  * Never writes credentials, prompts, bodies or full URLs.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export const MAX_FILE = 5 * 1024 * 1024
+export const MAX_FILE = 2 * 1024 * 1024
 export const MAX_EXPORT = 10 * 1024 * 1024
-const KEEP_FILES = 3
+const KEEP_FILES = 2
 
 const SECRET_PATTERNS = [
   /sk-[a-zA-Z0-9_-]{8,}/g,
@@ -52,6 +52,58 @@ function rotate(file) {
   }
 }
 
+/** 保留策略：先按天删，再按总量删最旧；永不删除当前活动文件。 */
+export const KEEP_DAYS = 14
+export const MAX_TOTAL = 20 * 1024 * 1024
+
+const LOG_NAME = /^dsh-token-dash-(\d{8})(?:\.\d+)?\.log$/
+
+/**
+ * 清理旧日志：天数与总量双上限，取更严的一侧；`activeFile` 无论多旧都不删。
+ * 失败只返回已完成的量，绝不抛出——日志治理不能拖垮插件。
+ */
+export function pruneLogs({ dir, activeFile, days = KEEP_DAYS, totalBytes = MAX_TOTAL, now = Date.now() } = {}) {
+  let removed = 0
+  let bytes = 0
+  if (dir === undefined) return { removed, bytes }
+  const drop = (item) => {
+    try {
+      unlinkSync(item.full)
+      removed += 1
+      bytes += item.size
+    } catch { /* 单个文件删不掉不影响其余 */ }
+  }
+  try {
+    const entries = readdirSync(dir)
+      .map((name) => {
+        const matched = LOG_NAME.exec(name)
+        if (matched === null) return null
+        const full = join(dir, name)
+        const stamp = matched[1]
+        const day = new Date(Number(stamp.slice(0, 4)), Number(stamp.slice(4, 6)) - 1, Number(stamp.slice(6, 8))).getTime()
+        let size = 0
+        try { size = statSync(full).size } catch { return null }
+        return { full, day, size }
+      })
+      .filter((item) => item !== null)
+      .sort((a, b) => a.day - b.day)
+    const cutoff = now - days * 86400_000
+    const kept = []
+    for (const item of entries) {
+      if (item.full === activeFile) { kept.push(item); continue }
+      if (item.day < cutoff) { drop(item); continue }
+      kept.push(item)
+    }
+    let total = kept.reduce((sum, item) => sum + item.size, 0)
+    for (const item of kept) {
+      if (total <= totalBytes) break
+      if (item.full === activeFile) continue
+      drop(item)
+      total -= item.size
+    }
+  } catch { /* 目录不可读时按无操作处理 */ }
+  return { removed, bytes }
+}
 export function createLogger({ dir, level = 'info', version = '0.2.0', dshVersion = '0.2.1-rc.5' } = {}) {
   if (dir === undefined) return { log() {}, info() {}, warn() {}, error() {}, file: null }
   mkdirSync(dir, { recursive: true })

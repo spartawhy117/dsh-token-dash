@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>8 家数据商：卡片换行验证</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  .metric { font-size: 11px; color: var(--weak); margin-top: 8px; text-align: center; }
+  .metric b { color: var(--ok); font-weight: 600; }
+  .metric .bad { color: var(--error); }
+</style>
+</head>
+<body>
+<div class="page">
+  <section>
+    <h2>API 用量 · 8 家（.grid.api：flex-wrap: wrap）</h2>
+    <div class="grid api" id="api"></div>
+    <div class="metric" id="api-metric"></div>
+  </section>
+
+  <section>
+    <h2>订阅套餐 · 8 家（.grid.sub：flex + max-width 260）</h2>
+    <div class="grid sub" id="sub"></div>
+    <div class="metric" id="sub-metric"></div>
+  </section>
+</div>
+
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const G = window.__SPEC__.gauge
+
+  const budgetCard = (name) => `
+    <div class="cell">
+      <div class="card">
+        <div class="head"><span class="name">${name}</span><span class="chip">[ API 用量 ]</span></div>
+        <div class="api-body">
+          <div class="gauge">
+            <div class="ring">${ringSvg(G.ring, G.stroke, 12, 'normal')}<span class="ring-label">已用</span></div>
+            <div class="pct normal">12.0%</div>
+          </div>
+          <div class="budget"><span class="k">月度预算</span>
+            <span class="budget-input"><span class="cur">¥</span><input value="100" readonly /></span></div>
+        </div>
+        <div class="kv"><span class="k">计划余额</span><span class="v">¥88.00</span></div>
+        <div class="kv"><span class="k">真实余额</span><span class="v">¥49.86</span></div>
+        <div class="kv"><span class="k">本月已花</span><span class="v">¥12.34</span></div>
+      </div>
+    </div>`
+
+  const gauge = (label, percent, state) => `
+    <div class="gauge">
+      <div class="ring">${ringSvg(G.ring, G.stroke, percent, state)}<span class="ring-label">${label}</span></div>
+      <div class="pct ${state}">${percent.toFixed(1)}%</div>
+      <div class="line">剩余 ${Math.round(100 - percent)}%</div>
+      <div class="line">3 小时后</div>
+      <div class="line">22:51</div>
+    </div>`
+
+  const subCard = (name, windows) => `
+    <div class="cell">
+      <div class="card">
+        <div class="head"><span class="name">${name}</span><span class="chip">[ 订阅 ]</span></div>
+        <div class="windows" style="grid-template-columns: repeat(${windows.length}, minmax(0, 1fr))">
+          ${windows.map((w) => gauge(w.label, w.percent, w.state)).join('')}
+        </div>
+        <div class="cap">${windows.length} 窗</div>
+      </div>
+    </div>`
+
+  const API_NAMES = ['DeepSeek', 'GLM Coding', 'Kimi Coding', 'OpenRouter', 'Qwen', 'OpenCode Go', 'Command Code', 'Ollama Cloud']
+  const SUB_DATA = [
+    ['GLM Coding', [{ label: '5h', percent: 42.5, state: 'normal' }, { label: '周', percent: 18.2, state: 'normal' }, { label: '月', percent: 3, state: 'normal' }]],
+    ['Kimi Coding', [{ label: '5h', percent: 96, state: 'critical' }, { label: '周', percent: 12, state: 'normal' }]],
+    ['OpenCode Go', [{ label: '5h', percent: 12, state: 'normal' }, { label: '周', percent: 34, state: 'normal' }, { label: '月', percent: 58, state: 'normal' }]],
+    ['Command Code', [{ label: '5h', percent: 96, state: 'critical' }, { label: '周', percent: 61, state: 'normal' }]],
+    ['Cerebras', [{ label: '周', percent: 7.5, state: 'normal' }, { label: '月', percent: 22, state: 'normal' }]],
+    ['Groq', [{ label: '5h', percent: 5, state: 'normal' }]],
+    ['Together', [{ label: '5h', percent: 33, state: 'normal' }, { label: '周', percent: 44, state: 'normal' }, { label: '月', percent: 55, state: 'normal' }]],
+    ['Fireworks', [{ label: '周', percent: 88, state: 'warn' }, { label: '月', percent: 91, state: 'critical' }]],
+  ]
+
+  document.getElementById('api').innerHTML = API_NAMES.map(budgetCard).join('')
+  document.getElementById('sub').innerHTML = SUB_DATA.map(([n, w]) => subCard(n, w)).join('')
+
+  // 关键指标：容器是否出现横向溢出 / 卡片占几行
+  const report = (id, outId) => {
+    const box = document.getElementById(id)
+    const cells = [...box.querySelectorAll('.cell')]
+    const rows = new Set(cells.map((c) => Math.round(c.getBoundingClientRect().top))).size
+    const overflow = box.scrollWidth - box.clientWidth
+    const widths = [...new Set(cells.map((c) => Math.round(c.getBoundingClientRect().width)))]
+    document.getElementById(outId).innerHTML =
+      `${cells.length} 张卡 · 占 <b>${rows} 行</b> · 每行最多 <b>${Math.max(...Object.values(cells.reduce((acc, c) => {
+        const top = Math.round(c.getBoundingClientRect().top)
+        acc[top] = (acc[top] ?? 0) + 1
+        return acc
+      }, {})))} 张</b> · 卡宽 ${widths.join('/')}px · 横向溢出 ` +
+      (overflow > 1 ? `<span class="bad">${overflow}px（出现横向滚动）</span>` : `<b>${Math.max(0, overflow)}px（无横向滚动）</b>`)
+  }
+
+  requestAnimationFrame(() => {
+    report('api', 'api-metric')
+    report('sub', 'sub-metric')
+  })
+</script>
+</body>
+</html>

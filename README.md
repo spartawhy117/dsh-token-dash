@@ -41,13 +41,14 @@
 | Kimi Coding | `KIMI_API_KEY` / `KIMI_CODING_API_KEY`，可选 `MOONSHOT_API_KEY` | `GET api.kimi.com/coding/v1/usages`；回落 `GET api.moonshot.cn/v1/users/me/balance` | 订阅 / API 用量 | 5h + 周/月窗口；订阅查询失败可回落余额 |
 | OpenRouter | `OPENROUTER_API_KEY` | `GET openrouter.ai/api/v1/credits` | API 用量 | Credits（USD） |
 | Qwen | `DASHSCOPE_API_KEY`（CNY）/ `DASHSCOPE_INTL_API_KEY`（USD） | 不请求余额接口 | API 用量 | 仅本地用量；余额不支持 |
-| OpenCode Go | `OPENCODE_GO_API_KEY` | `GET opencode.ai/zen/go/v1/usage`，回落 `GET opencode.ai/api/v1/usage` | 订阅 | 5h / 周 / 月窗口（USD） |
+| OpenCode Go | `OPENCODE_API_KEY` / `OPENCODE_GO_API_KEY` | `GET opencode.ai/zen/go/v1/usage`，回落 `GET opencode.ai/api/v1/usage` | 订阅 | 5h / 周 / 月窗口（USD） |
 | Command Code | `COMMAND_CODE_API_KEY` + `COMMAND_CODE_ORG_ID` | `GET api.commandcode.ai/alpha/billing/credits`（带 `orgId`） | 订阅 | 5h + 周窗口、Credits（CNY） |
 | Ollama Cloud | `OLLAMA_API_KEY` | `GET ollama.com/api/balance`；`GET ollama.com/api/usage?range=30d` | API 用量 | 套餐剩余 + 购买余额（USD）、套餐已用、周期、渠道 30 天用量 |
 | 其他任意 provider（自建、中转、Ollama 本地） | 无需凭据 | 不请求任何接口 | API 用量 | 只按模型名计价；未定价可补算 |
 
 - 在 DSH 的凭据设置中按上表名称保存 Key；插件只通过宿主 `credentials` 读取，不读环境变量或本机登录文件。
 - Ollama 在 DSH 里需要用「自定义 OpenAI 兼容供应商」接入：route id 必须填 `ollama`（凭据按 `<ROUTE>_API_KEY` 派生成 `OLLAMA_API_KEY`），自定义名填别的会取不到 Key，余额卡也不会出现。
+- OpenCode Go 的 `OPENCODE_API_KEY` 与 pi-ai 路由配置同名，配好 LLM 路由后无需再填第二份；旧名 `OPENCODE_GO_API_KEY` 仍兼容。`<ROUTE>_API_KEY` 派生只适用于自定义供应商，内置供应商的凭据名由 pi-ai 目录决定。
 - 填 Key 后自动探测；GLM / Kimi / OpenCode Go / Command Code 可在「全量看板」底部重新检测订阅。
 - 订阅模型计入 Tokens，但不计费用；计费形态按 Key 固化，不随配额接口抖动。
 - 余额、配额、用量分开展示；余额失败不会把当天的 Token 记账清零。

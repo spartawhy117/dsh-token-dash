@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildMonthlySeries, buildUsage, eachDayKey } from '../../src/core.js'
+import { resetPricingForTests, setCatalogForTests } from '../../src/pricing.js'
 
 const now = new Date(2026, 10, 2, 12, 0, 0).getTime()
 const providers = [
@@ -167,4 +168,62 @@ test('buildMonthlySeries: 超过 60 个日点按月合并，未超过原样返�
   assert.equal(series[0].dayKey, '2026-01')
   assert.equal(series[0].tokens, 50)
   assert.equal(series.reduce((sum, point) => sum + point.cost.CNY.cost, 0), 75)
+})
+
+// —— 订阅用量的估算 API 价格（feature_subscription_estimated_cost）——
+
+const estimateState = {
+  days: {
+    '2026-11-02': {
+      providers: {
+        'deepseek-official': { models: { 'deepseek-flash': row(1_000_000, 500_000, 3) } },
+        zhipu: { models: { 'glm-5.3': row(1_000_000, 500_000, 0) } },
+      },
+    },
+  },
+}
+
+test('订阅行给出估算 API 价格，且不计入总费用（REQ-01 / REQ-03）', () => {
+  resetPricingForTests()
+  setCatalogForTests([
+    { modelId: 'deepseek-flash', family: 'deepseek', input: 1, output: 4 },
+    { modelId: 'glm-5.3', family: 'glm', input: 1, output: 2 },
+  ])
+  const usage = buildUsage(estimateState, { billingModes: {} }, 'today', now, providers)
+  const sub = usage.models.find((item) => item.providerId === 'zhipu')
+  // cost 仍归零，估算走独立字段：1e6 × 1 + 5e5 × 2 每百万 token = 2
+  assert.equal(sub.cost, 0)
+  assert.equal(sub.estimatedPriced, true)
+  assert.equal(sub.estimatedCost, 2)
+  // 费用聚合不受估算影响
+  assert.equal(usage.totals.CNY.cost, 3)
+  // api 行不下发估算字段，避免与 cost 混淆
+  const api = usage.models.find((item) => item.providerId === 'deepseek-official')
+  assert.equal(api.estimatedCost, undefined)
+  assert.equal(api.estimatedPriced, undefined)
+})
+
+test('目录价缺失时标未定价，不补 0（REQ-04）', () => {
+  resetPricingForTests()
+  setCatalogForTests([])
+  const usage = buildUsage(estimateState, { billingModes: {} }, 'today', now, providers)
+  const sub = usage.models.find((item) => item.providerId === 'zhipu')
+  assert.equal(sub.estimatedPriced, false)
+  assert.equal(sub.estimatedCost, null)
+  assert.equal(sub.cost, 0)
+})
+
+test('订阅估算跨多日累加，口径与 costOf 一致（REQ-02）', () => {
+  resetPricingForTests()
+  setCatalogForTests([{ modelId: 'glm-5.3', family: 'glm', input: 1, output: 2 }])
+  const twoDays = {
+    days: {
+      '2026-11-02': { providers: { zhipu: { models: { 'glm-5.3': row(1_000_000, 0, 0) } } } },
+      '2026-11-01': { providers: { zhipu: { models: { 'glm-5.3': row(0, 500_000, 0) } } } },
+    },
+  }
+  const usage = buildUsage(twoDays, { billingModes: {} }, '7d', now, providers)
+  const sub = usage.models.find((item) => item.providerId === 'zhipu')
+  assert.equal(sub.estimatedCost, 2) // 1e6 × 1 + 5e5 × 2，分两日累加
+  assert.equal(usage.totals.CNY.cost, 0)
 })

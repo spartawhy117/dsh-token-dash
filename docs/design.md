@@ -1,6 +1,7 @@
 # dsh-token-dash 设计文档
 
-> 更新时间：2026-11-16（v3.13，P3 四格摘要带与用量趋势柱：`/usage` 新增 `series` / `grain`，摘要带两格 → 四格）<br>
+> 更新时间：2026-11-20（订阅估算 API 价格：`/usage` 的 `models[]` 与 `SummaryVM` 的 `provider.usage` 新增只读估算字段，费用口径不变）<br>
+> 2026-11-16（v3.13，P3 四格摘要带与用量趋势柱：`/usage` 新增 `series` / `grain`，摘要带两格 → 四格）<br>
 > 面向贡献者的一页式架构说明。需求背景见 [token-dash 计划（已归档）](plan/archived/feature_token_dash.md)，已归档的 UI 迭代见 [UI 迭代计划](plan/archived/feature_ui_refresh.md)；Provider/VM/UI 边界收口见 [边界计划](plan/archived/feature_provider_boundary.md)；UI 视觉以 [UI 设计](ui-design.md) 为唯一真源。
 
 ## 设计目标
@@ -231,6 +232,8 @@ SummaryVM（core.js → client 的唯一 DTO）
 > 当前 8 家：DeepSeek / GLM / Kimi / OpenRouter / Qwen / OpenCode Go / Command Code / Ollama。前 5 家用 `legacy` 函数保留既有账号钱包、双路径等特例（DeepSeek 账号钱包 / API Key；Kimi Coding / 开放平台）；后 3 家由声明式 `credential + quota + usage? + preflight?` 驱动。详细能力见 [后端能力清单](checklist/archived/backend-capability-checklist.md) §4。
 >
 > Ollama 在宿主侧没有内置供应商（pi-ai 的 43 个 provider 数据无 `ollama`），必须以「自定义 OpenAI 兼容供应商」接入，route id 填 `ollama`：宿主按 `deriveKeyRef(route)` 把 Key 存成 `<ROUTE>_API_KEY`，与本表 `credential.refs` 同源；填别的名字则取不到 Key、余额卡不出现（2026-11-10 本机 `app.asar` 核查）。
+>
+> **`deriveKeyRef` 只适用于自定义 route。** 内置 route 的凭据名由 pi-ai 目录写死：pi-ai 对 `opencode` 与 `opencode-go` 两个 route 都固定读 `OPENCODE_API_KEY`，且 Zen 与 Zen Go 共享同一把 Key。因此 OpenCode Go 声明 `refs: ['OPENCODE_API_KEY', 'OPENCODE_GO_API_KEY']`——主名跟随生态，旧名兜底（Issue #2，2026-11-20 真机验证）。
 
 ```text
 quota-sources.js
@@ -287,7 +290,7 @@ adapters.readProviders(ctx, prefs, cache)
 | 鉴权 | 回环放行；非回环优先 `connection.requestRejection`，无则校验 `remoteAddress + host + origin`，失败 403 |
 | 脱敏 | 日志已过滤；错误响应只返回 `reason`，不含上游 body / Key |
 | 附加路由 | 无 `/repo`；仓库入口为静态 `REPO_URL` 链接 |
-| `/usage` DTO | `{ range, startAt, endAt, startKey, endKey, totals, total, models, series, grain }`；`series` 为连续日点（`grain='month'` 时按月），导出包**不含**该字段 |
+| `/usage` DTO | `{ range, startAt, endAt, startKey, endKey, totals, total, models, series, grain }`；`series` 为连续日点（`grain='month'` 时按月），导出包**不含**该字段。`models[]` 对订阅行额外带 `estimatedCost` / `estimatedPriced`（只读参考估算）：前者缺价时为 `null`，后者区分「估算为 0」与「无价」；api 行不下发这两个字段，费用聚合仍只认 `kind === 'api'` |
 | `/update` DTO | `{ current, latest, hasUpdate, published, source }`；`source` 为 `registry`（默认）或 `local`（测试源）。`?refresh=1` 跳过 5min 进程内缓存 |
 | `/update/install` | POST；按 `updateSpec()` 拼 `dsh-token-dash@<latest>`，走真实 `dsh plugin add` 路径 |
 | `/log` 白名单 | 只接受 `CLIENT_LOG_MODULES` 中的模块（`slot` 挂载上报 / `update` 调度上报），其余 400 |

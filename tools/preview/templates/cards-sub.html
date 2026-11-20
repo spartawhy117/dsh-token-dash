@@ -14,6 +14,21 @@
     <h2>订阅卡状态全量：三窗 / 两窗（无「月」）/ 单窗 / 含空窗</h2>
     <div class="grid sub" id="cards"></div>
   </section>
+
+  <section>
+    <h2>网格宽度：1 家（封顶 260，不再随容器铺满）</h2>
+    <div class="grid sub" id="count-1"></div>
+  </section>
+
+  <section>
+    <h2>网格宽度：2 家</h2>
+    <div class="grid sub" id="count-2"></div>
+  </section>
+
+  <section>
+    <h2>网格宽度：3 家</h2>
+    <div class="grid sub" id="count-3"></div>
+  </section>
 </div>
 
 <script>
@@ -78,6 +93,27 @@
       { label: '月', percent: 58, state: 'normal' },
     ]), '含空窗'),
   ].join('')
+
+  // 家数递减场景：卡片宽度由「等分 + 260 上限」决定，单家时必须封顶而不是铺满整段
+  const COUNTED = [
+    subCard('GLM Coding', [
+      { label: '5h', percent: 42.5, state: 'normal' },
+      { label: '周', percent: 18.2, state: 'normal' },
+      { label: '月', percent: 3, state: 'normal' },
+    ]),
+    subCard('Kimi Coding', [
+      { label: '5h', percent: 96, state: 'critical' },
+      { label: '周', percent: 12, state: 'normal' },
+    ]),
+    subCard('OpenCode Go', [
+      { label: '5h', percent: 12, state: 'normal' },
+      { label: '周', percent: 34, state: 'normal' },
+      { label: '月', percent: 58, state: 'normal' },
+    ]),
+  ]
+  for (const count of [1, 2, 3]) {
+    document.getElementById(`count-${count}`).innerHTML = COUNTED.slice(0, count).map((node) => cell(node, '')).join('')
+  }
 </script>
 </body>
 </html>

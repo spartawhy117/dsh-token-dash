@@ -45,7 +45,7 @@ export const SPEC = {
     contentWidth: 952, // 1000 中栏 − 24 × 2 padding
     gap: 12,
     minCard: 220,
-    maxCard: 260, // 卡片不随剩余宽度无限拉伸，避免 3 家时被拉成 309
+    maxCard: 260, // 订阅卡与按量卡共用的宽度上限；单家时若不封顶会被拉到整段宽（Issue #4）
     pagePadding: 24,
   },
   card: {
@@ -111,7 +111,7 @@ export const columnCount = (
   gap = SPEC.layout.gap,
 ) => Math.max(1, Math.floor((contentWidth + gap) / (minCard + gap)))
 
-/** 给定列数时每张卡的实际宽度（px，向下取整） */
+/** 参考布局（默认 4 列）下每张卡的名义宽度；实际渲染宽由 CSS 的 flex + maxCard 决定，不是本函数返回值 */
 export const cardWidth = (
   contentWidth = SPEC.layout.contentWidth,
   columns = columnCount(),

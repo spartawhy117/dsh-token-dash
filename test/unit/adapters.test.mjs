@@ -362,3 +362,58 @@ test('missSignature：清单不变则签名不变，用于缓存态日志去重'
   assert.equal(missSignature({}), '')
   assert.equal(missSignature(null), '')
 })
+
+test('OpenCode 真机 schema：rolling 映射 5h，resetsAt 转时间戳', () => {
+  const windows = parseOpenCodeUsage({
+    usage: {
+      rolling: { status: 'ok', percent: 0, resetsAt: '2026-11-20T12:55:43.000Z' },
+      weekly: { status: 'ok', percent: 12.5, resetsAt: '2026-11-23T00:00:00.000Z' },
+      monthly: { status: 'ok', percent: 85, resetsAt: '2026-11-28T11:50:14.000Z' },
+    },
+  })
+  assert.deepEqual(windows.map((item) => [item.key, item.usedPercent]), [['5h', 0], ['week', 12.5], ['month', 85]])
+  assert.equal(windows[0].resetAt, Date.parse('2026-11-20T12:55:43.000Z'))
+  assert.equal(windows[2].resetAt, Date.parse('2026-11-28T11:50:14.000Z'))
+})
+
+test('OpenCode 旧 schema 兼容：fiveHour 仍可按 5h 解析', () => {
+  const windows = parseOpenCodeUsage({ data: { usage: { fiveHour: { usedPercent: 12 } } } })
+  assert.deepEqual(windows.map((item) => [item.key, item.usedPercent]), [['5h', 12]])
+})
+
+test('OpenCode 凭据双名：OPENCODE_API_KEY 命中，旧名兜底', async () => {
+  const restore = mockFetch(async () => ({
+    ok: true, status: 200, json: async () => ({ usage: { rolling: { percent: 0 }, monthly: { percent: 85 } } }),
+  }))
+  try {
+    const primary = await readProviders(ctxWith({ OPENCODE_API_KEY: 'sk-main' }), {})
+    assert.equal(primary.find((item) => item.id === 'opencode-go')?.windows.length, 2)
+    const legacy = await readProviders(ctxWith({ OPENCODE_GO_API_KEY: 'sk-old' }), {})
+    assert.equal(legacy.find((item) => item.id === 'opencode-go')?.windows.length, 2)
+    const none = await readProviders(ctxWith({}), {})
+    assert.equal(none.find((item) => item.id === 'opencode-go'), undefined)
+  } finally {
+    restore()
+  }
+})
+
+test('缺凭据的声明式源进入 failures，并带尝试过的 ref 名', async () => {
+  const none = await readProviders(ctxWith({}), {})
+  const missing = none.failures.filter((item) => item.error?.kind === 'missing-credential')
+  assert.deepEqual(missing.map((item) => item.id), ['opencode-go', 'command-code', 'ollama'])
+  const opencode = missing.find((item) => item.id === 'opencode-go')
+  assert.deepEqual(opencode.error.refs, ['OPENCODE_API_KEY', 'OPENCODE_GO_API_KEY'])
+  // misses 契约不变
+  assert.equal(none.misses.includes('opencode-go:none'), true)
+})
+
+test('logAdapterFailures 输出缺凭据的 ref 名', () => {
+  const events = []
+  const log = { info: () => {}, warn: (module, event, meta) => events.push([module, event, meta]) }
+  logAdapterFailures(log, [
+    { id: 'opencode-go', error: { kind: 'missing-credential', refs: ['OPENCODE_API_KEY', 'OPENCODE_GO_API_KEY'] } },
+  ])
+  assert.deepEqual(events, [
+    ['adapter.opencode', 'detect.fail', { errorKind: 'missing-credential', refs: ['OPENCODE_API_KEY', 'OPENCODE_GO_API_KEY'] }],
+  ])
+})

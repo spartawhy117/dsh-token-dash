@@ -302,7 +302,7 @@ function providerEmpty(providerId, kind = 'api') {
     kind,
     canSubscribe: canBeSubscription(providerId),
     currency: providerCurrency(providerId),
-    usage: { todayTokens: 0, monthTokens: 0, todayCost: 0, monthCost: 0, requests: 0 },
+    usage: { todayTokens: 0, monthTokens: 0, todayCost: 0, monthCost: 0, monthEstimate: 0, requests: 0 },
     models: [],
     windows: [],
   }
@@ -457,7 +457,7 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     points.set(dayKey, point)
     return point
   }
-  const add = (providerId, modelId, row, point) => {
+  const add = (providerId, modelId, row, point, ts = now) => {
     if (hidden.has(providerId)) return
     const meta = info.get(providerId)
     const kind = resolveProviderKind(state, prefs, providerId, meta)
@@ -488,6 +488,17 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     entry.billable = billable
     // 订阅模型按目录价算出的 cost 不是真实支出，VM 内归零，保证费用框与 Tokens 框同一集合
     entry.cost += billable ? num(row.cost) : 0
+    // 订阅行另算只读参考估算：走独立字段，不进入 cost 与任何费用聚合（REQ-01 ~ REQ-04）
+    if (!billable) {
+      const estimatePrice = resolvePrice(modelId, providerId, ts)
+      entry.estimatePriced = (entry.estimatePriced ?? true) && estimatePrice !== null
+      if (estimatePrice !== null) {
+        entry.estimatedCost = (entry.estimatedCost ?? 0) + costOf({
+          ts, provider: providerId, model: modelId,
+          input: row.input, cacheRead: row.cacheRead, cacheWrite: row.cacheWrite, output: row.output,
+        })
+      }
+    }
     if (row.priced === false) entry.priced = false
     if (row.priced === 'empty') entry.emptyRows = (entry.emptyRows ?? 0) + 1
     entry.rows = (entry.rows ?? 0) + 1
@@ -519,12 +530,12 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
       if (providerId === 'unknown') {
         for (const [rawModel, row] of Object.entries(providerBucket.models ?? {})) {
           const owner = providerFromModel(rawModel)
-          if (owner !== null) add(owner, normalizeModel(rawModel), row, point)
+          if (owner !== null) add(owner, normalizeModel(rawModel), row, point, Date.parse(dayKey))
         }
         continue
       }
       for (const [rawModel, row] of Object.entries(providerBucket.models ?? {})) {
-        add(providerId, normalizeModel(rawModel), row, point)
+        add(providerId, normalizeModel(rawModel), row, point, Date.parse(dayKey))
       }
     }
   }
@@ -544,7 +555,14 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
       },
       hitRate: denominator > 0 ? entry.cacheRead / denominator : null,
       cost: round2(entry.cost),
-      approximate: entry.billable && resolvePrice(entry.modelId, entry.providerId, now)?.approximate === true,
+      // 订阅行下发只读参考估算；api 行不下发，避免与 cost 语义混淆
+      ...(entry.billable
+        ? {}
+        : {
+          estimatedCost: entry.estimatePriced === false ? null : round2(entry.estimatedCost ?? 0),
+          estimatedPriced: entry.estimatePriced !== false,
+        }),
+      approximate: resolvePrice(entry.modelId, entry.providerId, now)?.approximate === true,
       priced: entry.priced !== false
         ? (entry.rows > 0 && (entry.emptyRows ?? 0) < entry.rows ? true : 'empty')
         : false,
@@ -707,6 +725,8 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
     const tokens = num(row.input) + num(row.cacheRead) + num(row.cacheWrite) + num(row.output)
     provider.usage.monthTokens += tokens
     provider.usage.monthCost += billable ? num(row.cost) : 0
+    // 订阅行的目录价不算支出，但按「本月估算」单独累计，供订阅卡展示（D-02）
+    if (!billable) provider.usage.monthEstimate += num(row.cost)
     provider.usage.requests += num(row.requests)
     if (isToday) {
       provider.usage.todayTokens += tokens
