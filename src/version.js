@@ -31,6 +31,13 @@ export function compareVersions(left, right) {
   return a.local === b.local ? 0 : a.local > b.local ? 1 : -1
 }
 
+/** True when both share the same X.Y.Z base, ignoring the local suffix. */
+export function sameBase(left, right) {
+  const a = parseVersion(left)
+  const b = parseVersion(right)
+  return a.base[0] === b.base[0] && a.base[1] === b.base[1] && a.base[2] === b.base[2]
+}
+
 /** True when `latest` is strictly newer than `current`. */
 export function isNewer(latest, current) {
   return compareVersions(latest, current) > 0

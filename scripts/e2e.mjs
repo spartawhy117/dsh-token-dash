@@ -662,9 +662,9 @@ try {
   // Issue #4：卡片底部不再显示状态行（D-07）
   assert.equal((await board.getByTestId('token-dash-budget-row-deepseek-official').innerText()).includes('normal'), false, 'api card must not show a status caption')
   assert.equal((await board.getByTestId('token-dash-quota-row-opencode-go').innerText()).includes('窗'), false, 'subscription card must not show the window count')
-  // Issue #5：总费用含估算，带 ≈ 与说明（D-04）
+  // Issue #9：四格金额不加 ≈（口径说明只由副行承担），Issue #5 的「含估算」保留
   const costCard = await board.getByTestId('token-dash-card-cost').innerText()
-  assert.ok(costCard.includes('≈'), 'total cost must be marked as an estimate')
+  assert.equal(costCard.includes('≈'), false, 'total cost must not carry the ≈ prefix')
   assert.ok(costCard.includes('含估算'), 'total cost must state that estimates are included')
   // Issue #6：数据到达后加载占位必须消失（REQ-07）
   assert.equal(await board.getByTestId('token-dash-board-loading').count(), 0, 'loading placeholder must disappear once data arrives')
@@ -782,11 +782,16 @@ try {
   const axisKeys = await board.locator('[data-testid^=token-dash-trend-axis-]').count()
   assert.ok(axisKeys >= 2, 'hit rate axis must render at least two ticks')
   assert.match(await board.getByTestId('token-dash-trend-axis-top').innerText(), /%$/, 'hit rate ticks carry a percent sign')
-  // 多币种下费用指标禁用，不静默取首个币种
+  // 两种币种下费用指标走双轴双柱，不再整块禁用（REQ-11）
   await jsClick(board.getByTestId('token-dash-card-cost'))
   await page.waitForTimeout(120)
-  assert.equal(await board.getByTestId('token-dash-trend-empty').count(), 1)
-  assert.match(await board.getByTestId('token-dash-trend-empty').innerText(), /多币种下成本柱不可用/)
+  assert.equal(await board.getByTestId('token-dash-trend-empty').count(), 0, 'cost metric must render with two currencies')
+  assert.equal(await board.getByTestId('token-dash-trend-axis-col-right').count(), 1, 'dual axis must render a right axis column')
+  assert.ok(
+    await board.locator('[data-testid^=token-dash-trend-bar-][data-testid$="-USD"]').count() > 0,
+    'secondary currency bars must be rendered',
+  )
+  assert.equal(await board.getByTestId('token-dash-trend-legend').count(), 1, 'dual axis must show a legend')
   await jsClick(board.getByTestId('token-dash-card-tokens'))
   await page.waitForTimeout(120)
   const detailTable = board.getByTestId('token-dash-detail-table')

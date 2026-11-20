@@ -4,6 +4,58 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.3.1-local.7] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+**成本趋势支持两种币种**
+
+- 「费用」指标以前在多币种时整块不可用，现在两种币种会并排画两根柱：人民币用左轴、美元用右轴，各自按自己的最大值缩放。
+- 左右轴用同一套刻度算法，只换货币符号，不再出现一根柱被压成一条线的情况。
+- 标题行加了色块图例，悬停显示「日期 · ¥金额 · $金额」。
+
+#### 修改
+
+**总费用不再带 ≈ 前缀**
+
+- 四格里的金额恢复成 `¥52.72`、`$1.57`，口径说明仍由下方「2 个币种 · 含估算」承担。
+
+**本地构建不再提示可更新**
+
+- 之前本地包会提示「可更新到 2.3.1」，点下去会用正式版覆盖本地包，把新代码换成旧代码。现在同版本号的本地包不再提示；真正发布了新版本时照常提示。
+
+**日志清理动作每次留痕**
+
+- 启动时的日志清理即使没有可删文件也会记一条，便于确认保留策略在跑。
+
+### English
+
+#### Added
+
+**Cost trend now handles two currencies**
+
+- The cost metric used to be unavailable with multiple currencies; it now draws two bars side by side — CNY on the left axis, USD on the right, each scaled to its own maximum.
+- Both axes use the same tick algorithm, differing only in the currency symbol, so neither series collapses into a flat line.
+- The header gained a colour legend, and hover shows `date · ¥amount · $amount`.
+
+#### Changes
+
+**Total cost no longer carries a ≈ prefix**
+
+- The tile reads `¥52.72` and `$1.57` again; the “incl. estimates” caption still states the basis.
+
+**Local builds no longer prompt for an update**
+
+- A local build used to offer “update to 2.3.1”, which would overwrite it with the released build and drop the newer code. Same-base local builds are no longer prompted; a genuinely newer release still is.
+
+**Log pruning is always recorded**
+
+- Startup pruning now logs an entry even when there was nothing to delete, so the retention policy can be confirmed to run.
+
 ## [2.3.1-local.6] - 2026-11-20
 
 > 本地构建，未发布

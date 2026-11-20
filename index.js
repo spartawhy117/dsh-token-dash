@@ -14,7 +14,7 @@ import { PROVIDER_SOURCES } from './src/quota-sources.js'
 import { catalogInfo, configurePricing, loadCommunityPricing, loadRouterPricing } from './src/pricing.js'
 import { providerCurrency } from './src/providers.js'
 import { clearLog, createLogger, exportLog, pruneLogs } from './src/diagnostics.js'
-import { isNewer } from './src/version.js'
+import { isNewer, sameBase } from './src/version.js'
 
 export const name = 'dsh-token-dash'
 
@@ -87,9 +87,9 @@ async function fetchLatest() {
   if (!response.ok) throw new Error(`registry-${response.status}`)
   const meta = await response.json()
   if (typeof meta?.version !== 'string') throw new Error('invalid-registry-response')
-  return { current: CURRENT_VERSION, latest: meta.version, hasUpdate: isNewer(meta.version, CURRENT_VERSION), published: true }
-  if (typeof meta?.version !== 'string') throw new Error('invalid-registry-response')
-  return { current: CURRENT_VERSION, latest: meta.version, hasUpdate: isNewer(meta.version, CURRENT_VERSION), published: true, source: 'registry' }
+  // 本地构建与 npm 同 base 时不提示更新：本地包代码更新，装正式版反而会退回（REQ-09）
+  const hasUpdate = isNewer(meta.version, CURRENT_VERSION) && !sameBase(meta.version, CURRENT_VERSION)
+  return { current: CURRENT_VERSION, latest: meta.version, hasUpdate, published: true, source: 'registry' }
 }
 
 /** 安装 spec：默认按 npm 版本号安装，仍走与真实更新完全相同的 CLI 路径。 */
@@ -226,7 +226,8 @@ export function apply(ctx) {
   // 启动即按保留策略清理：等价于「更新后清理一次旧目录」，之后每次启动持续生效
   try {
     const pruned = pruneLogs({ dir: logDir, activeFile: logger.file })
-    if (pruned.removed > 0) logger.info('diag', 'prune', pruned)
+    // 无条件记录：即使 removed 为 0 也要能确认保留策略执行过（REQ-08）
+    logger.info('diag', 'prune', pruned)
   } catch { /* 日志治理失败不影响插件 */ }
   let prefs
   let state

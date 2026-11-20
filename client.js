@@ -193,6 +193,8 @@ window.__ModuleLoader__.load({
       muted: 'var(--dsw-alias-label-secondary, rgba(235,235,235,.65))',
       weak: 'var(--dsw-alias-label-tertiary, rgba(235,235,235,.45))',
       accent: 'var(--dsw-alias-state-business-primary, #6ea8ff)',
+      // 第二条数据序列（双轴图的次币种柱）：独立色相，不借用绿/黄/红等状态语义色
+      series2: 'var(--td-series-2, #c9a5ff)',
       warn: 'var(--dsw-alias-state-warn-primary, #f0a020)',
       over: 'var(--dsw-alias-state-error-primary, #e05a5a)',
       ok: 'var(--td-state-ok, var(--dsw-alias-state-success-primary, #4ed17e))',
@@ -654,6 +656,13 @@ window.__ModuleLoader__.load({
       trendSpacer: { flex: '1 1 auto' },
       // 轴与绘图区两列：轴在绘图区之外（与 CC Switch 的 <YAxis> 同构），绘图区自己承担网格与柱
       trendPlot: { display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', height: 132, minWidth: 0 },
+      trendPlotDual: { gridTemplateColumns: 'auto minmax(0, 1fr) auto' },
+      trendAxisColRight: { paddingRight: 0, paddingLeft: 6 },
+      trendAxisRight: {
+        position: 'absolute', left: 0, fontSize: 11, color: T.weak, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+      },
+      trendLegend: { display: 'flex', alignItems: 'center', gap: 6, marginRight: 8, fontSize: 11, color: T.muted, whiteSpace: 'nowrap' },
+      trendLegendDot: { width: 8, height: 8, borderRadius: 999, display: 'inline-block', marginRight: 3 },
       trendAxisCol: { position: 'relative', minWidth: 0, paddingRight: 6 },
       trendAxis: {
         position: 'absolute', right: 6, color: T.weak, fontSize: 11, lineHeight: '14px',
@@ -1214,8 +1223,8 @@ window.__ModuleLoader__.load({
       const costEntries = Object.entries(usage?.totals ?? {})
       const total = usage?.total ?? null
       const dash = '—'
-      // 总费用含订阅估算（D-04）：统一带 ≈，副行说明含估算
-      const costNodes = costEntries.map(([currency, value]) => h('span', { key: currency }, `≈${fmtMoney(value.cost, currency)}`))
+      // 总费用含订阅估算：金额不加前缀，口径说明只由副行「含估算」承担（REQ-10，修正 D-04 的一半）
+      const costNodes = costEntries.map(([currency, value]) => h('span', { key: currency }, fmtMoney(value.cost, currency)))
       const tokensLabel = h('span', null,
         tr('真实 Tokens'),
         h(InfoTip, {
@@ -1327,16 +1336,25 @@ window.__ModuleLoader__.load({
       // 悬停态：{ center: 柱位百分比, ratio: 柱高百分比, text: 浮层文案 }；null 表示未悬停
       const [hover, setHover] = useState(null)
       const points = Array.isArray(series) ? series : []
-      const values = points.map((point) => trendValue(point, metric))
-      const known = values.filter((value) => value !== null && value > 0)
-      const max = known.length > 0 ? Math.max(...known) : 0
-      const floor = metric === 'hitRate' ? hitRateFloor(values) : 0
-      const span = Math.max(max - floor, 1e-9)
-      // 多币种时一根柱无法表达，按既定决策禁用成本指标并给出口文案
+      // 成本指标：两个币种走双轴双柱；>2 仍给出口文案（三轴不可读，明确不做）
       const currencies = new Set()
       for (const point of points) for (const currency of Object.keys(point.cost ?? {})) currencies.add(currency)
-      const costBlocked = metric === 'cost' && currencies.size > 1
-      const costCurrency = currencies.size === 1 ? [...currencies][0] : 'CNY'
+      const currencyList = [...currencies]
+      const dual = metric === 'cost' && currencyList.length === 2
+      const primary = currencyList.includes('CNY') ? 'CNY' : (currencyList[0] ?? 'CNY')
+      const secondary = dual ? currencyList.find((code) => code !== primary) : null
+      const costBlocked = metric === 'cost' && currencyList.length > 2
+      const costCurrency = currencyList.length === 1 ? currencyList[0] : primary
+      const costAt = (point, code) => Number(point?.cost?.[code]?.cost) || 0
+      const primaryValues = dual ? points.map((point) => costAt(point, primary)) : null
+      const secondaryValues = dual ? points.map((point) => costAt(point, secondary)) : null
+      const values = dual ? primaryValues : points.map((point) => trendValue(point, metric))
+      const known = values.filter((value) => value !== null && value > 0)
+      const max = known.length > 0 ? Math.max(...known) : 0
+      const secondaryKnown = dual ? secondaryValues.filter((value) => value > 0) : []
+      const secondaryMax = secondaryKnown.length > 0 ? Math.max(...secondaryKnown) : 0
+      const floor = metric === 'hitRate' ? hitRateFloor(values) : 0
+      const span = Math.max(max - floor, 1e-9)
       // 换指标 / 换范围后旧的柱位与文案都已失效，直接清空悬停态
       useEffect(() => { setHover(null) }, [metric, series])
       const tickOf = (dayKey) => {
@@ -1345,10 +1363,14 @@ window.__ModuleLoader__.load({
       }
       // 日期刻度按可用宽度抽稀，末点必显
       const step = Math.max(1, Math.ceil(points.length / 6))
+      const hasData = dual ? (known.length > 0 || secondaryKnown.length > 0) : known.length > 0
       const emptyMessage = costBlocked
         ? tr('多币种下成本柱不可用，请切换其他指标')
-        : (points.length === 0 || known.length === 0 ? tr('范围内暂无消耗') : null)
+        : (points.length === 0 || !hasData ? tr('范围内暂无消耗') : null)
       const axisTicks = emptyMessage === null ? trendAxisTicks({ floor, max, metric, currency: costCurrency }) : []
+      const rightTicks = emptyMessage === null && dual
+        ? trendAxisTicks({ floor: 0, max: secondaryMax, metric, currency: secondary })
+        : []
       // 轴宽随最长刻度自适应：字号 11px 下中文≈11px、其余≈6.2px，再留 6px 与柱体的间距
       // 轴列宽度由内容自适应（grid auto 列），这里只保证空态时左侧不塌陷
       const axisWidth = axisTicks.reduce((widest, tick) => {
@@ -1357,17 +1379,28 @@ window.__ModuleLoader__.load({
         return Math.max(widest, px)
       }, 0)
       const axisPad = axisTicks.length === 0 ? 34 : Math.max(28, Math.ceil(axisWidth) + 6)
+      const rightWidth = rightTicks.reduce((widest, tick) => {
+        let px = 0
+        for (const char of tick.text) px += /[\u4e00-\u9fff]/.test(char) ? 11 : 6.2
+        return Math.max(widest, px)
+      }, 0)
+      const rightPad = rightTicks.length === 0 ? 0 : Math.max(28, Math.ceil(rightWidth) + 6)
       return h('div', { 'data-testid': 'token-dash-trend', 'data-td-trend': metric, style: styles.trendBox },
         h('div', { style: styles.trendHead },
           h('b', { 'data-testid': 'token-dash-trend-title', style: styles.trendTitle },
             tr('使用趋势 · {metric}', { metric: tr(METRIC_LABELS[metric]) })),
           h('span', { style: styles.trendHint }, tr(grain === 'month' ? '按月' : '按天')),
           h('span', { style: styles.trendSpacer }),
+          dual
+            ? h('span', { 'data-testid': 'token-dash-trend-legend', style: styles.trendLegend },
+              h('i', { style: { ...styles.trendLegendDot, background: T.accent } }), fmtMoney(0, primary).slice(0, 1) + primary,
+              h('i', { style: { ...styles.trendLegendDot, background: T.series2, marginLeft: 8 } }), fmtMoney(0, secondary).slice(0, 1) + secondary)
+            : null,
           h(Segmented, {
             value: metric, onChange: onMetricChange, label: tr('趋势指标'), kind: 'radiogroup', fit: true,
             options: TREND_METRICS.map(([value, label]) => ({ value, label: tr(label) })),
           })),
-        h('div', { style: styles.trendPlot },
+        h('div', { style: dual ? { ...styles.trendPlot, ...styles.trendPlotDual } : styles.trendPlot },
           // 左列：Y 轴（在绘图区之外，与 CC Switch 的 <YAxis> 同构）
           h('div', { 'data-testid': 'token-dash-trend-axis-col', style: { ...styles.trendAxisCol, minWidth: axisPad } },
             ...axisTicks.map((tick) => h('span', {
@@ -1390,21 +1423,40 @@ window.__ModuleLoader__.load({
               ...points.map((point, index) => {
                 const value = values[index]
                 const ratio = value === null || value <= floor ? 0 : Math.max(0, Math.min(100, ((value - floor) / span) * 100))
+                const secondaryRatio = dual && secondaryMax > 0
+                  ? Math.max(0, Math.min(100, (secondaryValues[index] / secondaryMax) * 100))
+                  : 0
+                const hoverText = dual
+                  ? `${point.dayKey} · ${fmtMoney(value, primary)} · ${fmtMoney(secondaryValues[index], secondary)}`
+                  : `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`
                 // 悬停即渲染虚线与浮层：不挂原生 title，避免系统 tooltip 的 ~1s 延迟
                 return h('span', {
                   key: point.dayKey,
                   'data-testid': `token-dash-trend-slot-${point.dayKey}`,
-                  style: styles.trendSlot,
+                  style: dual ? { ...styles.trendSlot, display: 'flex', alignItems: 'flex-end', gap: 1 } : styles.trendSlot,
                   onMouseEnter: () => setHover({
                     center: ((index + 0.5) / points.length) * 100,
                     ratio,
-                    text: `${point.dayKey} · ${fmtMetric(value, metric, costCurrency)}`,
+                    text: hoverText,
                   }),
                 },
-                  h('span', {
-                    'data-testid': `token-dash-trend-bar-${point.dayKey}`,
-                    style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
-                  }))
+                  dual
+                    ? [
+                      h('span', {
+                        key: primary,
+                        'data-testid': `token-dash-trend-bar-${point.dayKey}-${primary}`,
+                        style: { ...styles.trendBar, flex: '1 1 0', height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
+                      }),
+                      h('span', {
+                        key: secondary,
+                        'data-testid': `token-dash-trend-bar-${point.dayKey}-${secondary}`,
+                        style: { ...styles.trendBar, flex: '1 1 0', height: `${secondaryRatio}%`, background: secondaryRatio === 0 ? 'transparent' : T.series2 },
+                      }),
+                    ]
+                    : h('span', {
+                      'data-testid': `token-dash-trend-bar-${point.dayKey}`,
+                      style: { ...styles.trendBar, height: `${ratio}%`, background: ratio === 0 ? 'transparent' : T.accent },
+                    }))
               })) : h('div', { 'data-testid': 'token-dash-trend-empty', style: styles.trendMsg }, emptyMessage),
             emptyMessage === null && hover !== null ? h('span', {
               'data-testid': 'token-dash-trend-hover-line',
@@ -1426,7 +1478,18 @@ window.__ModuleLoader__.load({
             emptyMessage === null && hover !== null ? h('div', {
               'data-testid': 'token-dash-trend-hover-tip',
               style: { ...styles.trendTip, left: `${hover.center}%` },
-            }, hover.text) : null)))
+            }, hover.text) : null),
+          dual
+            ? h('div', { 'data-testid': 'token-dash-trend-axis-col-right', style: { ...styles.trendAxisCol, ...styles.trendAxisColRight, minWidth: rightPad } },
+              ...rightTicks.map((tick) => h('span', {
+                key: tick.key,
+                'data-testid': `token-dash-trend-axis-right-${tick.key}`,
+                'aria-hidden': true,
+                style: tick.top === null
+                  ? { ...styles.trendAxisRight, bottom: 18 }
+                  : { ...styles.trendAxisRight, top: tick.top, transform: tick.top === '50%' ? 'translateY(-50%)' : undefined },
+              }, tick.text)))
+            : null))
     }
 
     function MiniBar({ ratio = 0, neutral = false, stretch = false }) {
