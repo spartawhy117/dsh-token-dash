@@ -58,7 +58,7 @@ Only the official endpoints listed below are called. Any other provider is still
 
 Screenshots use mock data so the full layout is visible at once.
 
-**P1 · Composer footer-right Pill**: API usage / subscription variants; click to open, click outside, `×` or `Esc` to close.
+**P1 · Composer footer-right Pill**: API usage / subscription variants; click to open, click outside, `×` or `Esc` to close. The API variant shows one line of budget ring + today's spend + real balance; the subscription variant shows a ring per window. Colour only signals alerts — a healthy state stays neutral.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/pill-api.png" alt="API usage pill" />
@@ -85,15 +85,16 @@ Screenshots use mock data so the full layout is visible at once.
 - Subscription windows use three slots: first left, second center, third right; two windows occupy the first two slots.
 - Model column is capped at 150; Tokens / requests / hit rate are right-aligned.
 
-**P3 · Full dashboard**: cards for 8 providers, a four-cell summary (cost / real tokens / requests / cache hit rate), usage trend bars with a labeled vertical axis and grid lines, a model breakdown section and a settings capsule; the page owns its scrollbar at the window edge.
+**P3 · Full dashboard**: cards for 8 providers, a four-cell summary (real tokens / cost / cache hit rate / requests), a metric-switchable trend chart (including the dual-currency, dual-axis cost view), a model breakdown with subscription estimates, and a settings capsule; the page owns its scrollbar at the window edge.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/spartawhy117/dsh-token-dash/main/docs/pic/en/settings.png" alt="Full dashboard" />
 </p>
 
-- API usage card: budget input, planned balance, real balance, month-to-date spend; subscription card: one ring per window with remaining percentage and countdown.
-- Trend chart: the vertical axis takes its own column outside the plot, with three ticks that follow the selected metric; three grid lines line up with those ticks; the hit-rate axis is pinned to 100% at the top, and a single 0% day cannot drag its floor back to zero.
-- Breakdown: its own section heading, then model / Tokens / input / cache / output / requests / hit rate / cost; everything except the model column is right-aligned.
+- API usage card: budget input, planned balance, real balance, month-to-date spend; subscription card: one ring per window with remaining percentage and countdown, plus an estimated monthly value when available; cards no longer carry a status line.
+- Trend chart: the vertical axis takes its own column outside the plot, with three ticks that follow the selected metric; three grid lines line up with those ticks; the hit-rate axis is pinned to 100% at the top, and a single 0% day cannot drag its floor back to zero. With **two currencies** the cost metric switches to a **dual-axis, two-bar** layout — CNY on the left axis, USD on the right, each scaled to its own maximum, with a colour legend in the header.
+- Total cost tile: includes subscription estimates alongside actual billing, captioned “{n} currencies · incl. estimates”.
+- Breakdown: its own section heading, then model / Tokens / input / cache / output / requests / hit rate / cost; everything except the model column is right-aligned. Cost is always marked `≈` as a local estimate, and subscription rows show what those tokens would cost at API rates (or “not priced”, or `—` when no estimate exists).
 - Settings capsule: refresh interval + account-balance toggle; logs, export/import, price table and version below.
 - The settings section has an external "Settings and data" title above the capsule; the capsule itself keeps the refresh interval, logs/data controls and version row.
 - Spacing uses only 4 / 8 / 12 / 16 / 24 / 32; P2 and P3 share the same tokens.

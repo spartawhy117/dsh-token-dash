@@ -109,7 +109,7 @@ export const summarySubThreeWindows = {
   currentProviderId: 'opencode-go',
 }
 
-const row = (providerId, providerName, modelId, displayName, kind, currency, cost, buckets, requests, approximate = false) => {
+const row = (providerId, providerName, modelId, displayName, kind, currency, cost, buckets, requests, approximate = false, estimate = undefined) => {
   const total = buckets.input + buckets.cacheRead + buckets.cacheWrite + buckets.output
   const denominator = buckets.input + buckets.cacheRead + buckets.cacheWrite
   return {
@@ -128,6 +128,8 @@ const row = (providerId, providerName, modelId, displayName, kind, currency, cos
     cost,
     priced: true,
     approximate,
+    // 订阅行的只读估算：其余行不下发，保持「无估算 → 显示 —」这个状态可被覆盖
+    ...(estimate === undefined ? {} : { estimatedCost: estimate.cost, estimatedPriced: estimate.priced }),
     hitRate: denominator > 0 ? buckets.cacheRead / denominator : null,
     tokens: { ...buckets, cache: buckets.cacheRead + buckets.cacheWrite, total },
   }
@@ -137,8 +139,8 @@ const monthModels = [
   row('deepseek-official', 'DeepSeek', 'deepseek-v4.1-flash', 'DeepSeek-V4.1-Flash', 'api', 'CNY', 91.9, { input: 110_000, cacheRead: 200_000, cacheWrite: 0, output: 20_000 }, 48),
   row('openrouter', 'OpenRouter', 'deepseek-v4.1-flash', 'DeepSeek-V4.1-Flash', 'api', 'USD', 22.8, { input: 20_000, cacheRead: 10_000, cacheWrite: 0, output: 10_000 }, 12, true),
   row('qwen', 'Qwen', 'qwen3.8-max', 'Qwen3.8-Max', 'api', 'CNY', 0.4, { input: 50_000, cacheRead: 20_000, cacheWrite: 0, output: 10_000 }, 24),
-  row('zhipu', 'GLM Coding', 'glm-5.3', 'GLM-5.3', 'subscription', 'CNY', 0, { input: 300_000, cacheRead: 520_000, cacheWrite: 0, output: 40_000 }, 64),
-  row('opencode-go', 'OpenCode Go', 'claude-sonnet', 'Claude Sonnet', 'subscription', 'USD', 0, { input: 60_000, cacheRead: 120_000, cacheWrite: 0, output: 8_000 }, 22),
+  row('zhipu', 'GLM Coding', 'glm-5.3', 'GLM-5.3', 'subscription', 'CNY', 0, { input: 300_000, cacheRead: 520_000, cacheWrite: 0, output: 40_000 }, 64, false, { cost: 12.4, priced: true }),
+  row('opencode-go', 'OpenCode Go', 'claude-sonnet', 'Claude Sonnet', 'subscription', 'USD', 0, { input: 60_000, cacheRead: 120_000, cacheWrite: 0, output: 8_000 }, 22, false, { cost: 0.82, priced: true }),
   row('command-code', 'Command Code', 'gpt-5.4', 'GPT-5.4', 'subscription', 'CNY', 0, { input: 20_000, cacheRead: 40_000, cacheWrite: 0, output: 4_000 }, 6),
 ]
 
