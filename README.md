@@ -156,6 +156,7 @@ npm run logs -- --module provider,route      # 缓存 / 路由异常
 ```bash
 npm test      # 单元测试（80 通过）
 npm run e2e   # 端到端（临时 DSH_HOME + web profile + Playwright）
+npm run stats # npm 下载量、版本分布与装机估算（只读公开接口，按 UTC 日统计）
 npm run shots # 用假数据重新生成 docs/pic 的 P1/P2/P3 截图
 npm run pack  # 发布 tarball 生成到 build/
 ```

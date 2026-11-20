@@ -47,3 +47,9 @@
 - tarball 在 `build/`（gitignore，不入库）。
 - Release 页产物 = 自动 pack 的 tarball（离线安装源）。
 - npm 安装：`dsh plugin --profile desktop add dsh-token-dash@X.Y.Z`。
+
+## 发布后统计
+
+- `npm run stats`（即 `node scripts/npm-stats.mjs --days 30`）只读 npm registry 与 api.npmjs.org，输出下载总量、近 7 天版本分布、每日曲线与启发式装机估算；`--out <file>` 落盘留档，`--json` 输出原始数据。
+- 口径：下载按 UTC 日统计、当日未结算；下载次数 ≠ 用户数（镜像 / 扫描 / 重复安装都会计入），估算只作趋势参考。
+- 按版本的拆分接口只提供最近 7 天，需要历史版本分布时每次发版后跑一次并归档。
