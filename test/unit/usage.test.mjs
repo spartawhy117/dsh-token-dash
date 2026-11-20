@@ -57,7 +57,7 @@ test('buildUsage: all starts at earliest day', () => {
   assert.equal(usage.totals.CNY.requests, 3)
 })
 
-test('buildUsage: subscription cost is excluded from totals but row remains', () => {
+test('buildUsage: 订阅行 cost 为 0，估算走独立字段', () => {
   const usage = buildUsage(state, { billingModes: {} }, 'today', now, providers)
   const subscription = usage.models.find((item) => item.providerId === 'zhipu')
   assert.equal(subscription.kind, 'subscription')
@@ -183,7 +183,7 @@ const estimateState = {
   },
 }
 
-test('订阅行给出估算 API 价格，且不计入总费用（REQ-01 / REQ-03）', () => {
+test('订阅行给出估算 API 价格并计入总费用（REQ-01 / REQ-06）', () => {
   resetPricingForTests()
   setCatalogForTests([
     { modelId: 'deepseek-flash', family: 'deepseek', input: 1, output: 4 },
@@ -195,8 +195,9 @@ test('订阅行给出估算 API 价格，且不计入总费用（REQ-01 / REQ-03
   assert.equal(sub.cost, 0)
   assert.equal(sub.estimatedPriced, true)
   assert.equal(sub.estimatedCost, 2)
-  // 费用聚合不受估算影响
-  assert.equal(usage.totals.CNY.cost, 3)
+  // 总费用 = 实际 + 估算（D-04），并单列 estimated
+  assert.equal(usage.totals.CNY.cost, 5)
+  assert.equal(usage.totals.CNY.estimated, 2)
   // api 行不下发估算字段，避免与 cost 混淆
   const api = usage.models.find((item) => item.providerId === 'deepseek-official')
   assert.equal(api.estimatedCost, undefined)
@@ -225,5 +226,6 @@ test('订阅估算跨多日累加，口径与 costOf 一致（REQ-02）', () => 
   const usage = buildUsage(twoDays, { billingModes: {} }, '7d', now, providers)
   const sub = usage.models.find((item) => item.providerId === 'zhipu')
   assert.equal(sub.estimatedCost, 2) // 1e6 × 1 + 5e5 × 2，分两日累加
-  assert.equal(usage.totals.CNY.cost, 0)
+  assert.equal(usage.totals.CNY.cost, 2)
+  assert.equal(usage.totals.CNY.estimated, 2)
 })

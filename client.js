@@ -74,7 +74,9 @@ window.__ModuleLoader__.load({
       '30秒': '30s', '1分钟': '1m', '5分钟': '5m',
       '社区': 'Community', '内置兜底': 'Built-in fallback',
       '查询失败': 'Query failed', '套餐查询失败': 'Quota query failed',
-      '金额说明': 'Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.',
+      '数据加载中': 'Loading data',
+  '含估算': 'incl. estimates',
+  '金额说明': 'Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.',
   '本月估算': 'Est. this month',
       '订阅不计价，估算值仅作参考': 'Subscription is not billed; the estimate is for reference only',
       '周': 'Week', '月': 'Month', '重置': 'Reset',
@@ -276,7 +278,8 @@ window.__ModuleLoader__.load({
     }
 
     async function getJson(path) {
-      const res = await fetch(`${API}${path}`, { headers: { accept: 'application/json' } })
+      // 10 秒超时：把「一直等」转成可重试的失败态，避免长时间无反馈（REQ-07）
+      const res = await fetch(`${API}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
       const body = await res.json().catch(() => ({}))
       if (!res.ok || body?.ok !== true) throw new Error(body?.reason ?? `http-${res.status}`)
       return body.data
@@ -1211,7 +1214,8 @@ window.__ModuleLoader__.load({
       const costEntries = Object.entries(usage?.totals ?? {})
       const total = usage?.total ?? null
       const dash = '—'
-      const costNodes = costEntries.map(([currency, value]) => h('span', { key: currency }, fmtMoney(value.cost, currency)))
+      // 总费用含订阅估算（D-04）：统一带 ≈，副行说明含估算
+      const costNodes = costEntries.map(([currency, value]) => h('span', { key: currency }, `≈${fmtMoney(value.cost, currency)}`))
       const tokensLabel = h('span', null,
         tr('真实 Tokens'),
         h(InfoTip, {
@@ -1231,7 +1235,7 @@ window.__ModuleLoader__.load({
           label: tr('总费用'),
           main: () => h('div', { style: styles.summaryV },
             pending ? dash : (costNodes.length === 0 ? dash : costNodes)),
-          sub: () => (pending ? dash : tr('{n} 个币种', { n: costEntries.length })),
+          sub: () => (pending ? dash : `${tr('{n} 个币种', { n: costEntries.length })} · ${tr('含估算')}`),
         },
         hitRate: {
           label: tr('缓存命中率'),
@@ -1445,7 +1449,8 @@ window.__ModuleLoader__.load({
 
     /** P3 API 卡底部说明：状态 · 比例，再补余额周期 / 限流 / 渠道用量（渠道值只读）。 */
     function apiCardCaption(provider, { hasBudget, percent, budget }) {
-      const parts = [`${hasBudget ? stateOf(percent, API_CRITICAL) : 'unset'} · ${hasBudget ? fmtRatio(budget.percent) : '—'}`]
+      // 状态与比例已由环和百分比表达，说明行只留环上放不下的信息（D-07）
+      const parts = []
       const periodEnd = Number(provider.balance?.periodEnd)
       const period = Number.isFinite(periodEnd) && periodEnd > 0 ? resetParts(periodEnd).absolute : null
       if (period !== null) parts.push(tr('周期至 {time}', { time: period }))
@@ -2186,7 +2191,9 @@ window.__ModuleLoader__.load({
                     style: { fontSize: 10, color: T.weak },
                   }, tr('按社区表 CNY'))
                   : null)),
-            h('div', { style: styles.cardCaption }, apiCardCaption(provider, { hasBudget, percent, budget })))
+            apiCardCaption(provider, { hasBudget, percent, budget }) === ''
+              ? null
+              : h('div', { style: styles.cardCaption }, apiCardCaption(provider, { hasBudget, percent, budget })))
         }))
     }
 
@@ -2228,11 +2235,10 @@ window.__ModuleLoader__.load({
               }, windows.map((plan) => h(QuotaCell, {
                 key: plan.key, providerId: provider.id, plan, windowKey: plan.key,
               }))),
-            h('div', { style: styles.cardCaption },
-              `${windows.length} ${tr('窗')}`,
-              Number(provider.usage?.monthEstimate) > 0
-                ? ` · ${tr('本月估算')} ${fmtMoney(provider.usage.monthEstimate, provider.currency)}`
-                : null))
+            Number(provider.usage?.monthEstimate) > 0
+              ? h('div', { style: styles.cardCaption },
+                `${tr('本月估算')} ${fmtMoney(provider.usage.monthEstimate, provider.currency)}`)
+              : null)
         }))
     }
 
@@ -2351,6 +2357,10 @@ window.__ModuleLoader__.load({
       const models = Array.isArray(usage?.models) ? usage.models : []
       const updated = fmtClock(summary?.updatedAt)
       const degraded = summary?.providersDegraded === true
+      // 无数据时只给一行加载提示，避免重挂载后长时间空白（REQ-07）
+      if (summary === null) {
+        return h('div', { 'data-testid': 'token-dash-board-loading', style: styles.empty }, tr('数据加载中'))
+      }
       const emptyAll = summary !== null && api.length === 0 && subscriptions.length === 0
       // 空态快照：确认「空白」到底是走了空态分支还是渲染异常
       if (api.length + subscriptions.length === 0) {

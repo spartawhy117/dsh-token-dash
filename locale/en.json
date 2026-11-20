@@ -10,6 +10,8 @@
   "内置兜底": "Built-in fallback",
   "查询失败": "Query failed",
   "套餐查询失败": "Quota query failed",
+  "数据加载中": "Loading data",
+  "含估算": "incl. estimates",
   "金额说明": "Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.",
   "本月估算": "Est. this month",
   "订阅不计价，估算值仅作参考": "Subscription is not billed; the estimate is for reference only",

@@ -317,7 +317,7 @@ function normalizeProviderInfo(input) {
 const BILLING_MODES = new Set(['api', 'subscription'])
 
 function emptyTotals() {
-  return { cost: 0, requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, hitRate: null }
+  return { cost: 0, estimated: 0, requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, hitRate: null }
 }
 
 /** 行内与 0 桶共用：声明 > 快照 > registry，不写死 CNY。 */
@@ -489,14 +489,16 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
     // 订阅模型按目录价算出的 cost 不是真实支出，VM 内归零，保证费用框与 Tokens 框同一集合
     entry.cost += billable ? num(row.cost) : 0
     // 订阅行另算只读参考估算：走独立字段，不进入 cost 与任何费用聚合（REQ-01 ~ REQ-04）
+    let rowEstimate = null
     if (!billable) {
       const estimatePrice = resolvePrice(modelId, providerId, ts)
       entry.estimatePriced = (entry.estimatePriced ?? true) && estimatePrice !== null
       if (estimatePrice !== null) {
-        entry.estimatedCost = (entry.estimatedCost ?? 0) + costOf({
+        rowEstimate = costOf({
           ts, provider: providerId, model: modelId,
           input: row.input, cacheRead: row.cacheRead, cacheWrite: row.cacheWrite, output: row.output,
         })
+        entry.estimatedCost = (entry.estimatedCost ?? 0) + rowEstimate
       }
     }
     if (row.priced === false) entry.priced = false
@@ -517,6 +519,10 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
       const bucket = (point.cost[currency] ??= { cost: 0, requests: 0 })
       bucket.cost += num(row.cost)
       bucket.requests += num(row.requests)
+    } else if (rowEstimate !== null) {
+      // 趋势「费用」与四格同口径：订阅行按当日估算计入（D-05）
+      const bucket = (point.cost[currency] ??= { cost: 0, requests: 0 })
+      bucket.cost += rowEstimate
     }
   }
 
@@ -579,18 +585,24 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
   }
   if (Object.keys(totals).length === 0) totals.CNY = emptyTotals()
   for (const row of rows) {
-    if (row.billable !== true) continue
     const bucket = totals[row.currency] ?? emptyTotals()
-    bucket.cost += row.cost
-    bucket.requests += row.requests
-    bucket.input += row.input
-    bucket.cacheRead += row.cacheRead
-    bucket.cacheWrite += row.cacheWrite
-    bucket.output += row.output
+    if (row.billable === true) {
+      bucket.cost += row.cost
+      bucket.requests += row.requests
+      bucket.input += row.input
+      bucket.cacheRead += row.cacheRead
+      bucket.cacheWrite += row.cacheWrite
+      bucket.output += row.output
+    } else {
+      // 订阅行只并入估算金额：requests / input 等仍保持 api 口径，避免改动 totals 的 hitRate
+      bucket.cost += row.estimatedCost ?? 0
+      bucket.estimated += row.estimatedCost ?? 0
+    }
     totals[row.currency] = bucket
   }
   for (const bucket of Object.values(totals)) {
     bucket.cost = round2(bucket.cost)
+    bucket.estimated = round2(bucket.estimated ?? 0)
     const denominator = bucket.input + bucket.cacheRead + bucket.cacheWrite
     bucket.hitRate = denominator > 0 ? bucket.cacheRead / denominator : null
   }
@@ -858,7 +870,7 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
     total.remaining = round2(total.remaining)
   }
 
-  const totalCost = round2(models.reduce((sum, row) => sum + (row.kind === 'api' ? row.cost : 0), 0))
+  const totalCost = round2(models.reduce((sum, row) => sum + (row.kind === 'api' ? row.cost : (row.estimatedCost ?? 0)), 0))
   const unpricedModels = models.filter((row) => row.priced === false).map((row) => `${row.providerId}:${row.modelId}`)
   const totals = models.reduce((out, row) => ({
     input: out.input + row.input,

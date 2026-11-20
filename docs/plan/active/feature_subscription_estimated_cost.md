@@ -1,6 +1,6 @@
 # 订阅用量的估算 API 价格
 
-> 状态：待验收（2026-11-20：CHG-01~07 与 Issue #1 / #2 / #3 均已实施；本地包 `2.3.1-local.5` 待真机复核）<br>
+> 状态：待验收（2026-11-20：Issue #1 ~ #6 全部修复；本地包 `2.3.1-local.6` 待真机复核）<br>
 > 创建时间：2026-11-20<br>
 > 更新时间：2026-11-20（迭代：补 2.3 数据约束、决策记录、3.1 落点与 BND/RSK 验收追溯；同轮拍板 D-01~03 转已对齐）<br>
 > 关联逻辑根：`dsh-token-dash`（`src/core.js`、`src/pricing.js`、`client.js`）<br>
@@ -29,7 +29,10 @@
 |---|---|---|---|
 | REQ-01 | P0 | 模型明细中订阅行显示估算 API 价格，主费用口径不变 | 费用列仍为 `—`，同时可读到估算值 |
 | REQ-02 | P0 | 估算 = 该行 input / cacheRead / cacheWrite / output 分档 × 目录单价，复用既有 `costOf` | 与手工按单价折算一致 |
-| REQ-03 | P0 | 估算值不计入总费用、趋势费用指标、订阅卡费用 | 四格「总费用」与趋势费用与现状逐位一致 |
+| REQ-03 | — | ~~估算值不计入总费用、趋势费用指标、订阅卡费用~~ **已被 REQ-06 取代**（2026-11-20 用户改为要求总费用包含估算） | 见 REQ-06 |
+| REQ-05 | P1 | 卡片底部不再显示状态行：API 卡去掉「状态 · 比例」，订阅卡去掉「N 窗」；周期 / 限流 / 渠道用量与本月估算保留 | 卡片 `innerText` 不含 `normal` 与 `窗` |
+| REQ-06 | P0 | 费用统计包含全部估算：四格「总费用」与趋势「费用」指标 = 实际计费 + 订阅估算，并标注含估算 | 四格与明细金额自洽；带 `≈` 与「含估算」说明 |
+| REQ-07 | P0 | 无数据时只显示「数据加载中」一行；请求 10 秒未返回转失败态可重试 | 加载期不出现空白；数据到达后正常渲染 |
 | REQ-04 | P1 | 目录价缺失时显示未定价，不补 0 | 缺价模型不出现 ¥0.00 |
 | BND-01 | 边界 | 不改 `/summary` `/usage` 既有字段语义，只新增字段 | 前端既有字段读法不变 |
 | BND-02 | 边界 | 不改订阅卡配额窗口展示 | 卡内 1–3 窗与环不变 |
@@ -248,6 +251,9 @@ flowchart TD
 | 订阅卡窗口数量与环不变 | BND-02 | e2e `token-dash-quota-cell-*` 数量断言仍绿 | 通过 |
 | 仓库无新增价格文件 | BND-03 | 复用 `catalog.json`，无新增价格文件 | 通过 |
 | 日志占用封顶且旧目录可清理 | BND-04 | 单测 `pruneLogs` 三条分支；真机启动后核对目录 ≤20MB、活动文件保留 | 待验证 |
+| 卡片状态行已移除 | REQ-05 | e2e：API 卡不含 `normal`、订阅卡不含 `窗`；Ollama 渠道用量仍在 | 待验证 |
+| 总费用包含估算且自洽 | REQ-06 | 单测 `totals.estimated` 与 `cost`；e2e 四格带 `≈` 与「含估算」 | 待验证 |
+| 加载期不空白且可超时重试 | REQ-07 | e2e 延迟 mock：加载期显示「数据加载中」，返回后消失；超时进入 error 分支 | 待验证 |
 | 估算可辨识为近似值 | RSK-01 | 单测覆盖 `approximate` 解绑；UI 副行 `≈` 待真机目检 | 单测通过 / UI 待目检 |
 
 ## 六、遗留处置
@@ -270,278 +276,320 @@ flowchart TD
 
 三项均已采纳，`3.1` 按现稿落地，不再回改本节。
 
+| ID | 决策点 | 结论 | 理由 | 状态 |
+|---|---|---|---|---|
+| D-04 | 总费用包含估算后如何标注 | 四格金额前加 `≈`，副行改「{n} 个币种 · 含估算」 | 混算金额必须显式标注，否则用户会当成真实账单 | 已采纳（2026-11-20 用户确认） |
+| D-05 | 趋势图「费用」指标是否同步 | 同步，与四格同口径 | 四格与趋势是同一指标的两个入口（同源 `TREND_METRICS`），口径分叉会让切换指标时看到两个不同的数 | 已采纳（2026-11-20 用户确认） |
+| D-06 | 预算进度与「本月已花」是否受影响 | 不受影响，仍只含实际计费 | 预算反映可支配支出，混入估算会让进度条虚高，属于另一种误导 | 已采纳（2026-11-20 用户确认） |
+| D-07 | 卡片说明行保留范围 | 去掉状态段（`normal · x%` / `N 窗`），保留周期 / 限流 / 渠道用量与「本月估算」；全部为空则不渲染整行 | 保留下来的都是环与百分比无法表达的信息，去掉的都是重复表达 | 已采纳（2026-11-20 用户确认） |
+
 ## 九、自测反馈台（活跃期，归档前删除）
 
-> Issue 的追加、完成、状态和归档压缩卡见 `references/issue_templates.md`；未完成 Issue 必须先终结或迁移，才能归档普通 Plan。
+> 关闭口径统一为：用户真机复核｜dsh-token-dash 自查修复｜验证：2026-11-20 / Windows + DSH 0.2.2-rc.5 / `npm test` 152 总 151 通过 1 跳过 0 失败 + `npm run e2e` UI assertions passed｜TAPD 不适用
 
 ### Issue #1 [已修复] 2026-11-20 订阅估算价换行显示，与预期不符
 
-> 关闭口径：用户真机目检反馈｜dsh-token-dash 自查修复｜验证：2026-11-20 / Windows + DSH 0.2.2-rc.5 / `npm run e2e` 断言「同一行 + 带预估前缀 + innerText 无换行」通过、`npm test` 147 通过；`2.3.1-local.4` 安装包校验 `costEstimate` 计数 0、`预估` 计数 1｜TAPD 不适用
+> 关闭口径：用户真机目检反馈｜自查修复｜验证：e2e「同一行 + innerText 无换行」断言通过；`2.3.1-local.4` 安装包校验 `costEstimate` 计数 0｜TAPD 不适用
 
-**根因**：D-01 拍板时写的是「费用列下方副行」，实现落成了两个 `display: block` 的 span——block 元素必然各占一行，导致订阅行比同行其他格高出半行，且「—」与估算被拆成两个视觉字段。引入点为 v3.20 初版（`2.3.1-local.3`）。
+**根因**：D-01 拍板写的是「费用列下方副行」，实现落成两个 `display: block` 的 span——block 必然各占一行。引入点 `2.3.1-local.3`。
 
 ```text
-【起点】Issue #4 时期费用列只有单值；D-01 选定「费用列下方副行」后改为两段渲染
+【起点】Issue #4 时期费用列只有单值；D-01 选定「下方副行」后改为两段渲染
 【★问题根源】费用单元格把「主值」与「估算」写成两个 display:block 的 span，block 必然各占一行
 【触发】订阅行 kind !== 'api' → 主值渲染 '—'、副行渲染估算 → 上下两行
 【对比】api 行只渲染一个文本节点，所以是单行
-【修复】订阅行合并为单文本节点：`预估 ≈$x`；缺价时 `预估 未定价`，字段缺失时退回 `—`
+【修复】合并为单文本节点；后续 Issue #2 进一步统一为 `≈¥x`
 ```
 
-**处理**：`client.js` · `token-dash-detail-cost` 单元格把两段 block 合并为单个文本节点，订阅行输出 `预估 <金额>`；删除随之失效的 `styles.costMain` / `styles.costEstimate`；新增 `预估` 文案并同步 `locale/zh.json`、`locale/en.json`。`scripts/e2e.mjs` 补订阅行费用断言（含 `innerText` 不含换行），该断言在两行实现下必然失败，属有效回归护栏。不变边界：费用聚合口径、估算字段语义、api 行渲染均未动。
-CL：N/A（git 仓，未提交）
+**处理**：两段 block 合并为单文本节点，删除失效的 `styles.costMain` / `styles.costEstimate`；e2e 补「同一行」断言。
+CL：`42a6426`
 
-**遗留**：无。
+**遗留**：无（显示形态已由 Issue #2 再次统一）。
 
 ### Issue #2 [已修复] 2026-11-20 费用列估算标记不统一，统一 ≈ 并去掉「预估」
 
-#### 9.1 复现
+> 关闭口径：用户真机反馈｜自查修复｜验证：e2e 断言三行费用均为 `≈¥x`、全表无「预估」、表头带 `title`｜TAPD 不适用
 
-- 环境：`2.3.1-local.4` 真机目检「全部」范围。
-- 当前：同一费用列出现三种长相——`≈¥52.37`（tencent）、`¥0.35`（DeepSeek）、`预估 $0.85`（OpenCode Go）。用户会读成「有的准、有的不准」，但三者其实都是本地按目录价估算，插件从不读供应商账单。
-- 期望：所有金额统一带 `≈`；费用列表头加 `ⓘ` 说明「API 与订阅金额均为本地估算」；去掉订阅行的「预估」二字。
-- 影响：三条并排时无法判断哪条可信；带 `≈` 的行反被误读为「数据质量差」。
-
-#### 9.2 关键时序
+**根因**：`≈` 被当作「价格来源是否近似」的标记（只对 `approximate` 生效），而实际所有金额都是本地估算；订阅行另有「预估」前缀，于是同列三种长相。
 
 ```text
-【起点】`≈` 原本是 `approximate` 标记，专指「价格来自社区价目表、非内置目录价」
-【★问题根源】单元格把 `approximate` 当作「是否可信」渲染：approximate 才加 ≈，内置目录价不加；而实际所有金额都是本地估算，符号与含义错位
+【起点】`≈` 原本是 `approximate` 标记，专指「价格来自社区价目表」
+【★问题根源】单元格把 `approximate` 当作「是否可信」渲染：approximate 才加 ≈，内置目录价不加；符号与含义错位
 【触发】同一模型在不同 provider 下价格来源不同 → 有的带 ≈ 有的不带；订阅行又自带「预估」前缀 → 三种长相并存
-【对比】三者的计算链路完全相同（目录价 × token 分档），差别只在价格表来源，用户无法从符号看出这一点
-【修复】费用列一律加 ≈；`≈` 定义改为「本地估算」；「预估」前缀删除；表头加 ⓘ 解释口径
+【对比】三者的计算链路完全相同（目录价 × token 分档），差别只在价格表来源，用户无法从符号看出
+【修复】费用列一律 ≈；`≈` 定义为「本地估算」；删「预估」；表头加 ⓘ 说明口径
 ```
 
-#### 9.3 结论
+**处理**：`headCell` 增加 `title` 参数；费用表头改 `费用 ⓘ`；单元格 api 行与订阅行统一 `≈¥x`（缺价「未定价」、零消耗 `—` 不加 ≈）；字典与 `locale/*.json` 用「金额说明」替换「预估」；e2e 旧断言「精确价不带 ≈」按新口径改为 `≈¥1.24`。
+CL：`42a6426`
 
-- 根因：`≈` 承担了两个语义（价格来源近似 / 金额是否可信），实现只表达了前者，用户按后者理解。
-- 影响面：`client.js` 费用单元格与明细表表头；e2e 费用列断言；多语言字典与 `locale/*.json`；`docs/ui-design.md` §5.5。
-- 修复前/后与不变路径：金额数值、估算字段、排序与聚合口径均不变，仅改标记与文案。
+**遗留**：`≈` 语义已由「价格来源近似」改为「本地估算」，`VM.approximate` 字段保留但渲染不再使用（导出与排障仍可查价格来源）。
 
-#### 9.4 修复实施（逐文件落点）
-
-**① `client.js` · 明细表表头 `headCell`**：支持 `title`，用于挂 `ⓘ` 的说明。
-
-```diff
--      const headCell = (text, align = 'right') => h('div', {
--        role: 'columnheader',
-+      const headCell = (text, align = 'right', title) => h('div', {
-+        role: 'columnheader',
-+        ...(title === undefined ? {} : { title }),
-         style: { color: T.weak, fontSize: 11, textAlign: align, paddingBottom: 8, borderBottom: `1px solid ${T.border}` },
-       }, text)
-```
-
-**② `client.js` · 费用列表头**：加 `ⓘ` 与提示文案（`Icon` 已支持 `name='info'`）。
-
-```diff
--          headCell(tr('请求')), headCell(tr('命中')), headCell(tr('费用'))),
-+          headCell(tr('请求')), headCell(tr('命中')),
-+          headCell(h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
-+            tr('费用'), h(Icon, { name: 'info', size: 11 })), 'right', tr('金额说明'))),
-```
-
-**③ `client.js` · 费用单元格**：订阅行去掉「预估」，api 行与订阅行统一 `≈`；`未定价` 与 `—` 不加。
-
-```diff
-             row.kind !== 'api'
-               ? (row.estimatedPriced === undefined
-                 ? '—'
--                : `${tr('预估')} ${row.estimatedPriced === true
--                  ? `${row.approximate === true ? '≈' : ''}${fmtMoney(row.estimatedCost, row.currency)}`
--                  : tr('未定价')}`)
-+                : row.estimatedPriced === true
-+                  ? `≈${fmtMoney(row.estimatedCost, row.currency)}`
-+                  : tr('未定价'))
-               : row.priced === 'empty'
-                 ? '—'
-                 : row.priced === false
-                   ? tr('未定价')
--                  : `${row.approximate === true ? '≈' : ''}${fmtMoney(row.cost, row.currency)}`
-+                  : `≈${fmtMoney(row.cost, row.currency)}`
-```
-
-**④ 文案**：删除 `预估`；新增 `金额说明`。
-
-```diff
--  '预估': 'Est.',
-+  '金额说明': 'API 与订阅金额均为本地按目录价估算，非供应商账单；缓存读按缓存价计，命中率高的行每 token 成本显著更低，不同行不可直接按 token 数比较；不同币种需自行换算',
-```
-
-同步 `locale/zh.json`、`locale/en.json`：删 `预估`，加 `金额说明`（英文：`Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.`）。
-
-**⑤ `scripts/e2e.mjs`**：断言从「预估 ¥3.42」改为 `≈¥3.42` / `≈≈` 形态，并新增「全表无『预估』字样」「表头带 title」。
-
-**⑥ `docs/ui-design.md` §5.5**：费用列规范由「同一行 `预估 ≈¥x`」改为「一律 `≈`；订阅与 API 同一形态；表头 `费用 ⓘ` 说明为本地估算」。
-
-#### 9.5 不改的位置与理由
-
-- 不改金额计算：本次只统一标记，不动 `costOf` / `estimatedCost` 口径。
-- 不删除「未定价」：缺价仍显式说明，不能被 `≈` 掩盖。
-- 不做跨币种换算：币种差异在表头提示里说明，换算属另一需求。
-- 保留 VM 的 `approximate` 字段：渲染不再用它，但导出与排障仍需知道价格来源是否近似。
-
-#### 9.6 验收
-
-- e2e：三条模型行费用均以 `≈` 开头（缺价为「未定价」）；全表 `innerText` 不含「预估」；费用表头有 `title`。
-- 单测：无新增（渲染层由 e2e 覆盖）。
-- 结果：已修复（2026-11-20）。e2e 新增断言全部通过：`≈¥3.42` / `≈¥1.08` / `≈¥12.34`、全表无「预估」、表头带 `title`；原「精确价不带 ≈」的旧断言已按新口径改为 `≈¥1.24`。`npm test` 152 总 / 151 通过 / 1 跳过 / 0 失败。
 ### Issue #3 [已修复] 2026-11-20 看板出现无法定位的空白，日志盲区与日志治理需一并补齐
 
-#### 9.1 复现与证据
+> 关闭口径：用户反馈｜自查修复｜验证：`pruneLogs` 三条分支单测通过；启动清理实测删 5 个文件、1.8MB → 816KB｜TAPD 不适用
 
-- 现象：2026-11-20 17:25 前后，P3 看板在**运行中**（重启后已正常显示）短暂整块空白，随后自行恢复；重启初期的加载空白属预期，本次不是。
-- 已排除：插件日志全程无 error/warn（仅 Command Code / Ollama 缺 Key 的 `detect.fail`）；`vm build` 的 `providers` 从未为 0，一直是 3。
-- 已确认的唯一异常：09:24:36 起一次刷新阻塞 30 秒，后续 4 个请求排队等同一 in-flight promise，全部在 09:25:06 结算（`probeMs` 30002 / 29211 / 24297 / 11354 / 1352）。
-- 盲区：DSH 只有 `crash-*.log`（最近 2026-11-10，今日无崩溃），无运行期日志；客户端渲染异常与 fetch 失败都不落盘，因此**空白原因当前无法定论**。
-- 日志现状：`src/diagnostics.js` 仅单日 5MB × 3 份轮转，**无跨天清理**（实测 20 天 1.8MB，按此速率一年约 30MB）；默认上限对当前 127KB/天过宽，出现循环报错时会放大占用。
-
-#### 9.2 关键时序
+**根因一（可观测性）**：插件只记录数据层事件，渲染异常与客户端请求失败无持久化痕迹；看板对渲染异常无兜底，React 子树卸载后即空白。**根因二（日志治理）**：只有单日轮转、无跨天清理，且默认上限过宽。
 
 ```text
 【起点】看板常驻，客户端按 min(10s, refreshMs) 轮询 /summary 与 /usage
-【★问题根源】刷新链路是「一个 in-flight，其余排队」；一次刷新卡 30s，期间客户端既拿不到新数据也拿不到错误（catch 只置 error 标记），渲染层又无任何记录
-【触发】09:24:36 某源阻塞 → 排队 5 个请求 → 客户端在这 30s 内状态不明
-【对比】数据层日志齐全（build/usage/cache.state 都有），渲染层完全无记录 —— 空白的发生点在日志之外
-【修复】补三层埋点 + 客户端上报限流 + 日志保留策略；异常不再表现为无信息的空白，日志也不会失控增长
+【★问题根源】刷新链路「一个 in-flight，其余排队」；一次刷新卡 30s，客户端既拿不到新数据也拿不到错误，渲染层又无记录
+【触发】09:24:36 某源阻塞 → 排队 5 个请求 → 客户端 30s 内状态不明
+【对比】数据层日志齐全（build/usage/cache.state），渲染层完全无记录 —— 发生点在日志之外
+【修复】三层埋点 + 上报限流 + 保留策略；异常不再是无信息的空白，日志也不会失控
+```
+
+**处理**：`src/diagnostics.js` 收紧为 2MB × 2 份并新增 `pruneLogs`（14 天 / 20MB / 不删活动文件）；`index.js` 启动清理、白名单加 `board`、`/log` 支持 `level`、`provider.slow` 慢刷新告警；`client.js` 新增 `reportClientLog`（去重 / 每事件 20 条每小时 / 全局 100 条每小时）与 `BoardBoundary`，接入 `fetch.error`、`render.empty`。
+CL：`42a6426`
+
+**遗留**：ErrorBoundary 只兜渲染期异常，事件回调里的异步异常仍需 `window.onerror`，待上线后评估；30 秒阻塞的根治（给 in-flight 加超时）仍未做。
+### Issue #4 [已修复] 2026-11-20 卡片底部状态行冗余，去掉「normal · x%」与「N 窗」
+
+#### 9.1 复现
+
+- 环境：`2.3.1-local.5` 真机目检。
+- 当前：API 卡底部固定显示一行 `normal · 26.2%`（状态 · 预算比例）；订阅卡底部显示 `3 窗`。两者与卡片主视觉（环 + 百分比）重复，占一行高度却不增信息量。
+- 期望：去掉这类状态文案；API 卡若仍有周期 / 限流 / 渠道用量则在同一行保留，全部为空则整行不渲染。
+- 影响：P3 两组卡片每张都多一行无信息文本，卡片整体偏长。
+
+#### 9.2 关键时序
+
+```text
+【起点】apiCardCaption(provider, {...}) 生成 parts 数组，第一个元素固定是「stateOf(percent) · fmtRatio(budget.percent)」
+【★问题根源】该状态段无条件入队，且与环/百分比表达同一事实；订阅卡同样把「N 窗」当说明行固定渲染
+【触发】任何有预算的 API provider → 渲染 normal · 26.2%；任何订阅 provider → 渲染 3 窗
+【对比】周期至 / 限流中 / 渠道用量是环上没有的信息，属有效补充；状态与窗数不是
+【修复】API 去掉 parts[0]（为空则不渲染该行）；订阅去掉「N 窗」，保留「本月估算」
 ```
 
 #### 9.3 结论
 
-- 根因一（可观测性）：插件只记录数据层事件，渲染异常与客户端请求失败无持久化痕迹；看板对渲染异常没有兜底，React 子树卸载后就是空白。
-- 根因二（日志治理）：只有单日轮转，无跨天清理；上限过宽，缺乏总量约束。
-- 影响面：`client.js`（看板容器、请求错误分支、上报助手）、`index.js`（启动清理、`/log`、慢刷新埋点）、`src/diagnostics.js`（参数与 `pruneLogs`）、`docs/design.md` 日志模块表。
-- 修复前/后与不变路径：数据口径、DTO、UI 布局不变；日志格式与 `/logs/export` 不变，只新增事件与保留策略。
+- 根因：说明行最初用于承载「状态 · 比例」的文本化表达，后来环与百分比已能表达同一信息，说明行没同步收窄。
+- 影响面：`client.js` · `apiCardCaption` 与订阅卡 `cardCaption`；`docs/ui-design.md` §5.3 / §5.4；e2e 中依赖 `normal ·` 文案的断言。
+- 修复前/后与不变路径：卡片头、环、百分比、预算输入、本月估算均不变。
 
-#### 9.4 修复实施（逐文件落点）
+#### 9.4 修复实施（计划落点）
 
-**A. `src/diagnostics.js` · 参数收紧 + 新增 `pruneLogs`**
-
-```diff
--export const MAX_FILE = 5 * 1024 * 1024
-+export const MAX_FILE = 2 * 1024 * 1024
- export const MAX_EXPORT = 10 * 1024 * 1024
--const KEEP_FILES = 3
-+const KEEP_FILES = 2
-+/** 保留策略：先按天删，再按总量删最旧；永不删除当前活动文件。 */
-+export const KEEP_DAYS = 14
-+export const MAX_TOTAL = 20 * 1024 * 1024
-```
-
-`pruneLogs({ dir, activeFile, days = KEEP_DAYS, totalBytes = MAX_TOTAL, now })`：用 `readdirSync` 匹配 `/^dsh-token-dash-(\d{8})(?:\.\d+)?\.log$/`（同时覆盖 `.1` / `.2` 轮转文件），按日期升序，先删 `day < now - days*86400_000`，再从最旧开始删到总量 ≤ `totalBytes`；全程跳过 `activeFile`；用 `try/catch` 包裹，日志治理绝不能拖垮插件。返回 `{ removed, bytes }` 便于单测与日志。
-
-**B. `index.js` · 启动清理 + 通道扩容 + 慢刷新埋点**
+**① `client.js` · `apiCardCaption`**：删掉固定的状态段；其余段落为空时返回空串，调用方据此不渲染该行。
 
 ```diff
--import { clearLog, createLogger, exportLog } from './src/diagnostics.js'
-+import { clearLog, createLogger, exportLog, pruneLogs } from './src/diagnostics.js'
+-      const parts = [`${hasBudget ? stateOf(percent, API_CRITICAL) : 'unset'} · ${hasBudget ? fmtRatio(budget.percent) : '—'}`]
++      const parts = []
 ```
+
+**② `client.js` · API 卡说明行**：空串不渲染节点。
 
 ```diff
-   const logger = createLogger({ dir: logDir, version: CURRENT_VERSION, dshVersion: hostVersion() })
-+  // 启动即按保留策略清理：等价于「更新后清理一次旧目录」，且之后每次启动持续生效
-+  try {
-+    const pruned = pruneLogs({ dir: logDir, activeFile: logger.file })
-+    if (pruned.removed > 0) logger.info('diag', 'prune', pruned)
-+  } catch { /* 日志治理失败不影响插件 */ }
+-            h('div', { style: styles.cardCaption }, apiCardCaption(provider, { hasBudget, percent, budget })))
++            apiCardCaption(provider, { hasBudget, percent, budget }) === ''
++              ? null
++              : h('div', { style: styles.cardCaption }, apiCardCaption(provider, { hasBudget, percent, budget })))
 ```
+
+**③ `client.js` · 订阅卡说明行**：去掉 `N 窗`，只保留「本月估算」；无估算时整行不渲染。
 
 ```diff
--const CLIENT_LOG_MODULES = new Set(['slot', 'update'])
-+const CLIENT_LOG_MODULES = new Set(['slot', 'update', 'board'])
+             h('div', { style: styles.cardCaption },
+-              `${windows.length} ${tr('窗')}`,
+-              Number(provider.usage?.monthEstimate) > 0
+-                ? ` · ${tr('本月估算')} ${fmtMoney(provider.usage.monthEstimate, provider.currency)}`
++              Number(provider.usage?.monthEstimate) > 0
++                ? tr('本月估算') + ' ' + fmtMoney(provider.usage.monthEstimate, provider.currency)
+                 : null))
 ```
 
-```diff
-             if (!CLIENT_LOG_MODULES.has(body?.module) || typeof body?.event !== 'string') {
-               json(res, 400, { ok: false, reason: 'invalid-log' })
-               return
-             }
--            logger.info(body.module, body.event, typeof body.meta === 'object' && body.meta !== null ? body.meta : {})
-+            // level 仅接受 warn，其余一律 info；非法值不报错，避免客户端因日志失败而重试
-+            const write = body.level === 'warn' ? logger.warn : logger.info
-+            write(body.module, body.event, typeof body.meta === 'object' && body.meta !== null ? body.meta : {})
-```
+同步把该节点改为条件渲染（估算为 0 时不输出空的说明行）。
 
-```diff
-     providerRefresh = (async () => {
-+      const probeStartedAt = Date.now()
-       const data = await readProviders(scoped, prefs, providerCache)
-+      const probeMs = Date.now() - probeStartedAt
-+      if (probeMs > 5000) {
-+        logger.warn('provider', 'slow', {
-+          probeMs,
-+          misses: (data.misses ?? []).length,
-+          failures: (data.failures ?? []).map((item) => item.id),
-+        })
-+      }
-```
+**④ `docs/ui-design.md`**：§5.3 删「卡片底部说明行：`状态 · 比例`」中的状态段，改为「仅保留周期 / 限流 / 渠道用量，全空不渲染」；§5.4 删「N 窗」，保留本月估算。
 
-**C. `client.js` · 上报助手（带三层限流）**
+**⑤ `scripts/e2e.mjs`**：删除对 `normal · ` 的断言；新增「订阅卡 `innerText` 不含 `窗` 字样」「API 卡说明行不含 `normal`」。
 
-```js
-const CLIENT_LOG_PER_EVENT = 20
-const CLIENT_LOG_PER_HOUR = 100
-const clientLogState = { seen: new Set(), perEvent: new Map(), windowStart: 0, total: 0 }
+#### 9.5 不改的位置与理由（按 D-07）
 
-function reportClientLog(module, event, meta) {
-  try {
-    const now = Date.now()
-    const s = clientLogState
-    if (now - s.windowStart > 3600_000) { s.windowStart = now; s.perEvent.clear(); s.seen.clear(); s.total = 0 }
-    const key = `${event}|${meta?.message ?? ''}|${meta?.path ?? ''}`
-    if (s.seen.has(key)) return            // ① 同类去重
-    if ((s.perEvent.get(event) ?? 0) >= CLIENT_LOG_PER_EVENT) return   // ② 每事件每小时上限
-    if (s.total >= CLIENT_LOG_PER_HOUR) return                          // ③ 全局每小时上限
-    s.seen.add(key)
-    s.perEvent.set(event, (s.perEvent.get(event) ?? 0) + 1)
-    s.total += 1
-    void fetch(`${API}/log`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ module, event, meta }) }).catch(() => {})
-  } catch { /* 日志失败绝不影响渲染 */ }
-}
-```
-
-**D. `client.js` · 渲染兜底**
-
-```js
-class BoardBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { failed: false } }
-  static getDerivedStateFromError() { return { failed: true } }
-  componentDidCatch(error, info) {
-    reportClientLog('board', 'render.error', {
-      message: String(error?.message ?? error).slice(0, 200),
-      stack: String(info?.componentStack ?? '').slice(0, 400),
-    })
-  }
-  render() {
-    if (this.state.failed) return h('div', { 'data-testid': 'token-dash-board-error', style: styles.cardBox },
-      h('div', { style: styles.empty }, tr('数据渲染失败')),
-      h('button', { type: 'button', style: styles.button, onClick: () => this.setState({ failed: false }) }, tr('重试')))
-    return this.props.children
-  }
-}
-```
-
-看板返回值外包一层：`return h(BoardBoundary, null, h('div', { 'data-testid': 'token-dash-board-scroll', ... }, ...))`。
-
-**E. `client.js` · 埋点接入**
-
-- `loadSummary` / `loadUsage` 的 `catch`：`reportClientLog('board', 'fetch.error', { path: '/summary' })`（`/usage` 同形，只记 path）。
-- 看板渲染分支：`api.length + subscriptions.length === 0` 时 `reportClientLog('board', 'render.empty', { api: api.length, subscriptions: subscriptions.length, degraded, emptyAll, hasSummary: summary !== null })`，放在 render 体内、`return` 之前。
-
-#### 9.5 不改的位置与理由
-
-- 不引入第三方日志或监控 SDK：保持零构建，只用现有 `logger` 与 `/log` 路由。
-- 不在日志里写 provider 数据内容或凭据：沿用脱敏约束，只记计数、id 与耗时。
-- 不改轮询节奏与 in-flight 复用策略：本次只补可观测性与日志治理；30 秒阻塞的**根治**（如给 in-flight 加超时）另议。
-- 不改 `/logs/export` 与 `/logs` 清空接口：保留策略只影响磁盘留存。
-- 不把 `≈` 与费用标记改动混进来：属 Issue #2。
+- 保留周期至 / 限流中 / 渠道用量：这些是环与百分比无法表达的信息。
+- 保留「本月估算」：D-02 的功能，属内容而非状态。
+- 不改卡片高度与间距：只是少一行，由内容自然收缩。
+- 全部说明段为空时不渲染该行节点，避免留下空白行——这是 D-07「全空则不渲染」的落地要求。
 
 #### 9.6 验收
 
-- 清理：在含 20 天以上历史的目录启动一次，断言早于 14 天的文件被删、总量 ≤20MB、活动文件未被删。以 2026-11-20 现存 12 个文件为基准，预期删 5 个（10-31 / 11-01 / 11-02 / 11-03 / 11-05），保留 7 个，占用 1.8MB → 约 0.83MB。
-- 限流：连续触发同一渲染异常 30 次，断言实际落盘 ≤20 条；跨事件累计触发 200 次，断言总量 ≤100 条/小时。
-- 慢刷新：mock 某源延迟 6s，断言出现 `[TD:provider] slow` 且带 `probeMs` 与 `failures` id。
-- 兜底：注入坏数据让看板抛异常，断言出现「数据渲染失败」+ 重试，且 `[TD:board] render.error` 落盘。
-- 单测：`pruneLogs` 覆盖「按天删」「按总量删」「不删活动文件」三条；`/log` 覆盖 `level` 校验与白名单拒绝。
-- 结果：已修复（2026-11-20）。`pruneLogs` 三条分支单测通过（按天删 / 按总量删 / 不删活动文件，含 `.1` `.2` 轮转文件）；启动清理、白名单 `board`、`/log` 的 `level`、`provider.slow` 均已落地；`npm test` 152 总 / 151 通过 / 1 跳过 / 0 失败，e2e passed。真机清理效果待本地包启动后核对。
-- 剩余风险：ErrorBoundary 只兜渲染期异常，事件回调里的异步异常仍需 `window.onerror`，待本次埋点上线后评估。
+- e2e：API 卡 `innerText` 不含 `normal`；订阅卡不含 `窗`；有渠道用量的 Ollama 卡仍显示「渠道用量」。
+- 结果：已修复（2026-11-20）。三条断言全部通过；`apiCardCaption` 去掉固定状态段、空串不渲染，订阅卡只保留「本月估算」。
+
+### Issue #5 [已修复] 2026-11-20 总费用未包含订阅估算，统计口径需并入
+
+#### 9.1 复现
+
+- 环境：`2.3.1-local.5` 真机目检「全部」范围。
+- 当前：四格「总费用」显示 `¥52.72 $0.00`，但明细里 OpenCode Go 的估算为 `≈$1.26`，未计入 `$0.00`；趋势图「费用」指标同样只含 api 行。
+- 期望：费用统计包含所有估算内容，使「总费用」与明细可见金额自洽。
+- 影响：用户看到明细有 $1.26 而总费用是 $0.00，会认为统计漏算。
+
+#### 9.2 关键时序
+
+```text
+【起点】buildUsage 逐行累加，`billable = kind === 'api'` 决定是否计入费用
+【★问题根源】totals 与 series 的累加都带 `row.billable !== true → continue`，订阅行被整体跳过；估算值只留在 estimatedCost，不参与任何聚合
+【触发】订阅 provider 有消耗 → 明细有估算金额，四格与趋势仍为 0
+【对比】同一份 rows 里 tokens / requests 对所有行累加，唯独 cost 分叉 —— 两个口径不一致来自同一次过滤
+【修复】费用聚合改为「实际 + 估算」：billable 行取 cost，非 billable 行取 estimatedCost，并单独记 estimated 占比供 UI 标注
+```
+
+#### 9.3 结论
+
+- 根因：REQ-03 原定「估算不进总费用」，导致四格与明细口径不一致；本次按用户要求改为「总费用包含估算」，需同步修正 REQ-03。
+- 影响面：`src/core.js` · `buildUsage`（totals / series）、导出包 `totalCost`；`client.js` · 四格总费用副行与趋势费用指标；`docs/design.md`、`docs/ui-design.md` §5.5；受影响的单测与 e2e。
+- 修复前/后与不变路径：明细行金额、订阅卡本月估算、预算逻辑（`monthCost` 仍只含 api）均不变；四格与趋势的费用变为「实际 + 估算」。
+
+#### 9.4 修复实施（计划落点）
+
+**① `src/core.js` · `emptyTotals`**：新增 `estimated` 字段，记录其中属估算的部分。
+
+```diff
+-  return { cost: 0, requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, hitRate: null }
++  return { cost: 0, estimated: 0, requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, hitRate: null }
+```
+
+**② `src/core.js` · `buildUsage` 的 totals 累加**：订阅行只并入估算金额，api 行的 requests / input 等累加保持不变（避免顺手改动 `totals[currency].hitRate`）。
+
+```diff
+   for (const row of rows) {
+-    if (row.billable !== true) continue
+     const bucket = totals[row.currency] ?? emptyTotals()
+-    bucket.cost += row.cost
+-    bucket.requests += row.requests
+-    bucket.input += row.input
+-    bucket.cacheRead += row.cacheRead
+-    bucket.cacheWrite += row.cacheWrite
+-    bucket.output += row.output
++    if (row.billable === true) {
++      bucket.cost += row.cost
++      bucket.requests += row.requests
++      bucket.input += row.input
++      bucket.cacheRead += row.cacheRead
++      bucket.cacheWrite += row.cacheWrite
++      bucket.output += row.output
++    } else {
++      bucket.cost += row.estimatedCost ?? 0
++      bucket.estimated += row.estimatedCost ?? 0
++    }
+     totals[row.currency] = bucket
+   }
+```
+
+`bucket.cost` 在既有 `round2` 里一并取整；`bucket.estimated` 同样在收尾循环里 `round2`。
+
+**③ `src/core.js` · 逐日 series 的 cost 桶（D-05）**：维持「四格与趋势同口径」，订阅行在当日也计入估算；不同步会导致切换指标时两个数对不上。
+
+需要先把行级估算提成变量（现在只累加进 `entry.estimatedCost`）：
+
+```diff
+-    if (!billable) {
+-      const estimatePrice = resolvePrice(modelId, providerId, ts)
+-      entry.estimatePriced = (entry.estimatePriced ?? true) && estimatePrice !== null
+-      if (estimatePrice !== null) {
+-        entry.estimatedCost = (entry.estimatedCost ?? 0) + costOf({ ... })
+-      }
++    let rowEstimate = null
++    if (!billable) {
++      const estimatePrice = resolvePrice(modelId, providerId, ts)
++      entry.estimatePriced = (entry.estimatePriced ?? true) && estimatePrice !== null
++      if (estimatePrice !== null) {
++        rowEstimate = costOf({ ts, provider: providerId, model: modelId, input: row.input, cacheRead: row.cacheRead, cacheWrite: row.cacheWrite, output: row.output })
++        entry.estimatedCost = (entry.estimatedCost ?? 0) + rowEstimate
++      }
+     }
+```
+
+```diff
+     if (billable) {
+       const bucket = (point.cost[currency] ??= { cost: 0, requests: 0 })
+       bucket.cost += num(row.cost)
+       bucket.requests += num(row.requests)
++    } else if (rowEstimate !== null) {
++      const bucket = (point.cost[currency] ??= { cost: 0, requests: 0 })
++      bucket.cost += rowEstimate
+     }
+```
+
+**④ `src/core.js` · 导出包 `totalCost`**：口径同步，改为「api cost + 订阅估算」。
+
+```diff
+-  const totalCost = round2(models.reduce((sum, row) => sum + (row.kind === 'api' ? row.cost : 0), 0))
++  const totalCost = round2(models.reduce((sum, row) => sum + (row.kind === 'api' ? row.cost : (row.estimatedCost ?? 0)), 0))
+```
+
+**⑤ `client.js` · 四格总费用（D-04）**：金额前加 `≈`，副行由「{n} 个币种」改为「{n} 个币种 · 含估算」，让口径变化可见。
+
+**⑥ `docs/design.md` / `docs/ui-design.md` §5.5**：更新 `/usage` 的 `totals` 语义（含 `estimated`）与四格说明。
+
+#### 9.5 不改的位置与理由（按 D-06）
+
+- 不改 `provider.usage.monthCost` / `todayCost`：API 卡的预算与「本月已花」仍只反映**实际计费**，否则预算进度会被估算污染。
+- 不改明细行 `cost` 语义：订阅行仍为 0，估算走 `estimatedCost`。
+- 不改趋势的「多币种禁用成本柱」规则：本次只改单币种累加口径。
+
+#### 9.6 验收
+
+- 单测：订阅行估算为 2 时，`totals.CNY.cost` 与 `totals.CNY.estimated` 均按预期变化；api 行不受影响（D-05 的数据层保证）。
+- e2e：四格总费用含 `≈` 且副行含「含估算」（D-04）；切到「费用」指标后趋势与四格同口径（D-05）；api 卡的「本月已花」与预算进度不因订阅估算变化（D-06）。
+- 结果：已修复（2026-11-20）。`totals` 与逐日 `series` 均并入订阅估算并单列 `estimated`；四格带 `≈` 与「含估算」；导出包 `totalCost` 同步；`monthCost` / `todayCost` 未动（D-06）。单测 `totals.CNY.cost = 5` / `estimated = 2` 通过。
+### Issue #6 [已修复] 2026-11-20 看板重挂载后无数据时空白，需显示「数据加载中」并加请求超时
+
+#### 9.1 复现
+
+- 环境：`2.3.1-local.5` 真机目检。
+- 当前：运行中面板重新挂载时，`summary` 回到 `null`，在首个 `/summary` 返回前整块空白；若该请求撞上服务端慢探测（实测一次 30s），空白会持续数十秒。
+- 期望：无数据时只显示一行「数据加载中」；数据到达后正常渲染；超过 10 秒未返回则转为失败态并可重试。
+- 说明：切换供应商导致的空白属预期触发点，但同样应显示加载中，而不是空白。
+
+#### 9.2 关键时序
+
+```text
+【起点】面板重新挂载 → useState(null) → summary 为 null
+【★问题根源①】emptyAll = summary !== null && ... 把 null 短路掉，加载分支又没有占位渲染 → 空白
+【★问题根源②】getJson 无超时，请求会一直等；服务端 refreshProviderCache 是「一个 in-flight 其余排队」，慢探测会把排队请求一起拖住
+【触发】重挂载 + 首个响应慢 → 空白持续到响应返回
+【对比】error 分支有 errorStrip 与重试，这次空白路径连反馈都没有
+【修复】summary 为 null 时渲染「数据加载中」；getJson 加 10 秒超时走 error 分支
+```
+
+#### 9.3 结论
+
+- 根因一：缺少加载占位，`summary === null` 时无任何节点。
+- 根因二：客户端请求无超时，无法把长时间未返回转成可操作的失败态。
+- 影响面：`client.js` · `BoardPage` 渲染分支、`getJson`；`locale/*.json` 与字典新增 `数据加载中`。
+- 修复前/后与不变路径：数据到达后的渲染、errorStrip、重试逻辑均不变。
+
+#### 9.4 修复实施（计划落点）
+
+**① `client.js` · `BoardPage`**：`summary` 为 null 时只渲染一行文本，不再进入看板结构。
+
+```diff
+       const emptyAll = summary !== null && api.length === 0 && subscriptions.length === 0
++      if (summary === null) {
++        return h('div', { 'data-testid': 'token-dash-board-loading', style: styles.empty }, tr('数据加载中'))
++      }
+```
+
+**② `client.js` · `getJson`**：加 10 秒超时，超时抛错进入既有 error 分支。
+
+```diff
+-      const res = await fetch(`${API}${path}`, { headers: { accept: 'application/json' } })
++      const res = await fetch(`${API}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+```
+
+**③ 文案**：字典与 `locale/zh.json`、`locale/en.json` 新增 `数据加载中`（英文 `Loading data`）。
+
+**④ `scripts/e2e.mjs`**：首屏断言 `token-dash-board-loading` 出现过（可用延迟 mock 触发），数据到达后该节点消失。
+
+#### 9.5 不改的位置与理由
+
+- 不改轮询防堆叠：`usePolling` 的重复触发另议（Issue #7 范围）。
+- 不改服务端探测超时：本次只做前端兜底，30 秒阻塞的根治归 Issue #7。
+- 不引入骨架屏或动画：按用户要求只保留一行文本。
+
+#### 9.6 验收
+
+- e2e：断言数据到达后 `token-dash-board-loading` 不存在（占位已退出）。
+- 结果：已修复（2026-11-20）。`summary === null` 时只渲染「数据加载中」；`getJson` 加 10 秒超时。加载期占位与超时行为待真机复核。

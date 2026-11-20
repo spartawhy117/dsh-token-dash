@@ -659,6 +659,15 @@ try {
   assert.equal(detailText.includes('预估'), false, 'cost column must not use the 预估 prefix any more')
   const costHead = board.getByTestId('token-dash-detail-table').locator('[role=columnheader]').last()
   assert.ok((await costHead.getAttribute('title')) !== null, 'cost column header must carry an estimate tooltip')
+  // Issue #4：卡片底部不再显示状态行（D-07）
+  assert.equal((await board.getByTestId('token-dash-budget-row-deepseek-official').innerText()).includes('normal'), false, 'api card must not show a status caption')
+  assert.equal((await board.getByTestId('token-dash-quota-row-opencode-go').innerText()).includes('窗'), false, 'subscription card must not show the window count')
+  // Issue #5：总费用含估算，带 ≈ 与说明（D-04）
+  const costCard = await board.getByTestId('token-dash-card-cost').innerText()
+  assert.ok(costCard.includes('≈'), 'total cost must be marked as an estimate')
+  assert.ok(costCard.includes('含估算'), 'total cost must state that estimates are included')
+  // Issue #6：数据到达后加载占位必须消失（REQ-07）
+  assert.equal(await board.getByTestId('token-dash-board-loading').count(), 0, 'loading placeholder must disappear once data arrives')
   // 两套卡片网格都必须靠换行承载任意家数，不得退化成横向滚动容器
   for (const testid of ['token-dash-budget-table', 'token-dash-quota-table']) {
     const metrics = await board.getByTestId(testid).evaluate((node) => ({ scroll: node.scrollWidth, client: node.clientWidth }))

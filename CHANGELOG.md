@@ -4,6 +4,50 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.3.1-local.6] - 2026-11-20
+
+> 本地构建，未发布
+
+### 中文
+
+#### 修改
+
+**卡片底部不再有状态行**
+
+- API 用量卡不再在底部显示「normal · 26.2%」这类状态文字，订阅卡不再显示「3 窗」。状态和比例看环上的颜色与数字就够了。
+- 仍保留环上放不下的信息：余额周期、限流中、渠道用量、以及订阅卡的本月估算；这些都没有时整行不显示。
+
+**总费用包含订阅估算**
+
+- 四格「总费用」和趋势图「费用」现在都计入订阅用量的估算值，不再是实际计费与实际计费、估算与估算各算各的。
+- 金额前统一带 `≈`，副行写明「含估算」，避免被当成供应商账单。
+- API 卡的「本月已花」和预算进度不受影响，仍只反映真实计费。
+
+**数据未就绪时显示「数据加载中」**
+
+- 面板刚打开或数据还没回来时，显示一行「数据加载中」，不再是一片空白。
+- 请求超过 10 秒没返回会转成失败态并可重试，不会一直干等。
+
+### English
+
+#### Changes
+
+**No more status line under the cards**
+
+- The API usage card no longer prints 「normal · 26.2%」 at the bottom, and subscription cards no longer print a window count; the ring colour and percentage already say it.
+- Information the ring cannot carry is kept: billing cycle, rate limiting, channel usage, and the subscription's estimated monthly value. When none applies, the line is omitted entirely.
+
+**Total cost now includes subscription estimates**
+
+- The total-cost tile and the cost metric in the trend chart both include the estimated value of subscription usage.
+- Amounts carry `≈` and the caption reads “incl. estimates” so the figure is not mistaken for a provider invoice.
+- Each API card's month-to-date spend and budget progress still reflect actual billing only.
+
+**“Loading data” while the first response is pending**
+
+- A freshly opened panel shows a single “Loading data” line instead of a blank area.
+- Requests that take longer than 10 seconds switch to a retryable failure state.
+
 ## [2.3.1-local.5] - 2026-11-20
 
 > 本地构建，未发布
