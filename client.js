@@ -76,7 +76,7 @@ window.__ModuleLoader__.load({
       '查询失败': 'Query failed', '套餐查询失败': 'Quota query failed',
       '数据加载中': 'Loading data',
   '含估算': 'incl. estimates',
-  '金额说明': 'Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.',
+  'API 与订阅金额均为本地按目录价估算，非供应商账单；缓存读按缓存价计，命中率高的行每 token 成本显著更低，不同行不可直接按 token 数比较；不同币种需自行换算': 'Both API and subscription amounts are estimated locally from catalog prices, not provider invoices; cached reads use the cache price, so rows with a higher hit rate cost much less per token and rows are not directly comparable by token count; currencies are not converted.',
   '本月估算': 'Est. this month',
       '订阅不计价，估算值仅作参考': 'Subscription is not billed; the estimate is for reference only',
       '周': 'Week', '月': 'Month', '重置': 'Reset',
@@ -1078,7 +1078,7 @@ window.__ModuleLoader__.load({
           headCell('Tokens'), headCell(tr('输入')), headCell(tr('缓存')), headCell(tr('输出')),
           headCell(tr('请求')), headCell(tr('命中')),
           headCell(h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
-            tr('费用'), h(Icon, { name: 'info', size: 11 })), 'right', tr('金额说明'))),
+            tr('费用'), h(Icon, { name: 'info', size: 11 })), 'right', tr('API 与订阅金额均为本地按目录价估算，非供应商账单；缓存读按缓存价计，命中率高的行每 token 成本显著更低，不同行不可直接按 token 数比较；不同币种需自行换算'))),
         ...rows.map((row) => h('div', {
           key: `${row.providerId}:${row.modelId}`,
           role: 'row',
