@@ -6,6 +6,7 @@ import {
   collectReleases,
   coverageOf,
   estimate,
+  launchWindow,
   median,
   parseArgs,
   pickBaseline,
@@ -126,30 +127,40 @@ test('coverageOf：发布日越靠后，7 日窗口覆盖越高', () => {
   assert.equal(coverageOf('2026-11-22', { today, lastSettledDay }), 0)
   assert.equal(coverageOf('2026-11-19', { today, lastSettledDay }), 0.5)
   assert.equal(coverageOf('2026-11-16', { today, lastSettledDay }), 1)
-  // 早于 7 日窗口：已被挤出统计口径
   assert.equal(coverageOf('2026-11-15', { today, lastSettledDay }), 0)
-  // 尚未结算
   assert.equal(coverageOf('2026-11-23', { today, lastSettledDay }), 0)
 })
 
-test('recentVersions：只取近期 N 个版本，给出 7 日量与发布日下载', () => {
+test('launchWindow：按发布日往后取整日，缺数据就是 null', () => {
+  const dailyByDay = new Map([
+    ['2026-11-20', 263],
+    ['2026-11-21', null],
+  ])
+  assert.deepEqual(launchWindow({ releaseDay: '2026-11-20', dailyByDay, days: 1 }), [{ day: '2026-11-20', downloads: 263 }])
+  assert.deepEqual(launchWindow({ releaseDay: '2026-11-20', dailyByDay, days: 2 }), [
+    { day: '2026-11-20', downloads: 263 },
+    { day: '2026-11-21', downloads: null },
+  ])
+  assert.deepEqual(launchWindow({ releaseDay: '2026-11-24', dailyByDay, days: 1 }), [{ day: '2026-11-24', downloads: null }])
+})
+
+test('recentVersions：给出 7 日量 + 发布后 24h / 48h', () => {
   const times = {
-    '2.2.0': '2026-11-15T18:41:12Z',
     '2.3.0': '2026-11-16T05:25:25Z',
     '2.3.1': '2026-11-19T07:09:40Z',
     '2.4.0': '2026-11-20T10:51:08Z',
   }
   const weekByVersion = new Map([
-    ['2.2.0', 200],
     ['2.3.0', 349],
     ['2.3.1', 213],
     ['2.4.0', 263],
   ])
   const dailyByDay = new Map([
-    ['2026-11-15', 209],
     ['2026-11-16', 270],
+    ['2026-11-17', 69],
     ['2026-11-19', 177],
     ['2026-11-20', 263],
+    ['2026-11-21', 119],
   ])
   const rows = recentVersions({
     times,
@@ -161,20 +172,36 @@ test('recentVersions：只取近期 N 个版本，给出 7 日量与发布日下
     lastSettledDay: '2026-11-22',
   })
   assert.deepEqual(rows.map((row) => row.version), ['2.4.0', '2.3.1', '2.3.0'])
-  assert.equal(rows[0].week, 263)
-  assert.equal(rows[0].launchDay, 263)
+  assert.equal(rows[0].window24, 263)
+  assert.equal(rows[0].window48, 382)
+  assert.equal(rows[0].pending48, false)
   assert.equal(rows[0].launchExact, true)
-  assert.equal(rows[0].latest, true)
-  assert.equal(rows[0].ageDays, 3)
-  assert.equal(rows[1].launchDay, 177)
-  assert.equal(rows[2].week, 349)
+  // 2.3.1 发布日 11-19(177) + 次日 11-20(263) = 440（含 2.4.0 的发布日，故真实单版本 48h 更低）
+  assert.equal(rows[1].window48, 440)
+  // 2.3.0 的次日 11-17 有数据
+  assert.equal(rows[2].window48, 339)
+})
+
+test('recentVersions：48h 未结算时 window48 为 null 并标记 pending', () => {
+  const rows = recentVersions({
+    times: { '2.4.0': '2026-11-20T10:51:08Z' },
+    weekByVersion: new Map([['2.4.0', 263]]),
+    dailyByDay: new Map([['2026-11-20', 263]]),
+    latest: '2.4.0',
+    count: 1,
+    today: '2026-11-22',
+    lastSettledDay: '2026-11-20',
+  })
+  assert.equal(rows[0].window24, 263)
+  assert.equal(rows[0].window48, null)
+  assert.equal(rows[0].pending48, true)
 })
 
 test('recentVersions：同一天发布多个版本时标为不精确', () => {
   const rows = recentVersions({
     times: { '1.3.0': '2026-11-04T19:31:36Z', '2.0.0': '2026-11-04T21:53:45Z' },
     weekByVersion: new Map([['2.0.0', 2], ['1.3.0', 2]]),
-    dailyByDay: new Map([['2026-11-04', 432]]),
+    dailyByDay: new Map([['2026-11-04', 432], ['2026-11-05', 263]]),
     latest: '2.0.0',
     count: 2,
     today: '2026-11-10',
@@ -184,7 +211,7 @@ test('recentVersions：同一天发布多个版本时标为不精确', () => {
   assert.deepEqual(rows[1].launchDayVersions, ['1.3.0', '2.0.0'])
 })
 
-test('recentVersions：发布日尚未结算时不给 24h 数', () => {
+test('recentVersions：发布日尚未结算时 24h 与 48h 都无数据', () => {
   const rows = recentVersions({
     times: { '2.4.0': '2026-11-20T10:51:08Z' },
     weekByVersion: new Map([['2.4.0', 0]]),
@@ -194,7 +221,9 @@ test('recentVersions：发布日尚未结算时不给 24h 数', () => {
     today: '2026-11-20',
     lastSettledDay: '2026-11-19',
   })
-  assert.equal(rows[0].launchDay, null)
+  assert.equal(rows[0].window24, null)
+  assert.equal(rows[0].window48, null)
+  assert.equal(rows[0].pending48, false)
   assert.equal(rows[0].week, 0)
 })
 
@@ -223,24 +252,26 @@ test('buildModel：近期版本表、当日未结算与总量对齐', () => {
   assert.equal(model.lastSettledDay, '2026-11-20')
   assert.equal(model.totals.week, 349)
   assert.equal(model.totals.window, 177 + 263)
-  assert.equal(model.recent.length, 2)
   assert.deepEqual(model.recent.map((row) => row.version), ['2.4.0', '2.3.0'])
   const latestRow = model.recent[0]
   assert.equal(latestRow.week, 0)
-  assert.equal(latestRow.launchDay, 263)
-  assert.equal(latestRow.launchExact, true)
+  assert.equal(latestRow.window24, 263)
+  // 次日 11-21 未结算 → 48h 暂缺
+  assert.equal(latestRow.window48, null)
+  assert.equal(latestRow.pending48, true)
 })
 
-test('parseArgs：默认 3 个版本，非法参数报错', () => {
-  assert.deepEqual(parseArgs([]), { days: 30, pkg: null, out: null, json: false, versions: 3 })
+test('parseArgs：默认落盘 npm-reports，--stdout 与非法参数', () => {
+  assert.deepEqual(parseArgs([]), { days: 30, pkg: null, out: null, json: false, stdout: false, versions: 3 })
   assert.equal(parseArgs(['--versions', '5']).versions, 5)
   assert.equal(parseArgs(['--json']).json, true)
+  assert.equal(parseArgs(['--stdout']).stdout, true)
   assert.throws(() => parseArgs(['--versions', '0']), /--versions 需为 1–20 的整数/)
   assert.throws(() => parseArgs(['--days', '3']), /--days 需为 7–365 的整数/)
   assert.throws(() => parseArgs(['--nope']), /未知参数/)
 })
 
-test('renderMarkdown：近期版本表、口径说明与数据源齐备', () => {
+test('renderMarkdown：三列口径、暂未更新文案与口径说明齐备', () => {
   const model = buildModel({
     pkg: 'demo-pkg',
     registry: {
@@ -251,20 +282,39 @@ test('renderMarkdown：近期版本表、口径说明与数据源齐备', () => 
     rangeDownloads: [
       { day: '2026-11-19', downloads: 177 },
       { day: '2026-11-20', downloads: 263 },
-      { day: '2026-11-21', downloads: 0 },
+      { day: '2026-11-21', downloads: 119 },
+      { day: '2026-11-22', downloads: 0 },
     ],
     days: 30,
     versions: 2,
-    now: new Date('2026-11-21T12:00:00Z'),
+    now: new Date('2026-11-22T12:00:00Z'),
   })
   const markdown = renderMarkdown(model)
   assert.match(markdown, /# demo-pkg 下载统计/)
   assert.match(markdown, /## 近期 2 个版本/)
-  assert.match(markdown, /\| 版本 \| 7 日安装量 \| 发布日下载（24h） \| 发布日 \| 版本年龄 \| 7 日窗口覆盖 \|/)
-  // 发布日即最近完整日 → 7 日窗口覆盖 0%；领先 5 天 → (5-0)/6 ≈ 67%
-  assert.match(markdown, /\| 2\.4\.0（latest） \| 0 \| 263 \| 2026-11-20 \| 1 天 \| 0% \|/)
-  assert.match(markdown, /\| 2\.3\.0 \| 349 \| — \| 2026-11-16 \| 5 天 \| 67% \|/)
-  assert.match(markdown, /\| 近 7 天下载（全版本） \| 349 \|/)
-  assert.match(markdown, /## 估算（启发式，只看趋势）/)
+  assert.match(markdown, /\| 版本 \| 发布后 24h \| 发布后 48h \| 7 日安装量 \| 发布日 \|/)
+  assert.match(markdown, /\| 2\.4\.0（latest） \| 263 \| 382 \| 0 \| 2026-11-20 \|/)
+  // 表内不再出现年龄与覆盖列
+  assert.doesNotMatch(markdown, /版本年龄/)
+  assert.doesNotMatch(markdown, /7 日窗口覆盖 \|/)
+  assert.match(markdown, /数据暂未更新/)
+  assert.match(markdown, /npm-reports\//)
   assert.match(markdown, /## 口径说明/)
+})
+
+test('renderMarkdown：48h 未结算时单元格写「数据暂未更新」', () => {
+  const model = buildModel({
+    pkg: 'demo-pkg',
+    registry: {
+      time: { '2.4.0': '2026-11-20T10:51:00Z' },
+      'dist-tags': { latest: '2.4.0' },
+    },
+    weekDownloads: [['2.4.0', 263]],
+    rangeDownloads: [{ day: '2026-11-20', downloads: 263 }],
+    days: 30,
+    versions: 1,
+    now: new Date('2026-11-21T12:00:00Z'),
+  })
+  const markdown = renderMarkdown(model)
+  assert.match(markdown, /\| 2\.4\.0（latest） \| 263 \| 数据暂未更新 \| 263 \|/)
 })

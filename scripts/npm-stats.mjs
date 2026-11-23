@@ -1,13 +1,14 @@
 /**
- * npm 下载统计：近期版本的 7 日安装量与发布后安装节奏。
+ * npm 下载统计：近期版本的 7 日安装量、发布后 24h / 48h 下载，报告落盘到 npm-reports/。
  *
- * Usage: node scripts/npm-stats.mjs [--versions 3] [--days 30] [--pkg dsh-token-dash] [--out <file>] [--json]
+ * Usage: node scripts/npm-stats.mjs [--versions 3] [--days 30] [--pkg dsh-token-dash] [--out <file>] [--stdout] [--json]
  *
  * 只读 npm registry 与 api.npmjs.org 的公开接口，不采集任何用户数据；
  * npm 的下载按 UTC 日统计，且当日通常尚未结算（显示为 —）。
  *
  * 口径：versions/last-week 只给「版本 × 最近 7 天」的合计，没有按天拆分，
- * 所以「发布后 24h」用发布当天的全包日下载近似（只有该日恰好只发一个版本时才精确）。
+ * 所以「发布后 24h / 48h」用发布日起的整日全包下载累加近似（只有该日恰好只发一个版本时才精确）。
+ * 数据未结算时写「数据暂未更新」，不按 0 计入。
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -23,6 +24,10 @@ const LAUNCH_WARMUP_DAYS = 7
 const PROMPT_SHARE = { min: 0.6, max: 0.7 }
 /** 默认展示的近期版本数。 */
 const RECENT_VERSIONS = 3
+/** 默认报告目录：仓库根下的本地输出目录（见 .gitignore，不入库）。 */
+const DEFAULT_OUT_DIR = 'npm-reports'
+/** npm 统计落后于发布时的提示文案。 */
+const PENDING = '数据暂未更新'
 
 /** ISO 时间 → UTC 日期（YYYY-MM-DD）；无效输入返回 null。 */
 export function utcDay(value) {
@@ -123,7 +128,21 @@ export function coverageOf(day, { today, lastSettledDay }) {
 }
 
 /**
- * 近期版本的 7 日安装量 + 发布日（24h）安装量，按发布时间倒序。
+ * 一个版本发布后若干天内累计的全包下载。
+ * settledDays 只有发布日当天可用时，48h 无法得出 → pending，由报告写「数据暂未更新」。
+ */
+export function launchWindow({ releaseDay, dailyByDay, days }) {
+  const out = []
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = addDays(releaseDay, offset)
+    const value = dailyByDay.get(day)
+    out.push({ day, downloads: value === undefined || value === null ? null : value })
+  }
+  return out
+}
+
+/**
+ * 近期版本的 7 日安装量 + 发布后 24h / 48h 下载，按发布时间倒序。
  * weekByVersion 为 Map<版本, 近 7 天下载>；dailyByDay 为 Map<UTC 日期, 当日全包下载|null>。
  */
 export function recentVersions({
@@ -142,10 +161,14 @@ export function recentVersions({
       const releasesOnDay = Object.entries(times).filter(
         ([other]) => /^\d+\.\d+\.\d+/.test(other) && utcDay(times[other]) === releaseDay,
       )
-      const launchDay = dailyByDay.get(releaseDay)
       const settled = releaseDay !== null && releaseDay <= lastSettledDay
-      // 同一 UTC 日发了多个版本时，发布日下载含多个版本，不能当成单版本 24h
-      const launchExact = settled && releasesOnDay.length === 1
+      // 同一 UTC 日发了多个版本时，当日下载含多个版本，不能当成单版本安装量
+      const exact = settled && releasesOnDay.length === 1
+      const d1 = launchWindow({ releaseDay: releaseDay ?? today, dailyByDay, days: 1 })
+      const d2 = launchWindow({ releaseDay: releaseDay ?? today, dailyByDay, days: 2 })
+      const sum = (rows) => (rows.every((row) => row.downloads !== null) ? rows.reduce((acc, row) => acc + row.downloads, 0) : null)
+      const window24 = settled ? sum(d1) : null
+      const window48 = settled ? sum(d2) : null
       return {
         version,
         latest: version === latest,
@@ -153,22 +176,30 @@ export function recentVersions({
         releaseDay,
         ageDays: releaseDay === null ? null : Math.round((Date.parse(today) - Date.parse(releaseDay)) / 86400000),
         week: weekByVersion.get(version) ?? null,
-        launchDay: settled && launchDay !== null && launchDay !== undefined ? launchDay : null,
+        launchDay: settled && d1[0].downloads !== null ? d1[0].downloads : null,
         launchDayVersions: releasesOnDay.map(([other]) => other),
-        launchExact,
+        launchExact: exact,
+        window24,
+        window48,
+        // 发布日已结算但次日未结算：48h 还没数据
+        pending48: settled && window48 === null,
         coverage: releaseDay === null ? 0 : coverageOf(releaseDay, { today, lastSettledDay }),
       }
     })
 }
 
 const fmt = (value) => (value === null || value === undefined ? '—' : Number(value).toLocaleString('en-US'))
-const pct = (part, total) => (total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '—')
 const signed = (value) => (value > 0 ? `+${fmt(value)}` : fmt(value))
 const shortDay = (day) => day.slice(5)
 const releaseLabel = (versions) =>
   versions.length > 3 ? `${versions.slice(0, 3).join(' / ')} 等 ${versions.length} 个` : versions.join(' / ')
+/** 24h / 48h 单元格：未结算写「数据暂未更新」。 */
+const windowCell = (row, value) => {
+  if (value !== null && value !== undefined) return row.launchExact ? fmt(value) : `${fmt(value)} ⚠`
+  return PENDING
+}
 
-/** 渲染 Markdown 报告（stdout / --out 用）。 */
+/** 渲染 Markdown 报告（默认写入 npm-reports/）。 */
 export function renderMarkdown(model) {
   const { pkg, generatedAt, start, end, today, lastSettledDay, firstDay, totals, recent, daily, releases, estimate: est } = model
   const lines = []
@@ -179,18 +210,16 @@ export function renderMarkdown(model) {
   if (recent.length === 0) {
     lines.push('registry 里没有可用的版本时间。', '')
   } else {
-    lines.push('| 版本 | 7 日安装量 | 发布日下载（24h） | 发布日 | 版本年龄 | 7 日窗口覆盖 |', '| --- | ---: | ---: | --- | ---: | ---: |')
+    lines.push('| 版本 | 发布后 24h | 发布后 48h | 7 日安装量 | 发布日 |', '| --- | ---: | ---: | ---: | --- |')
     for (const row of recent) {
-      const launch = row.launchDay === null ? '—' : fmt(row.launchDay)
-      const mark = row.launchExact ? '' : row.launchDay === null ? '' : ' ⚠'
       const tags = row.latest ? '（latest）' : ''
       lines.push(
-        `| ${row.version}${tags} | ${fmt(row.week)} | ${launch}${mark} | ${row.releaseDay ?? '—'} | ${row.ageDays === null ? '—' : `${row.ageDays} 天`} | ${Math.round(row.coverage * 100)}% |`,
+        `| ${row.version}${tags} | ${windowCell(row, row.window24)} | ${windowCell(row, row.window48)} | ${fmt(row.week)} | ${row.releaseDay ?? '—'} |`,
       )
     }
     lines.push('')
-    lines.push('> 「7 日安装量」= 该版本在最近 7 个完整 UTC 日的 tarball 下载次数；「发布日下载（24h）」= 发布当天的全包下载量，仅当该日只发布一个版本时等于该版本的 24h 安装量，否则标 ⚠（含同期其他版本）。')
-    lines.push('> 「7 日窗口覆盖」= 该版本的可用统计天数占 7 天的比例；发布不满 7 天的版本，7 日安装量会被截断，不能与满 7 天的版本直接比。', '')
+    lines.push(`> 「发布后 24h / 48h」= 发布当天起 1 / 2 个 UTC 日的全包下载累计；数据未结算时写「${PENDING}」，不按 0 计入。该日同时发布多个版本时标 ⚠（含同期其他版本）。`)
+    lines.push('> 「7 日安装量」= 该版本在最近 7 个完整 UTC 日的 tarball 下载次数；发布不满 7 天的版本只累计到已结算日，实际天数少于 7 天，数值偏低。', '')
   }
 
   lines.push('## 总量', '', '| 指标 | 数值 |', '| --- | ---: |')
@@ -205,7 +234,7 @@ export function renderMarkdown(model) {
     if (firstDay !== null && row.day < firstDay) continue
     const released = releases.get(row.day)
     let event = released === undefined ? '' : `发布 ${releaseLabel(released)}`
-    if (row.downloads === null) event = event === '' ? '未结算' : `未结算（${event}）`
+    if (row.downloads === null) event = event === '' ? PENDING : `${PENDING}（${event}）`
     const excess = row.downloads === null || est.baseline === null ? '—' : signed(row.downloads - est.baseline)
     lines.push(`| ${shortDay(row.day)} | ${fmt(row.downloads)} | ${excess} | ${event} |`)
   }
@@ -226,7 +255,8 @@ export function renderMarkdown(model) {
   lines.push('## 口径说明', '')
   lines.push('- 下载次数是 tarball 拉取次数，不是用户数：镜像同步、供应链扫描、重复安装都会计入。')
   lines.push('- 按版本的拆分接口（versions/last-week）只给最近 7 天的合计，没有按天拆分；历史分布需要定期运行本脚本归档。')
-  lines.push(`- npm 结算滞后约 2 天：今日 ${today} 与更晚的日期显示为 —，不参与任何合计。`)
+  lines.push(`- npm 结算滞后约 2 天：今日 ${today} 与更晚的日期显示为「${PENDING}」，不参与任何合计。`)
+  lines.push(`- 本报告写入 ${DEFAULT_OUT_DIR}/（本地输出目录，不入库）。`)
   lines.push('- 7 日安装量包含镜像回源与重试，长尾版本（发布超过 7 天仍被拉）尤其如此。', '')
 
   lines.push('## 数据源', '')
@@ -253,10 +283,11 @@ async function fetchJson(url, label) {
 }
 
 export function parseArgs(argv) {
-  const options = { days: 30, pkg: null, out: null, json: false, versions: RECENT_VERSIONS }
+  const options = { days: 30, pkg: null, out: null, json: false, stdout: false, versions: RECENT_VERSIONS }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--json') options.json = true
+    else if (arg === '--stdout') options.stdout = true
     else if (arg === '--days') options.days = Number.parseInt(argv[++index], 10)
     else if (arg === '--versions') options.versions = Number.parseInt(argv[++index], 10)
     else if (arg === '--pkg') options.pkg = argv[++index]
@@ -341,14 +372,17 @@ async function main() {
   const output = options.json
     ? `${JSON.stringify({ ...model, releases: Object.fromEntries(model.releases) }, null, 2)}\n`
     : renderMarkdown(model)
-  if (options.out !== null) {
-    const file = resolve(options.out)
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, output)
-    console.log(`已写入 ${file}`)
+
+  if (options.stdout) {
+    process.stdout.write(output)
     return
   }
-  process.stdout.write(output)
+  // 默认落盘到 npm-reports/<pkg>-YYYY-MM-DD.<md|json>，该目录不入库
+  const ext = options.json ? 'json' : 'md'
+  const file = options.out !== null ? resolve(options.out) : resolve(DEFAULT_OUT_DIR, `${pkg}-${today}.${ext}`)
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, output)
+  console.log(`已写入 ${file}`)
 }
 
 const invokedDirectly = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href

@@ -17,6 +17,9 @@ test-results/
 *.log
 .cache/
 
+# 本地报告输出（npm run stats 的落盘目录，不入库）
+npm-reports/
+
 # third-party reference sources (local research only)
 reference/third-party/
 # 上游 README 截图的本地副本（便于查看，不入库）
