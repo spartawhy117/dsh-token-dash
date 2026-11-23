@@ -6,6 +6,28 @@ import { normalizeProvider, providerCurrency, providerLabel } from './providers.
 import { PROVIDER_SOURCES } from './quota-sources.js'
 
 const TIMEOUT = 6000
+// 宿主服务调用没有内置超时（2026-11-23：deepseekAccount.getBalance 曾挂起 30s）。
+// 超时抛 HostTimeoutError，由 errorDetail 归类 host-timeout；不吞宿主真实异常。
+const HOST_TIMEOUT = 5000
+class HostTimeoutError extends Error {
+  constructor(label) {
+    super(`host-timeout:${label}`)
+    this.name = 'HostTimeout'
+  }
+}
+async function withHostTimeout(promise, label) {
+  let timer = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new HostTimeoutError(label)), HOST_TIMEOUT)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 const GLM_QUOTA = 'https://bigmodel.cn/api/monitor/usage/quota/limit'
 const KIMI_USAGES = 'https://api.kimi.com/coding/v1/usages'
 const KIMI_BALANCE = 'https://api.moonshot.cn/v1/users/me/balance'
@@ -91,7 +113,7 @@ async function resolveKey(ctx, names) {
   if (credentials === undefined || typeof credentials.resolve !== 'function') return undefined
   for (const name of names) {
     try {
-      const hit = await credentials.resolve(name)
+      const hit = await withHostTimeout(credentials.resolve(name), 'credentials.resolve')
       const value = hit?.value
       if (typeof value === 'string' && value.trim() !== '') return { value: value.trim(), name }
     } catch {
@@ -127,6 +149,7 @@ function errorDetail(error) {
     }
   }
   const name = `${error?.name ?? ''} ${error?.message ?? ''}`
+  if (error?.name === 'HostTimeout') return { kind: 'host-timeout' }
   if (name.includes('Timeout') || name.includes('abort') || name.includes('Abort')) return { kind: 'timeout' }
   return { kind: 'network' }
 }
@@ -135,7 +158,7 @@ async function deepseek(ctx) {
   const account = ctx.get?.('deepseekAccount')
   if (account !== undefined && typeof account.getBalance === 'function') {
     try {
-      const data = await account.getBalance({ version: '1.0.2', locale: 'zh-CN', timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60 })
+      const data = await withHostTimeout(account.getBalance({ version: '1.0.2', locale: 'zh-CN', timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60 }), 'deepseekAccount.getBalance')
       if (data?.status === 'ready') {
         const wallets = [...(Array.isArray(data.value) ? data.value : Object.values(data.value ?? {})), ...(data.bonusWallets ?? [])]
         const amount = wallets.filter((wallet) => wallet?.currency === undefined || wallet.currency === 'CNY')
@@ -363,12 +386,16 @@ async function readCachedSource(ctx, prefs, source, cache) {
   const promise = readSource(ctx, prefs, source, cached?.data ?? null)
     .then((data) => {
       const at = Date.now()
-      cache.set(source.id, { at, ok: data !== null && data?._rateLimited !== true, data, promise: null, until: cacheExpiry(data, at) })
+      // null 且有旧值时降级沿用旧快照（保留 _stale 标记），TTL 仍按失败档 10s 重试；
+      // 无旧值的确定性 :none 维持 data=null，避免掩盖"Key 真被删除"。
+      const stored = data === null && cached?.data != null ? { ...cached.data, _stale: true } : data
+      cache.set(source.id, { at, ok: data !== null && data?._rateLimited !== true, data: stored, promise: null, until: cacheExpiry(data, at) })
       return data
     })
     .catch((error) => {
       const at = Date.now()
-      cache.set(source.id, { at, ok: false, data: null, promise: null, until: at + TTL_FAIL })
+      const stored = cached?.data != null ? { ...cached.data, _stale: true } : null
+      cache.set(source.id, { at, ok: false, data: stored, promise: null, until: at + TTL_FAIL })
       throw error
     })
   cache.set(source.id, { at: cached?.at ?? 0, ok: cached?.ok === true, data: cached?.data ?? null, promise, until: cached?.until ?? null })
@@ -402,6 +429,7 @@ export function toSnapshot(entry) {
     ...(entry.channel === undefined ? {} : { channel: entry.channel }),
     ...(entry._channelError === undefined ? {} : { channelError: entry._channelError }),
     rateLimited: entry._rateLimited === true,
+    stale: entry._stale === true,
     mode: entry.mode === 'subscription' || entry.mode === 'api' ? entry.mode : 'unknown',
     windows: Array.isArray(entry.windows) ? entry.windows : Array.isArray(entry.plans) ? entry.plans : [],
     error,
@@ -417,7 +445,15 @@ export function toSnapshot(entry) {
  * 缓存按源保存在调用方传入的 Map 中：成功 60s、失败 10s，并发复用 promise。
  */
 export async function readProviders(ctx, prefs, cache = new Map()) {
-  const results = await Promise.allSettled(PROVIDER_SOURCES.map((source) => readCachedSource(ctx, prefs, source, cache)))
+  const timings = []
+  const results = await Promise.allSettled(PROVIDER_SOURCES.map(async (source) => {
+    const startedAt = Date.now()
+    try {
+      return await readCachedSource(ctx, prefs, source, cache)
+    } finally {
+      timings.push({ id: source.id, ms: Date.now() - startedAt })
+    }
+  }))
   const out = []
   const misses = []
   const failures = []
@@ -442,6 +478,8 @@ export async function readProviders(ctx, prefs, cache = new Map()) {
   })
   out.misses = misses
   out.failures = failures
+  // 缓存命中的源计时趋近 0，最慢者即真实拖慢探测的源
+  out.slowest = timings.length === 0 ? null : timings.reduce((a, b) => (b.ms > a.ms ? b : a))
   return out
 }
 
@@ -566,3 +604,5 @@ export function logAdapterFailures(log, failures = []) {
 }
 
 export { KIMI_USAGES, GLM_QUOTA, KIMI_BALANCE, OPENROUTER_CREDITS }
+// 内部工具导出：仅用于单元测试验证超时与降级行为
+export { HostTimeoutError, withHostTimeout, errorDetail }

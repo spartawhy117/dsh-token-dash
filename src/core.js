@@ -644,7 +644,7 @@ export function buildUsage(state, prefs, range, now, providerInfoInput) {
   }
 }
 
-export function buildSummary(state, prefs, now, providerInfoInput) {
+export function buildSummary(state, prefs, now, providerInfoInput, activeProvider = null, recentProvider = null) {
   const month = localMonthKey(now)
   const todayKey = localDayKey(now)
   const providerMap = new Map()
@@ -659,7 +659,8 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
 
   for (const item of providerInfo) {
     // mode 是快照内部字段，剥离后不进入 VM
-    const { plans: legacyPlans, mode: _mode, ...info } = item
+    // _stale 是快照内部字段：剥离后以只读 stale 进 VM（与 mode 同口径）
+    const { plans: legacyPlans, mode: _mode, _stale: _rawStale, ...info } = item
     const id = normalizeProvider(info.id ?? info.provider)
     if (id === 'unknown' || hidden.has(id)) continue
     const kind = resolveProviderKind(state, prefs, id, item)
@@ -669,6 +670,7 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
       ...base,
       ...info,
       id,
+      stale: _rawStale === true,
       name: info.name ?? providerLabel(id),
       kind,
       canSubscribe: canBeSubscription(id),
@@ -833,9 +835,21 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
     provider.usage.monthCost = round2(provider.usage.monthCost)
     return { ...provider, budget }
   })
+  // 选卡口径三级回退：前端显式选择 → 最近观测 → 记账口径 → 首卡。
+  // 记账口径 state.currentProvider 只在记账时更新（切供应商未发消息则仍是旧值），不能单独作为依据。
+  // 必须比 providers.sort 先算：后面排序要用 current 作为首卡基准。
+  // 必须先经 normalizeProvider 归一：宿主路由名与快照 id 不一定同字面
+  // （如宿主报 deepseek-account，快照里是 deepseek-official），直接字面比对会落空。
+  const pick = (id) => {
+    const normalized = normalizeProvider(id)
+    if (normalized === 'unknown') return null
+    return providers.some((p) => p.id === normalized) ? normalized : null
+  }
+  // 记账口径也要校验：provider 可能已从配置移除（历史 daily.json 仍留着旧 id）
+  const current = pick(activeProvider) ?? pick(recentProvider) ?? pick(state.currentProvider) ?? providers[0]?.id ?? null
   providers.sort((a, b) => {
-    if (a.id === state.currentProvider) return -1
-    if (b.id === state.currentProvider) return 1
+    if (a.id === current) return -1
+    if (b.id === current) return 1
     return b.usage.todayCost - a.usage.todayCost
   })
 
@@ -888,7 +902,6 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
     cost: sum.cost + provider.usage.todayCost,
     requests: sum.requests + provider.usage.requests,
   }), { tokens: 0, cost: 0, requests: 0 })
-  const current = state.currentProvider ?? providers[0]?.id ?? null
 
   return {
     month,
@@ -906,6 +919,10 @@ export function buildSummary(state, prefs, now, providerInfoInput) {
     providers,
     apiTotals,
     currentProviderId: current,
+    // 归一化后的「前端当前选中」：宿主上报的是路由名（如 deepseek-account），
+    // 而 providers[].id 是内部 id（deepseek-official）。回显归一化值，
+    // 让 UI 无需知道别名规则即可选卡（保持「UI 不认识 provider」的边界）。
+    activeProviderId: pick(activeProvider),
     breakdown: { models },
     pricingLinks: pricingLinks(),
     showBalance: prefs?.showBalance !== false,

@@ -233,10 +233,19 @@ export function apply(ctx) {
   let state
   let providerCache = new Map()
   let providerCacheMeta = { at: 0, hadProviders: false, degraded: false, missSignature: null }
+  // /summary 与 /usage 共用的最小探测间隔：超过后触发一轮探测（不再阻塞响应）
+  const PROBE_MIN_INTERVAL_MS = 5000
+  // 面板一次打开会并发多个 range 请求：同 range 5s 内复用结果，避免重复全量聚合
+  const usageCache = new Map()
+  const USAGE_TTL_MS = 5000
+  // 最近一次由前端上报的 provider（切换供应商时即更新，不等记账）；仅用于 VM 兜底选卡，不写 state
+  let lastSeenProvider = null
   const cacheData = () => [...providerCache.values()].map((entry) => entry.data).filter((item) => item !== null && item !== undefined)
   const clearProviderCache = () => {
     providerCache.clear()
     providerCacheMeta = { at: 0, hadProviders: false, degraded: false, missSignature: null }
+    // 快照失效时用量缓存同步失效（provider 形态/币种可能变化）
+    usageCache.clear()
   }
   const metaOf = (id) => cacheData().find((item) => item.id === id)
   /** 形态判定：把当前快照交给 core，prefs / registry 的优先级由 core 决定。 */
@@ -361,7 +370,11 @@ export function apply(ctx) {
         if (state === undefined) return
         const sessionId = session?.id ?? session?.header?.id ?? 'live'
         const record = ingest(state, sessionId, event, num(session?.header?.seedLength), kindOf)
-        if (record !== undefined) flushReady?.schedule?.()
+        if (record !== undefined) {
+          // 新记录改变用量口径，缓存的 usage 结果需要重算
+          usageCache.clear()
+          flushReady?.schedule?.()
+        }
       })
     },
     { global: true },
@@ -371,11 +384,16 @@ export function apply(ctx) {
     const webServer = scoped.webServer
     if (webServer === undefined) return
     let providerRefresh = null
+    // 冷启动标记：首轮探测必须同步等待（否则空面板）；完成之后一律 stale-while-revalidate
+    let providerBootstrapped = false
     const refreshProviderCache = async () => {
       if (providerRefresh !== null) return providerRefresh
       providerRefresh = (async () => {
         const probeStartedAt = Date.now()
         const data = await readProviders(scoped, prefs, providerCache)
+        providerBootstrapped = true
+        // 探测可能改变 provider 形态/币种，用量结果需要重算
+        usageCache.clear()
         const probeElapsed = Date.now() - probeStartedAt
         // 慢刷新：一次探测超过 5s 会连带阻塞排队中的请求，单独留痕便于定位是哪一轮、哪些源拖慢
         if (probeElapsed > 5000) {
@@ -383,6 +401,7 @@ export function apply(ctx) {
             probeMs: probeElapsed,
             misses: (data.misses ?? []).length,
             failures: (data.failures ?? []).map((item) => item.id),
+            slowest: data.slowest ?? null,
           })
         }
         const hadProviders = providerCacheMeta.hadProviders === true || data.length > 0
@@ -423,6 +442,20 @@ export function apply(ctx) {
       })().finally(() => { providerRefresh = null })
       return providerRefresh
     }
+    const cachedUsage = (range, now) => {
+      const hit = usageCache.get(range)
+      return hit !== undefined && now - hit.at < USAGE_TTL_MS ? hit.data : null
+    }
+    // 三态门卫：fresh 缓存新鲜 / bootstrap 冷启动同步等待 / background 后台去重刷新
+    const ensureProviderCache = async () => {
+      if (Date.now() - providerCacheMeta.at <= PROBE_MIN_INTERVAL_MS) return 'fresh'
+      if (providerBootstrapped === true) {
+        void refreshProviderCache().catch(() => { /* 后台探测异常不进请求链 */ })
+        return 'background'
+      }
+      await refreshProviderCache().catch(() => { /* 首轮失败按空缓存构建，UI 既有重试兜底 */ })
+      return 'bootstrap'
+    }
     const off = webServer.register({
       kind: 'prefix',
       path: ROUTE_PREFIX,
@@ -447,13 +480,17 @@ export function apply(ctx) {
           await ready
           if (url.pathname === `${ROUTE_PREFIX}/summary` && req.method === 'GET') {
             const startedAt = Date.now()
+            // active 是前端当前选中的 provider：只用于选卡口径，不写回 state（记账语义不动）
+            const activeParam = url.searchParams.get('active')
+            if (typeof activeParam === 'string' && activeParam !== '') lastSeenProvider = activeParam
             let probeMs = 0
-            if (Date.now() - providerCacheMeta.at > 5000) {
+            let probeMode = 'fresh'
+            if (Date.now() - providerCacheMeta.at > PROBE_MIN_INTERVAL_MS) {
               const probeStartedAt = Date.now()
-              await refreshProviderCache()
-              probeMs = Date.now() - probeStartedAt
+              probeMode = await ensureProviderCache()
+              if (probeMode !== 'background') probeMs = Date.now() - probeStartedAt
             }
-            const summary = buildSummary(state, prefs, Date.now(), cacheData())
+            const summary = buildSummary(state, prefs, Date.now(), cacheData(), activeParam, lastSeenProvider)
             summary.version = CURRENT_VERSION
             summary.refreshMs = prefs.refreshMs
             summary.providersDegraded = providerCacheMeta.degraded === true
@@ -463,6 +500,10 @@ export function apply(ctx) {
               api: summary.providers.filter((item) => item.kind === 'api').length,
               subscription: summary.providers.filter((item) => item.kind === 'subscription').length,
               probeMs,
+              probe: probeMode,
+              // 诊断：前端上报的 active 与最终选中的 provider，用于定位切换不生效的层级
+              active: activeParam ?? null,
+              currentProviderId: summary.currentProviderId ?? null,
               durationMs: Date.now() - startedAt,
             })
             json(res, 200, { ok: true, data: summary })
@@ -476,12 +517,16 @@ export function apply(ctx) {
             }
             const startedAt = Date.now()
             let probeMs = 0
-            if (Date.now() - providerCacheMeta.at > 5000) {
+            let probeMode = 'fresh'
+            if (Date.now() - providerCacheMeta.at > PROBE_MIN_INTERVAL_MS) {
               const probeStartedAt = Date.now()
-              await refreshProviderCache()
-              probeMs = Date.now() - probeStartedAt
+              probeMode = await ensureProviderCache()
+              if (probeMode !== 'background') probeMs = Date.now() - probeStartedAt
             }
-            const usage = buildUsage(state, prefs, range, Date.now(), cacheData())
+            // 同 range 5s 内复用结果：面板打开时的重复请求不再重复全量聚合
+            const hit = cachedUsage(range, Date.now())
+            const usage = hit ?? buildUsage(state, prefs, range, Date.now(), cacheData())
+            if (hit === null) usageCache.set(range, { at: Date.now(), data: usage })
             logger.info('vm', 'usage', {
               range,
               models: usage.models.length,
@@ -492,6 +537,8 @@ export function apply(ctx) {
               points: usage.series.length,
               seriesCurrencies: Object.keys(usage.series.reduce((acc, point) => Object.assign(acc, point.cost), {})).length,
               probeMs,
+              probe: probeMode,
+              cached: hit !== null,
               durationMs: Date.now() - startedAt,
             })
             json(res, 200, { ok: true, data: usage })

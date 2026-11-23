@@ -128,6 +128,99 @@ test('旧 unknown 行在 provider 唯一时归因', () => {
   assert.equal(state.days['2026-10-30'].providers['deepseek-official'].models['deepseek-flash'].cost, 0.04)
 })
 
+test('选卡三级回退：active → recent → 记账 → 首卡', () => {
+  const now = new Date(2026, 10, 1, 12, 0, 0).getTime()
+  const state = emptyState()
+  state.currentProvider = 'deepseek-official'
+  const providers = [
+    { id: 'deepseek-official', kind: 'api', currency: 'CNY' },
+    { id: 'opencode-go', kind: 'subscription', currency: 'USD' },
+    { id: 'zhipu', kind: 'api', currency: 'CNY' },
+  ]
+  // active 命中 → 用它
+  assert.equal(buildSummary(state, { budgets: {} }, now, providers, 'opencode-go').currentProviderId, 'opencode-go')
+  // active 缺失 → 用最近观测
+  assert.equal(buildSummary(state, { budgets: {} }, now, providers, null, 'zhipu').currentProviderId, 'zhipu')
+  // 两者都缺失 → 记账口径
+  assert.equal(buildSummary(state, { budgets: {} }, now, providers).currentProviderId, 'deepseek-official')
+  // 非法 id 逐级跳过，不抛错
+  assert.equal(buildSummary(state, { budgets: {} }, now, providers, 'nope', 'nope2').currentProviderId, 'deepseek-official')
+})
+
+test('VM 回显归一化 activeProviderId，供 UI 直接选卡', () => {
+  const now = new Date(2026, 10, 1, 12, 0, 0).getTime()
+  const state = emptyState()
+  state.currentProvider = 'tencent'
+  const providers = [
+    { id: 'deepseek-official', kind: 'api', currency: 'CNY' },
+    { id: 'tencent', kind: 'api', currency: 'CNY' },
+  ]
+  // 宿主路由名 -> VM 回显归一化后的内部 id
+  const summary = buildSummary(state, { budgets: {} }, now, providers, 'deepseek-account')
+  assert.equal(summary.activeProviderId, 'deepseek-official')
+  assert.equal(summary.currentProviderId, 'deepseek-official')
+  // 未上报时回显 null，UI 自行兜底
+  const bare = buildSummary(state, { budgets: {} }, now, providers)
+  assert.equal(bare.activeProviderId, null)
+  // 非法 id 同样回显 null
+  const bad = buildSummary(state, { budgets: {} }, now, providers, 'not-a-provider')
+  assert.equal(bad.activeProviderId, null)
+})
+
+test('选卡：宿主路由名与快照 id 不同字面时仍能命中（归一化回归）', () => {
+  const now = new Date(2026, 10, 1, 12, 0, 0).getTime()
+  const state = emptyState()
+  state.currentProvider = 'tencent'
+  const providers = [
+    { id: 'deepseek-official', kind: 'api', currency: 'CNY' },
+    { id: 'tencent', kind: 'api', currency: 'CNY' },
+  ]
+  // 宿主 modelSelection 报的是路由名 deepseek-account，快照归一化后是 deepseek-official
+  const summary = buildSummary(state, { budgets: {} }, now, providers, 'deepseek-account')
+  assert.equal(summary.currentProviderId, 'deepseek-official')
+  assert.equal(summary.providers[0].id, 'deepseek-official')
+  // deepseek / deepseek-official 两种写法都应命中
+  assert.equal(buildSummary(state, { budgets: {} }, now, providers, 'deepseek').currentProviderId, 'deepseek-official')
+  assert.equal(buildSummary(state, { budgets: {} }, now, providers, 'deepseek-official').currentProviderId, 'deepseek-official')
+})
+
+test('选卡三级回退：全空时回落首卡', () => {
+  const now = new Date(2026, 10, 1, 12, 0, 0).getTime()
+  const state = emptyState()
+  state.currentProvider = 'not-exist'
+  const summary = buildSummary(state, { budgets: {} }, now, [{ id: 'zhipu', kind: 'api', currency: 'CNY' }])
+  assert.equal(summary.currentProviderId, 'zhipu')
+})
+
+test('首卡排序与选卡同源', () => {
+  const now = new Date(2026, 10, 1, 12, 0, 0).getTime()
+  const state = emptyState()
+  state.currentProvider = 'deepseek-official'
+  addRecord(state, { ts: now, provider: 'zhipu', model: 'glm-5.3', input: 1000, cacheRead: 0, cacheWrite: 0, output: 100 })
+  const providers = [
+    { id: 'deepseek-official', kind: 'api', currency: 'CNY' },
+    { id: 'zhipu', kind: 'api', currency: 'CNY' },
+  ]
+  // 记账口径是 deepseek，但 active 指 zhipu → 首卡应是 zhipu
+  const summary = buildSummary(state, { budgets: {} }, now, providers, 'zhipu')
+  assert.equal(summary.currentProviderId, 'zhipu')
+  assert.equal(summary.providers[0].id, 'zhipu')
+})
+
+test('_stale 剥离后以只读 stale 进 VM', () => {
+  const now = new Date(2026, 10, 1, 12, 0, 0).getTime()
+  const summary = buildSummary(emptyState(), { budgets: {} }, now, [
+    { id: 'deepseek-official', kind: 'api', currency: 'CNY', _stale: true },
+    { id: 'zhipu', kind: 'api', currency: 'CNY' },
+  ])
+  const ds = summary.providers.find((p) => p.id === 'deepseek-official')
+  const glm = summary.providers.find((p) => p.id === 'zhipu')
+  assert.equal(ds.stale, true)
+  assert.equal(glm.stale, false)
+  // 内部字段不得泄漏到 VM
+  assert.equal(ds._stale, undefined)
+})
+
 test('provider 归一化与展示名', () => {
   assert.equal(normalizeProvider('deepseek-account'), 'deepseek-official')
   assert.equal(normalizeProvider('glm'), 'zhipu')

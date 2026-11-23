@@ -4,6 +4,51 @@
 
 This file records the **new features** and **changes** of each release in Chinese and English. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.5.0-local.6] - 2026-11-23
+
+> 本地构建，未发布
+
+### 中文
+
+#### 新增
+
+- 切换供应商后看板立即响应：P1 与 P2 按用户当前选中的供应商显示，不再等待下一次消息记账；首个供应商卡片顺序同步跟随。
+- 在两个同为 API 形态的供应商之间切换（如 DeepSeek 官方与第三方中转）时，看板也能立即跟随，不再停在旧供应商。
+- 修复切换供应商后界面不跟随的问题：恢复读取宿主投影的正确字段，并在切换发生时立即刷新，不再只依赖定时轮询。
+- 诊断日志补充「前端上报的供应商」与「实际选中的供应商」，便于定位切换类问题。
+- 修复两个按量供应商之间切换时不生效的问题：宿主上报的供应商名称与内部标识不一致时，现在能正确识别。
+- 看板选卡改为直接使用服务端归一化后的当前供应商，前端不再自行比对名称。
+- 供应商数据探测失败时保留上一次结果并标记「数据待更新」，不再让余额卡片突然消失。
+- P2 用量明细在面板展开期间自动刷新，不必手动点击刷新按钮。
+
+#### 修改
+
+- 打开面板或切换时间范围时界面不再长时间停在「加载中」：数据读取与后台探测解耦，先显示已有数据再静默更新。
+- 供应商接口响应过慢时（此前可能卡住数十秒）限制为最长 5 秒，超时后按失败处理并继续。
+- 看板收起时的刷新间隔从自定义值收紧，避免长时间不更新。
+- 面板同时请求多个时间范围的情况减少，重复请求复用已有结果。
+- 诊断日志新增慢探测归因（最慢的供应商）、探测模式与用量缓存命中标记，便于排查刷新问题。
+
+### English
+
+#### Added
+
+- The dashboard reacts immediately after switching providers: P1 and P2 follow the provider currently selected by the user instead of waiting for the next message to be recorded; the first provider card ordering follows as well.
+- Switching between two API-form providers (for example the DeepSeek official API and a third-party relay) now follows immediately instead of staying on the previous provider.
+- Fixed the dashboard not following a provider switch: read the correct host projection field and refresh immediately on switch instead of relying only on the timer.
+- Diagnostics now record both the reported and the resolved provider to speed up switch-related troubleshooting.
+- Fixed switching between two pay-as-you-go providers when the host reports a provider name that differs from the internal identifier.
+- The dashboard now renders the provider normalized by the host instead of comparing provider names on the client.
+- When a provider probe fails, the previous result is kept and marked as outdated, so balance cards no longer disappear abruptly.
+- P2 usage details refresh automatically while the panel is open, without clicking the refresh button.
+
+#### Changes
+
+- Opening the panel or switching the time range no longer leaves the UI stuck on a loading state: reads are decoupled from background probes, showing existing data first and updating silently.
+- Provider interface calls that used to hang for tens of seconds are now capped at 5 seconds and treated as failures afterwards.
+- The refresh interval while the dashboard is collapsed is tightened to avoid stale data for long periods.
+- Fewer simultaneous requests for multiple time ranges; repeated requests reuse existing results.
+- Diagnostic logs now include slow-probe attribution (slowest provider), probe mode and usage-cache hit markers for refresh troubleshooting.
 ## [2.4.0] - 2026-11-20
 
 ### 中文

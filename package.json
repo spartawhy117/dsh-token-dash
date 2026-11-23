@@ -1,6 +1,6 @@
 {
   "name": "dsh-token-dash",
-  "version": "2.4.0",
+  "version": "2.5.0-local.6",
   "description": "DeepSeek Harness Token 与费用看板：按供应商查看预算、订阅配额（GLM / Kimi / OpenCode Go / Command Code）与账户余额；Pill、浮层、整页三处展示费用与真实 Tokens、缓存命中率与用量趋势，成本趋势支持双币种双轴；订阅用量给出按 API 单价的估算参考，未定价模型不按 0 元计，可导出 / 导入本地 JSON 备份。",
   "type": "module",
   "main": "./index.js",

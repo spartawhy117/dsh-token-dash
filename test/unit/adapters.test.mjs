@@ -4,6 +4,43 @@ import { logAdapterEvents, logAdapterFailures, missSignature, parseGlmQuota, par
 import { parseCommandCodeCredits, parseOpenCodeUsage } from '../../src/quota-sources.js'
 import { emptyState, stampProviderKinds } from '../../src/core.js'
 
+test('withHostTimeout：永不 resolve 的 promise 超时抛 HostTimeoutError', async () => {
+  const { withHostTimeout, errorDetail } = await import('../../src/adapters.js')
+  const never = new Promise(() => {})
+  await assert.rejects(
+    () => withHostTimeout(never, 'test.never'),
+    (error) => {
+      assert.equal(error.name, 'HostTimeout')
+      return true
+    },
+  )
+  // 归类为 host-timeout，与普通 timeout / network 区分
+  const hostError = new Error('host-timeout:test')
+  hostError.name = 'HostTimeout'
+  assert.equal(errorDetail(hostError).kind, 'host-timeout')
+})
+
+test('withHostTimeout：正常 resolve 不受影响', async () => {
+  const { withHostTimeout } = await import('../../src/adapters.js')
+  assert.equal(await withHostTimeout(Promise.resolve('ok'), 'test.fast'), 'ok')
+})
+
+test('withHostTimeout：原始异常原样透传，不被吞掉', async () => {
+  const { withHostTimeout } = await import('../../src/adapters.js')
+  const boom = new Error('upstream-500')
+  await assert.rejects(
+    () => withHostTimeout(Promise.reject(boom), 'test.fail'),
+    (error) => error === boom,
+  )
+})
+
+test('toSnapshot：_stale 透出为只读 stale', () => {
+  const snapshot = toSnapshot({ id: 'deepseek-official', kind: 'api', currency: 'CNY', _stale: true })
+  assert.equal(snapshot.stale, true)
+  const normal = toSnapshot({ id: 'zhipu', kind: 'api', currency: 'CNY' })
+  assert.equal(normal.stale, false)
+})
+
 test('GLM parses TOKENS_LIMIT unit 3/6 and ignores TIME_LIMIT', () => {
   const windows = parseGlmQuota({
     success: true,

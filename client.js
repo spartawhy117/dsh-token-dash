@@ -96,7 +96,7 @@ window.__ModuleLoader__.load({
       '名称': 'Name', '已用': 'Used', '已用 / 预算': 'Used / budget', '计划余额': 'Planned left', '真实余额': 'Real balance',
       '剩余 {value}': '{value} left', '本月已花': 'Spent this month',
       '今日': 'Today', '总费用': 'Total cost', '重试': 'Retry',
-      '模型用量明细': 'Model usage details', '模型': 'Model', '共 {n} 个模型': 'Total {n} models', '窗': 'windows', '数据来源': 'Data source', '数据来自本机会话记录，费用与 Tokens 均在本地估算': 'Estimated locally from local session records', '范围与明细': 'Range & details', '输入': 'In', '缓存': 'Cache', '输出': 'Out', '费用': 'Cost',
+      '模型用量明细': 'Model usage details', '模型': 'Model', '共 {n} 个模型': 'Total {n} models', '窗': 'windows', '数据待更新': 'Data may be stale', '探测失败，暂用上次数据': 'Probe failed; showing last data', '数据来源': 'Data source', '数据来自本机会话记录，费用与 Tokens 均在本地估算': 'Estimated locally from local session records', '范围与明细': 'Range & details', '输入': 'In', '缓存': 'Cache', '输出': 'Out', '费用': 'Cost',
       '费用（API 计价估算）': 'Cost (API estimate)',
       '重新检测订阅配额': 'Recheck subscription quota',
       '未检测到已配置供应商': 'No configured provider detected',
@@ -546,6 +546,7 @@ window.__ModuleLoader__.load({
       summaryValue: { fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
       providerLine: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0, minHeight: 24 },
       providerChip: { color: T.muted, fontSize: 12, whiteSpace: 'nowrap' },
+    staleBadge: { color: T.weak, fontSize: 11, whiteSpace: 'nowrap', border: `1px solid ${T.border}`, borderRadius: 4, padding: '0 4px' },
       windowRow: { display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', columnGap: 8, alignItems: 'center', minHeight: 24, fontSize: 13 },
       windowKey: { display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' },
       table: { display: 'grid', minWidth: 0 },
@@ -1562,27 +1563,31 @@ window.__ModuleLoader__.load({
       ? `/summary?active=${encodeURIComponent(active)}`
       : '/summary')
 
-    /** 三级取值：投影 next / lastUsed → 宿主默认模型 → 账本（null 交给 currentProviderId）。 */
-    function rawActiveProvider(props) {
-      try {
-        const projection = typeof props?.useProjection === 'function' ? props.useProjection('modelSelection') : null
-        const picked = projection?.next ?? projection?.lastUsed
-        const raw = typeof picked === 'string' ? picked : (picked?.provider ?? picked?.providerId ?? null)
-        if (typeof raw === 'string' && raw !== '') return raw
-      } catch { /* fall through */ }
+    /**
+     * 从投影取「用户当前选中」的 provider。
+     * 宿主 modelSelection 投影对客户端输出的是 { lastUsed, next }，其中 next = pending ?? lastUsed
+     * （pending 是「已切换、尚未发出请求」的最新选择），所以必须读 next。
+     * 必须作为 hook 在组件顶层无条件调用：放进 try/条件会破坏 React hook 顺序，更新会被丢弃。
+     */
+    function useActiveProvider(props) {
+      const projection = typeof props?.useProjection === 'function' ? props.useProjection('modelSelection') : null
+      const picked = projection?.next ?? projection?.lastUsed
+      const raw = typeof picked === 'string' ? picked : (picked?.provider ?? picked?.providerId ?? null)
+      if (typeof raw === 'string' && raw !== '') return raw
+      // 兜底：宿主默认模型（全局配置，非会话选择，仅保证有值可渲染）
       try {
         const service = typeof ctxRef?.get === 'function' ? ctxRef.get('agentDefaultModel') : null
-        const picked = service?.currentSelection?.()
-        const raw = typeof picked === 'string' ? picked : (picked?.provider ?? picked?.providerId ?? null)
-        if (typeof raw === 'string' && raw !== '') return raw
-      } catch { /* fall through */ }
+        const fallback = service?.currentSelection?.()
+        const value = typeof fallback === 'string' ? fallback : (fallback?.provider ?? fallback?.providerId ?? null)
+        if (typeof value === 'string' && value !== '') return value
+      } catch { /* ignore */ }
       return null
     }
 
     function Pill(props) {
       const updateState = useUpdateSnapshot()
       const hasUpdate = updateState.phase === 'available' || updateState.phase === 'confirm'
-      const active = rawActiveProvider(props)
+      const active = useActiveProvider(props)
       const [summary, setSummary] = useState(null)
       const [open, setOpen] = useState(false)
       const [error, setError] = useState(false)
@@ -1600,33 +1605,49 @@ window.__ModuleLoader__.load({
         try { if (window.localStorage.getItem('token-dash-hint-seen') !== '1') setHint(true) } catch { /* ignore */ }
       }, [])
 
+      // active 放进 ref：轮询定时器只建立一次，回调里读 ref 才能始终拿到最新选中项。
+      // 若把 active 放进 load 的依赖，load 会随切换重建、usePolling 却只依赖 refreshMs 不会重排，
+      // 结果是定时器一直跑旧闭包 —— 这正是此前「切换后不发请求」的成因。
+      const activeRef = useRef(active)
+      activeRef.current = active
+      const refreshMsRef = useRef(refreshMs)
+      refreshMsRef.current = refreshMs
+
       const load = useCallback(async () => {
         lastLoadAt.current = Date.now()
         setRefreshing(true)
         try {
-          const data = await getJson(summaryPath(active))
+          const data = await getJson(summaryPath(activeRef.current))
           setSummary(data)
           setError(false)
-          if (Number.isFinite(data?.refreshMs) && data.refreshMs !== refreshMs) setRefreshMs(data.refreshMs)
+          if (Number.isFinite(data?.refreshMs) && data.refreshMs !== refreshMsRef.current) setRefreshMs(data.refreshMs)
         } catch {
           setError(true)
         } finally {
           setRefreshing(false)
         }
-      }, [refreshMs, active])
+      }, [])
 
       useEffect(() => {
         getJson('/prefs').then((prefs) => setRefreshMs(prefs.refreshMs ?? 60000)).catch(() => {})
       }, [])
 
       useEffect(() => { load() }, [load])
-      // 展开即刷新：距上次拉取超过 2s 才发，避免开合抖动与 refreshMs 变化引起的重跑；可见期轮询缩到 10s
+      // active 变化时立刻取数（不依赖轮询或投影推送的时序）。
+      // load 本身不再随 active 重建，这里显式监听 active：切换供应商后立即发一次请求。
+      useEffect(() => {
+        if (active === null || active === undefined) return
+        if (Date.now() - lastLoadAt.current < 1500) return
+        void load()
+      }, [active, load])
+      // 展开即刷新：距上次拉取超过 2s 才发，避免开合抖动与 refreshMs 变化引起的重跑
       useEffect(() => {
         if (!open) return
         if (Date.now() - lastLoadAt.current < 2000) return
         void load()
       }, [open, load])
-      usePolling(load, { refreshMs: open ? Math.min(10_000, refreshMs) : refreshMs })
+      // 定时轮询兜底：不依赖投影变化，只要可见就按周期取数（与 dsh-quota 同构）。
+      usePolling(load, { refreshMs: Math.min(open ? 10_000 : 30_000, refreshMs) })
 
       const refreshSubs = useCallback(async () => {
         try { await fetch(`${API}/providers/refresh`, { method: 'POST', headers: { accept: 'application/json' } }) } catch { /* fall through */ }
@@ -1678,7 +1699,13 @@ window.__ModuleLoader__.load({
       }
 
       const providers = summary?.providers ?? []
-      const current = providers.find((provider) => provider.id === summary?.currentProviderId) ?? providers[0]
+      // 选卡三级：服务端归一化的 activeProviderId → 本地 active 直比 → 记账口径 → 首卡。
+      // 宿主的 active 是路由名（deepseek-account），与 providers[].id（deepseek-official）不同字，
+      // 因此优先用服务端回显的归一化值；本地直比只作兜底，不让 UI 承担别名知识。
+      const current = providers.find((provider) => provider.id === summary?.activeProviderId)
+        ?? providers.find((provider) => provider.id === active)
+        ?? providers.find((provider) => provider.id === summary?.currentProviderId)
+        ?? providers[0]
       let prefix = '[API]'
       let bodyNodes = [h('span', { key: 'unknown' }, '--')]
       let ariaText = tr('API 用量')
@@ -1746,7 +1773,7 @@ window.__ModuleLoader__.load({
           h(IconButton, { label: tr('关闭'), testid: 'token-dash-close', onClick: onClose }, h(Icon, { name: 'close', size: 13 }))))
     }
 
-    function Panel({ summary, error, refreshing, maxHeight, left = 0, panelRef, onRefresh, onClose }) {
+    function Panel({ summary, error, refreshing, maxHeight, left = 0, active, panelRef, onRefresh, onClose }) {
       const [range, setRange] = useState('today')
       const [usage, setUsage] = useState(null)
       const [usageLoading, setUsageLoading] = useState(false)
@@ -1771,6 +1798,8 @@ window.__ModuleLoader__.load({
       }, [range])
 
       useEffect(() => { loadUsage() }, [loadUsage])
+      // P2 展开期 usage 随轮询自动更新（对齐 P3 看板口径），聊天中不再依赖手动点击
+      usePolling(loadUsage, { refreshMs: Math.min(10_000, Number(summary?.refreshMs) || 60_000) })
       useEffect(() => { setPanelError(error === true) }, [error])
 
       useEffect(() => {
@@ -1797,7 +1826,11 @@ window.__ModuleLoader__.load({
       }, [onRefresh, loadUsage])
 
       const providers = summary?.providers ?? []
-      const current = providers.find((provider) => provider.id === summary?.currentProviderId) ?? providers[0]
+      // 与 Pill 同口径：归一化 active 优先，本地直比与记账口径兜底
+      const current = providers.find((provider) => provider.id === summary?.activeProviderId)
+        ?? providers.find((provider) => provider.id === active)
+        ?? providers.find((provider) => provider.id === summary?.currentProviderId)
+        ?? providers[0]
       const models = Array.isArray(usage?.models) ? usage.models : []
       const scoped = models.filter((model) => model.providerId === current?.id)
       const rows = scoped.length > 0 ? scoped : models
@@ -1864,6 +1897,16 @@ window.__ModuleLoader__.load({
       }, suffix === '' ? text : `${text} ${suffix}`)
     }
 
+    /** 降级角标：探测失败但仍有旧快照时提示「数据待更新」。 */
+    function StaleBadge({ provider }) {
+      if (provider?.stale !== true) return null
+      return h('span', {
+        'data-testid': 'token-dash-stale-badge',
+        style: styles.staleBadge,
+        title: tr('探测失败，暂用上次数据'),
+      }, tr('数据待更新'))
+    }
+
     /** P2 API 主区：环+% / 已用·预算 / 真实余额；第四格留空。 */
     function P2Summary({ provider, summary }) {
       const budget = provider.budget
@@ -1873,7 +1916,9 @@ window.__ModuleLoader__.load({
       return h(React.Fragment, null,
         h('div', { style: styles.providerLine },
           h('span', { style: styles.title, title: provider.name }, provider.name),
-          h('span', { style: styles.providerChip }, `[ ${tr('API 用量')} ]`)),
+          h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+            h(StaleBadge, { provider }),
+            h('span', { style: styles.providerChip }, `[ ${tr('API 用量')} ]`))),
         h('div', { 'data-testid': 'token-dash-summary-row', style: styles.summaryRow },
           h('span', { style: styles.summaryCell },
             h(InlineRing, {
@@ -1937,7 +1982,9 @@ window.__ModuleLoader__.load({
       return h(React.Fragment, null,
         h('div', { style: styles.providerLine },
           h('span', { style: styles.title, title: provider.name }, provider.name),
-          h('span', { style: styles.providerChip }, `[ ${tr('订阅')} ]`)),
+          h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+            h(StaleBadge, { provider }),
+            h('span', { style: styles.providerChip }, `[ ${tr('订阅')} ]`))),
         windows.length === 0
           ? h('div', { style: styles.empty }, tr('套餐查询失败'))
           : h('div', {
@@ -2344,7 +2391,7 @@ window.__ModuleLoader__.load({
 
     /** P3 整页：自取数 + 两表 + 两格卡与明细 + 底部设置胶囊。 */
     function BoardPage(props) {
-      const active = rawActiveProvider(props)
+      const active = useActiveProvider(props)
       const [summary, setSummary] = useState(null)
       const [usage, setUsage] = useState(null)
       const [prefs, setPrefs] = useState(null)
