@@ -17,6 +17,7 @@
 
 - 「现状档案」列指向 `docs/reference/` 下的仓库现状描述（只写对方实现，不写我方改造）。
 - 可采纳项拆两份：`docs/checklist/active/ui-reference-checklist.md`（UI 形态与全量状态）、`docs/checklist/active/backend-capability-checklist.md`（宿主输出契约）。
+- 跨仓库专题调研：`docs/reference/multi-account-subscriptions.md`（多账号 / 多订阅展示，结论不采纳）。
 
 ## 截图索引（本地）
 
