@@ -1,0 +1,102 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>SubWindow 边界情况验证</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .page { display: flex; flex-direction: column; gap: 26px; max-width: 1100px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .note { font-size: 11px; color: var(--weak); margin: 4px 0 10px; line-height: 1.7; }
+  .row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .cw { display: flex; flex-direction: column; gap: 8px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; align-self: flex-start; }
+  .tag.old { color: #f0a35e; border: 1px solid color-mix(in srgb,#f0a35e 40%,transparent); }
+  .tag.new { color: #6fbf73; border: 1px solid color-mix(in srgb,#6fbf73 40%,transparent); }
+
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .panel.narrow { width: 300px; }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: 4px; }
+  .ph .acts span { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb,var(--accent) 32%,transparent); background: color-mix(in srgb,var(--accent) 16%,transparent); }
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; } .sub-head .chip { font-size: 11px; color: var(--muted); }
+
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .k { font-size: 11px; color: var(--muted); }
+  .meta { font-size: 11px; color: var(--weak); white-space: nowrap; }
+
+  /* 旧实现：绝对定位时间 */
+  .v-old { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); padding-bottom: 16px; }
+  .v-old .win { display: inline-flex; align-items: flex-start; gap: 4px; white-space: nowrap; min-width: 0; }
+  .v-old .win:nth-child(1) { justify-self: start; }
+  .v-old .win:nth-child(2) { justify-self: center; }
+  .v-old .win:nth-child(3) { justify-self: end; }
+  .v-old .anchor { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+  .v-old .abs-time { position: absolute; top: 100%; left: 10px; transform: translateX(-50%); font-size: 11px; color: var(--weak); white-space: nowrap; }
+
+  /* 新实现：SubWindow 控件 */
+  .wins { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .wins > .cell { display: flex; min-width: 0; }
+  .wins > .cell:nth-child(1) { justify-content: flex-start; }
+  .wins > .cell:nth-child(2) { justify-content: center; }
+  .wins > .cell:nth-child(3) { justify-content: flex-end; }
+  .subwin { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+  .subwin__row { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .subwin__ring { display: inline-flex; align-items: center; gap: 4px; }
+  .subwin__ring b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .subwin__time { font-size: 11px; color: var(--weak); white-space: nowrap; }
+
+  .guide { position: relative; outline: 1px dashed color-mix(in srgb,#f0a35e 35%,transparent); }
+  .bad { outline: 1px solid #e05c5c; }
+  .dbg { font-size: 10px; color: #f0a35e; font-family: monospace; white-space: pre; line-height: 1.55; }
+</style></head><body>
+<div class="page">
+<section>
+  <h2>边界验证：2 窗 / 长标签 / 窄面板</h2>
+  <p class="note">三种现状会错位的场景。橙色虚线 = 内容区边界；红框 = 溢出。</p>
+  <div class="row" id="stage"></div>
+</section>
+<div class="dbg" id="m"></div>
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, criticalSub } = window.__SPEC__.ring
+  const ringOf = (pct) => { const st = ringStateOf(pct, criticalSub); return `${ringSvg(p2.size,p2.stroke,pct,st)}<b class="pct ${st}">${pct.toFixed(1)}%</b>` }
+  const head = `<div class="ph"><span class="t">当前模型</span><span class="acts"><span>↻</span><span>✕</span></span></div><div class="sub-head"><span class="name">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div>`
+
+  const oldWin = (w) => `<span class="win"><span class="k">${w.key}</span><span class="anchor">${ringOf(w.pct)}<span class="abs-time">${w.rel}</span></span></span>`
+  const newWin = (w) => `<span class="subwin"><span class="subwin__row"><span class="k">${w.key}</span><span class="subwin__ring">${ringOf(w.pct)}</span></span><span class="subwin__time">${w.rel}</span></span>`
+
+  const mkOld = (ws, narrow) => `<div class="cw"><span class="tag old">旧实现</span><div class="panel${narrow?' narrow':''}">${head}<div class="v-old guide">${ws.map(oldWin).join('')}</div></div></div>`
+  const mkNew = (ws, narrow) => `<div class="cw"><span class="tag new">SubWindow</span><div class="panel${narrow?' narrow':''}">${head}<div class="wins guide">${ws.map(w=>`<div class="cell">${newWin(w)}</div>`).join('')}</div></div></div>`
+
+  const two = [{key:'5h',pct:42.5,rel:'3 小时后'},{key:'周',pct:18.2,rel:'1 天后'}]
+  const longLabel = [{key:'session',pct:12,rel:'2 小时后'},{key:'周',pct:2,rel:'6 天后'},{key:'月',pct:99,rel:'5 天后'}]
+  const normal = [{key:'5h',pct:5,rel:'1 小时后'},{key:'周',pct:2,rel:'6 天后'},{key:'月',pct:99,rel:'5 天后'}]
+
+  document.getElementById('stage').innerHTML =
+    mkOld(two, false) + mkNew(two, false) +
+    mkOld(longLabel, false) + mkNew(longLabel, false) +
+    mkOld(normal, true) + mkNew(normal, true)
+
+  requestAnimationFrame(() => {
+    const lines = []
+    document.querySelectorAll('.v-old.guide, .wins.guide').forEach((g, i) => {
+      const gr = g.getBoundingClientRect()
+      const isOld = g.classList.contains('v-old')
+      let maxRight = -Infinity, minLeft = Infinity
+      g.querySelectorAll(isOld ? '.anchor' : '.subwin').forEach(el => {
+        const r = el.getBoundingClientRect()
+        maxRight = Math.max(maxRight, r.right)
+        minLeft = Math.min(minLeft, r.left)
+      })
+      const over = maxRight - gr.right
+      const under = gr.left - minLeft
+      lines.push(`${isOld ? '旧' : '新'} [场景${Math.floor(i/2)+1}] 内容 ${gr.left.toFixed(0)}~${gr.right.toFixed(0)} | 最右元素 ${maxRight.toFixed(0)} | 溢出 ${over>0.5?'+'+over.toFixed(1)+'px ⚠️':'无'} | 左溢出 ${under>0.5?'+'+under.toFixed(1)+'px ⚠️':'无'}`)
+    })
+    document.getElementById('m').textContent = lines.join('\n')
+  })
+</script></body></html>

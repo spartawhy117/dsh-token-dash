@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>P2 订阅窗口行 · 对齐方案对比</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: var(--space-6) var(--space-5); }
+  .page { width: 100%; max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .note { font-size: 11px; color: var(--weak); margin: 4px 0 10px; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; align-self: flex-start; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+  .tag.cur { color: #f0a35e; border-color: color-mix(in srgb, #f0a35e 40%, transparent); }
+
+  .panel { width: 380px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: var(--space-1); }
+  .ph .acts span { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; }
+  .sub-head .chip { font-size: 11px; color: var(--muted); }
+  .windows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-bottom: 16px; }
+  .win { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .win .top { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .win .k { font-size: 11px; color: var(--muted); }
+  .win .anchor { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+  .win .meta { position: absolute; top: 100%; left: 10px; transform: translateX(-50%); font-size: 11px; color: var(--weak); white-space: nowrap; line-height: 13px; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* 方案A：三列全部左对齐（环列对齐，数字参差） */
+  .modeA .win { justify-self: start; align-items: flex-start; }
+  /* 方案B：标签独占一格，环+数字左对齐成列 */
+  .modeB .win { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; row-gap: 2px; align-items: center; justify-self: start; }
+  .modeB .win .k { grid-column: 1; grid-row: 1; text-align: right; }
+  .modeB .win .anchor { grid-column: 2; grid-row: 1; justify-self: start; }
+  /* 方案C：标签在上，圆环+数字居中一列（槽位内水平居中） */
+  .modeC .win { align-items: center; text-align: center; }
+  .modeC .win .top { flex-direction: column; gap: 2px; }
+  .modeC .win .anchor { justify-content: center; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<section>
+  <h2>方案对比：P2 订阅窗口行三列对齐</h2>
+  <p class="note">当前问题：第一行是「标签 + 环 + 百分比」整组，三槽位分别左/中/右对齐，导致同一行内三组的起点、环位置、数字位置都不齐。</p>
+  <div class="row" id="stage"></div>
+</section>
+
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, criticalSub } = window.__SPEC__.ring
+  const windows = [
+    { key: '5h', pct: 5, rel: '1 小时后' },
+    { key: '周', pct: 2, rel: '6 天后' },
+    { key: '月', pct: 99, rel: '5 天后' },
+  ]
+  const inline = (pct) => {
+    const st = ringStateOf(pct, criticalSub)
+    return `<span class="inline">${ringSvg(p2.size, p2.stroke, pct, st)}<b class="pct ${st}">${pct.toFixed(1)}%</b></span>`
+  }
+  const winHtml = (w, mode) => {
+    if (mode === 'B') return `<span class="win"><span class="k">${w.key}</span><span class="anchor">${inline(w.pct)}<span class="meta">${w.rel}</span></span></span>`
+    if (mode === 'C') return `<span class="win"><span class="top"><span class="k">${w.key}</span><span class="anchor">${inline(w.pct)}<span class="meta">${w.rel}</span></span></span></span>`
+    return `<span class="win"><span class="top"><span class="k">${w.key}</span><span class="anchor">${inline(w.pct)}<span class="meta">${w.rel}</span></span></span></span>`
+  }
+  const panel = (title, mode, cur) => `<div class="col"><span class="tag ${cur ? 'cur' : ''}">${title}</span><div class="panel"><div class="ph"><span class="t">当前模型</span><span class="acts"><span>↻</span><span>✕</span></span></div><div class="sub-head"><span class="name">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div><div class="windows mode${mode}">${windows.map(w => winHtml(w, mode)).join('')}</div></div></div>`
+  document.getElementById('stage').innerHTML =
+    panel('当前（左/中/右对齐）', 'A', true) + panel('方案A：三列统统左对齐', 'A', false) + panel('方案B：标签右对齐 + 环列左对齐', 'B', false) + panel('方案C：每列纵向居中', 'C', false)
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>环数字垂直对齐 · 方案对比</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .row { display: flex; flex-direction: column; gap: 12px; }
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; }
+  .case { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; outline: 1px dashed #f0a35e; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* A: 现状 line-height 默认 */
+  .a b { }
+  /* B: line-height 1 */
+  .b b { line-height: 1; }
+  /* C: 数字用 flex 居中 + 固定高 */
+  .c b { display: inline-flex; align-items: center; height: 100%; line-height: 1; }
+  /* D: 给数字加 padding-bottom 抵消下沉 */
+  .d b { line-height: 1; padding-bottom: 2px; }
+  /* E: 环用 vertical-align 微调 */
+  .e b { line-height: 1; } .e svg { position: relative; top: -1px; }
+
+  .dbg { font-size: 10px; color: #6fbf73; font-family: monospace; white-space: pre; line-height: 1.5; }
+</style></head><body>
+<div class="row" id="stage"></div>
+<div class="dbg" id="m"></div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, criticalSub } = window.__SPEC__.ring
+  const cases = [
+    ['A 现状（默认 line-height）', 'a'],
+    ['B line-height:1', 'b'],
+    ['C inline-flex 定高居中', 'c'],
+    ['D line-height:1 + padding-bottom', 'd'],
+    ['E 环上移 1px', 'e'],
+  ]
+  const stage = document.getElementById('stage')
+  cases.forEach(([label, cls]) => {
+    const st = ringStateOf(30.6, criticalSub)
+    stage.insertAdjacentHTML('beforeend', `<div class="panel"><div class="case">${label}</div><span class="inline ${cls}">${ringSvg(p2.size,p2.stroke,30.6,st)}<b class="pct ${st}">30.6%</b></span></div>`)
+  })
+  requestAnimationFrame(() => {
+    const out = []
+    document.querySelectorAll('.inline').forEach((el, i) => {
+      const svg = el.querySelector('svg').getBoundingClientRect()
+      const b = el.querySelector('b').getBoundingClientRect()
+      const svgMid = svg.top + svg.height / 2
+      // 用 Range 量字形实际渲染盒
+      const range = document.createRange(); range.selectNodeContents(el.querySelector('b'))
+      const glyph = range.getBoundingClientRect()
+      const glyphMid = glyph.top + glyph.height / 2
+      out.push(`${cases[i][0].padEnd(28)} 环心=${svgMid.toFixed(1)}  字形心=${glyphMid.toFixed(1)}  差=${(glyphMid-svgMid).toFixed(2)}px`)
+    })
+    document.getElementById('m').textContent = out.join('\n')
+  })
+</script></body></html>

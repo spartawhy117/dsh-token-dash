@@ -1,0 +1,50 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>对齐根因测定</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 20px; font-family: system-ui; }
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; }
+  .windows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .col:nth-child(1) { justify-self: start; align-items: flex-start; }
+  .col:nth-child(2) { justify-self: center; align-items: center; }
+  .col:nth-child(3) { justify-self: end; align-items: flex-end; }
+  .top { display: inline-flex; align-items: center; gap: 4px; }
+  .k { font-size: 11px; color: var(--muted); }
+  .meta { font-size: 11px; color: var(--weak); white-space: nowrap; }
+  .dbg { font-size: 11px; color: #f0a35e; font-family: monospace; margin-top: 10px; white-space: pre; line-height: 1.5; }
+  .box { outline: 1px dashed #f0a35e; }
+</style></head><body>
+<div class="panel" id="p"><div class="windows" id="w"></div></div>
+<div class="dbg" id="dbg"></div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, criticalSub } = window.__SPEC__.ring
+  const ws = [{key:'5h',pct:5,rel:'1 小时后'},{key:'周',pct:2,rel:'6 天后'},{key:'月',pct:99,rel:'5 天后'}]
+  const wrap = document.getElementById('w')
+  ws.forEach((w,i) => {
+    const st = ringStateOf(w.pct, criticalSub)
+    const c = document.createElement('div'); c.className = 'col box'
+    c.innerHTML = `<span class="top"><span class="k">${w.key}</span>${ringSvg(p2.size,p2.stroke,w.pct,st)}<b style="font-size:12px;font-weight:600">${w.pct.toFixed(1)}%</b></span><span class="meta">${w.rel}</span>`
+    wrap.appendChild(c)
+  })
+  requestAnimationFrame(() => {
+    const p = document.getElementById('p').getBoundingClientRect()
+    const wr = wrap.getBoundingClientRect()
+    const o = []
+    o.push(`panel: left=${p.left.toFixed(1)} right=${p.right.toFixed(1)} width=${p.width.toFixed(1)}`)
+    o.push(`panel 内容区: ${(p.left+16).toFixed(1)} ~ ${(p.right-16).toFixed(1)}  (宽 ${(p.width-32).toFixed(1)})`)
+    o.push(`.windows: left=${wr.left.toFixed(1)} right=${wr.right.toFixed(1)} width=${wr.width.toFixed(1)}`)
+    o.push('')
+    document.querySelectorAll('.col').forEach((el, i) => {
+      const r = el.getBoundingClientRect()
+      const b = el.querySelector('b').getBoundingClientRect()
+      o.push(`第${i+1}列: left=${r.left.toFixed(1)} right=${r.right.toFixed(1)} | 百分比 right=${b.right.toFixed(1)}`)
+    })
+    o.push('')
+    const c3 = document.querySelectorAll('.col')[2].getBoundingClientRect()
+    o.push(`第3列右缘 ${c3.right.toFixed(1)} vs 内容右缘 ${(p.right-16).toFixed(1)} → 差 ${(c3.right-(p.right-16)).toFixed(1)}px`)
+    document.getElementById('dbg').textContent = o.join('\n')
+  })
+</script></body></html>

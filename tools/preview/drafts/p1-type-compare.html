@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>P1 Pill 字号对齐：现状 vs 改进方案</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px 20px; }
+  .page { max-width: 960px; }
+
+  .group { margin-bottom: 22px; }
+  .grp-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 5px; }
+  .grp-note { font-size: 11px; color: var(--weak); margin: 0 0 12px; line-height: 17px; }
+  .grp-note b { color: var(--muted); font-weight: 600; }
+
+  .pill {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; padding: 0 8px;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--border); color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  }
+  .pill .seg { display: inline-flex; align-items: center; gap: 4px; }
+  .pill .prefix { font-weight: 600; }
+  .pill svg { display: block; flex: none; }
+
+  /* 现状：完全照 client.js —— pill 无 fontSize，继承 16px */
+  .now { height: 26px; font-size: 16px; font-weight: 400; line-height: normal; }
+  .now .label { font-size: 11px; color: var(--muted); }
+  .now .val { font-weight: 600; }
+  .now .sep { color: var(--weak); }
+  /* 订阅态在现状里标签与百分比走 SubWindow / PercentValue */
+  .now .sub-label { font-size: 11px; line-height: 11px; color: var(--muted); }
+  .now .sub-val { font-size: 12px; line-height: 12px; font-weight: 600; }
+
+  /* A：P1 全 12px，单一字号单一行盒 */
+  .planA { height: 24px; font-size: 12px; font-weight: 400; line-height: 16px; }
+  .planA .label { font-size: 12px; color: var(--muted); line-height: 16px; }
+  .planA .val { font-weight: 600; line-height: 16px; }
+  .planA .sep { color: var(--weak); line-height: 16px; }
+
+  /* B：标签 12 / 数值 14，全部共享 20px 行盒 */
+  .planB { height: 26px; font-size: 12px; font-weight: 400; line-height: 20px; }
+  .planB .label { font-size: 12px; color: var(--muted); line-height: 20px; }
+  .planB .val { font-size: 14px; font-weight: 600; line-height: 20px; }
+  .planB .prefix { font-size: 14px; line-height: 20px; }
+  .planB .sep { color: var(--weak); font-size: 12px; line-height: 20px; }
+
+  .rows { display: flex; flex-direction: column; gap: 2px; }
+  .row { display: flex; align-items: center; }
+  .row .k { width: 158px; flex: none; font-size: 11px; color: var(--weak); line-height: 15px; padding-right: 10px; }
+  .row .k b { display: block; color: var(--text); font-weight: 600; font-size: 12px; margin-bottom: 1px; }
+  .row .demo { position: relative; display: flex; align-items: center; padding: 14px 16px; }
+
+  .centerline {
+    position: absolute; left: 0; right: 0; top: 50%; height: 0;
+    border-top: 1px dashed rgba(110,168,255,.5); pointer-events: none; z-index: 0;
+  }
+  /* 基线标记：横贯该文字宽度的短横线 */
+  .baseline {
+    position: absolute; height: 0; border-top: 1px solid rgba(255,209,102,.95);
+    z-index: 4; pointer-events: none;
+  }
+  .delta { font-size: 11px; color: var(--weak); margin-left: 12px; white-space: nowrap; line-height: 15px; }
+  .delta .ok { color: #86c79a; }
+  .delta .bad { color: #e05a5a; }
+  .delta .sub { display: block; color: var(--weak); font-size: 10.5px; }
+
+  .divider { height: 1px; background: var(--border); margin: 18px 0; }
+  .legend { display: flex; gap: 18px; font-size: 11px; color: var(--weak); margin-bottom: 14px; flex-wrap: wrap; line-height: 16px; }
+  .legend span i { display: inline-block; margin-right: 6px; vertical-align: 3px; }
+  table.wt { border-collapse: collapse; font-size: 11px; margin-top: 6px; width: 100%; }
+  table.wt th, table.wt td { text-align: left; padding: 5px 14px 5px 0; border-bottom: 1px solid var(--border); }
+  table.wt th { color: var(--weak); font-weight: 500; }
+  table.wt td { color: var(--text); font-variant-numeric: tabular-nums; }
+  table.wt td.ok { color: #86c79a; }
+  table.wt td.bad { color: #e05a5a; }
+  .verdict { margin-top: 12px; font-size: 11px; line-height: 18px; color: var(--muted); }
+  .verdict b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="legend">
+    <span><i style="width:14px;height:2px;background:rgba(110,168,255,.9);border-radius:2px"></i>虚线 = pill 垂直中线</span>
+    <span><i style="width:14px;height:1px;background:#ffd166"></i>黄线 = 文字基线（Typography 的真实对齐基准）</span>
+    <span>基线能重合 = 文字坐在同一条线上；中线只作参考</span>
+  </div>
+
+  <div class="group">
+    <p class="grp-title">① API 态</p>
+    <p class="grp-note">假数据：预算 91.9%（warn）/ 今日 ¥0.16 / 余额 ¥87.66。<b>看黄线是否重合。</b></p>
+    <div class="rows" id="apiRows"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="group">
+    <p class="grp-title">② 订阅态</p>
+    <p class="grp-note">三窗：5h 12% / 周 34% / 月 58%。</p>
+    <div class="rows" id="subRows"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="group">
+    <p class="grp-title">③ 实测数据</p>
+    <div id="widthTable"></div>
+    <div class="verdict" id="verdict"></div>
+  </div>
+</div>
+
+<script>
+  window.__SPEC__ = /*__SPEC_JSON__*/
+</script>
+<script>
+/*__RING_JS__*/
+</script>
+<script>
+  const SPEC = window.__SPEC__
+  const p1 = SPEC.ring.p1
+  const ring = (pct, crit) => ringSvg(p1.size, p1.stroke, pct, ringStateOf(pct, crit))
+
+  const seg = (label, inner, lcls) =>
+    `<span class="seg"><span class="label ${lcls}">${label}</span>${inner}</span>`
+
+  // 现状 API：数值不设字号 → 继承 16px（与 client.js 一致）
+  const apiNow = `
+    <span class="prefix">[API]</span>
+    ${seg('预算', ring(91.9, SPEC.ring.criticalApi) + '<span class="val" style="color:var(--warn)">91.9%</span>', '')}
+    ${seg('今日', '<span class="val">¥0.16</span>', '')}
+    ${seg('余额', '<span class="val">¥87.66</span>', '')}`
+
+  const apiPlan = (vcls) => `
+    <span class="prefix">[API]</span>
+    ${seg('预算', ring(91.9, SPEC.ring.criticalApi) + '<span class="val ' + vcls + '" style="color:var(--warn)">91.9%</span>', '')}
+    ${seg('今日', '<span class="val ' + vcls + '">¥0.16</span>', '')}
+    ${seg('余额', '<span class="val ' + vcls + '">¥87.66</span>', '')}`
+
+  const win = (label, pct, lcls, vcls) => `
+    <span class="seg">
+      <span class="label ${lcls}">${label}</span>${ring(pct, SPEC.ring.criticalSub)}
+      <span class="val ${vcls}" style="color:var(--ok)">${pct}%</span>
+    </span>`
+
+  const subNow = `
+    <span class="prefix">[订阅]</span>${win('5h', 12, 'sub-label', 'sub-val')}<span class="sep">・</span>${win('周', 34, 'sub-label', 'sub-val')}<span class="sep">・</span>${win('月', 58, 'sub-label', 'sub-val')}`
+
+  const subPlan = (lcls, vcls) => `
+    <span class="prefix">[订阅]</span>${win('5h', 12, lcls, vcls)}<span class="sep">・</span>${win('周', 34, lcls, vcls)}<span class="sep">・</span>${win('月', 58, lcls, vcls)}`
+
+  const rowsDef = [
+    { key: 'now', name: '现状',   spec: '16 / 11 / 12px 混排 · 高 26', cls: 'now' },
+    { key: 'A',   name: '方案 A', spec: '全 12px 单一字号 · 高 24',    cls: 'planA' },
+    { key: 'B',   name: '方案 B', spec: '标签 12 · 数值 14 · 高 26',   cls: 'planB' },
+  ]
+
+  const rowHtml = (v, inner) => `
+    <div class="row">
+      <div class="k"><b>${v.name}</b>${v.spec}</div>
+      <div class="demo" data-demo>
+        <div class="centerline"></div>
+        <span class="pill ${v.cls}" data-pill data-variant="${v.key}">${inner}</span>
+      </div>
+      <div class="delta" data-delta></div>
+    </div>`
+
+  document.getElementById('apiRows').innerHTML =
+    rowHtml(rowsDef[0], apiNow) +
+    rowHtml(rowsDef[1], apiPlan('')) +
+    rowHtml(rowsDef[2], apiPlan(''))
+
+  document.getElementById('subRows').innerHTML =
+    rowHtml(rowsDef[0], subNow) +
+    rowHtml(rowsDef[1], subPlan('', '')) +
+    rowHtml(rowsDef[2], subPlan('', ''))
+
+  // —— 基线探针：0 高 inline-block 的底边就是该文字的基线 ——
+  function baselineOf(el) {
+    const probe = document.createElement('span')
+    probe.style.cssText = 'display:inline-block;width:0;height:0;overflow:hidden;vertical-align:baseline'
+    el.appendChild(probe)
+    const b = probe.getBoundingClientRect().bottom
+    probe.remove()
+    return b
+  }
+
+  const results = {}
+
+  function measureRow(rowEl, vkey, section) {
+    const demo = rowEl.querySelector('[data-demo]')
+    const pill = demo.querySelector('[data-pill]')
+    const pr = pill.getBoundingClientRect()
+    const dr = demo.getBoundingClientRect()
+    const items = []
+    for (const el of pill.querySelectorAll('.label, .val, .prefix, .sep')) {
+      const b = baselineOf(el) - pr.top
+      const er = el.getBoundingClientRect()
+      items.push({ text: el.textContent.trim(), baseline: b, fs: getComputedStyle(el).fontSize,
+        x0: er.left - dr.left, x1: er.right - dr.left })
+      const line = document.createElement('div')
+      line.className = 'baseline'
+      line.style.left = (er.left - dr.left) + 'px'
+      line.style.width = er.width + 'px'
+      line.style.top = (pr.top - dr.top + b) + 'px'
+      demo.appendChild(line)
+    }
+    const bs = items.map((i) => i.baseline)
+    const spread = Math.max(...bs) - Math.min(...bs)
+    const uniq = [...new Set(bs.map((b) => b.toFixed(1)))]
+    rowEl.querySelector('[data-delta]').innerHTML =
+      `基线离散 <span class="${spread <= 0.5 ? 'ok' : 'bad'}">${spread.toFixed(1)}px</span>` +
+      `<span class="sub">${uniq.length} 条不同基线 · 高 ${pr.height.toFixed(0)}px</span>`
+    return { spread, uniq, height: pr.height, width: pr.width, items }
+  }
+
+  requestAnimationFrame(() => {
+    const apiRows = [...document.querySelectorAll('#apiRows .row')]
+    const subRows = [...document.querySelectorAll('#subRows .row')]
+    apiRows.forEach((r, i) => { results['api-' + rowsDef[i].key] = measureRow(r, rowsDef[i].key, 'api') })
+    subRows.forEach((r, i) => { results['sub-' + rowsDef[i].key] = measureRow(r, rowsDef[i].key, 'sub') })
+
+    const label = { now: '现状', A: '方案 A', B: '方案 B' }
+    const tr = (k) => `<tr>
+      <td>${label[k]}</td>
+      <td>${results['api-' + k].width.toFixed(1)}px</td>
+      <td>${results['sub-' + k].width.toFixed(1)}px</td>
+      <td>${results['api-' + k].height.toFixed(0)}px</td>
+      <td class="${results['api-' + k].spread <= 0.5 ? 'ok' : 'bad'}">${results['api-' + k].spread.toFixed(1)}px / ${results['api-' + k].uniq.length} 条</td>
+      <td class="${results['sub-' + k].spread <= 0.5 ? 'ok' : 'bad'}">${results['sub-' + k].spread.toFixed(1)}px / ${results['sub-' + k].uniq.length} 条</td></tr>`
+
+    document.getElementById('widthTable').innerHTML = `
+      <table class="wt">
+        <tr><th>版本</th><th>API 态宽</th><th>订阅 3 窗宽</th><th>pill 高</th><th>API 基线离散</th><th>订阅基线离散</th></tr>
+        ${tr('now')}${tr('A')}${tr('B')}
+      </table>`
+
+    const n = results['api-now'], a = results['api-A'], b = results['api-B']
+    const ns = results['sub-now'], asub = results['sub-A'], bsub = results['sub-B']
+    document.getElementById('verdict').innerHTML = `
+      <b>基线：</b>现状 API 有 ${n.uniq.length} 条不同基线（离散 ${n.spread.toFixed(1)}px）、订阅 ${ns.uniq.length} 条（${ns.spread.toFixed(1)}px）——文字没有坐在同一条线上，这就是"看着不齐"的根因。
+      方案 A 与 B 均收敛为 <b>1 条基线</b>（离散 0.0px）。<br>
+      <b>宽度：</b>订阅 3 窗 现状 ${ns.width.toFixed(1)}px → 方案 A ${asub.width.toFixed(1)}px（省 ${(ns.width - asub.width).toFixed(1)}px）→ 方案 B ${bsub.width.toFixed(1)}px（比 A 多 ${(bsub.width - asub.width).toFixed(1)}px）。`
+  })
+</script>
+</body>
+</html>

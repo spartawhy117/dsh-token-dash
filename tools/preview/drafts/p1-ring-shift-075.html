@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{/*__SPEC_CSS__*/}
+/*__BASE_CSS__*/
+body{padding:24px;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;font-size:16px;max-width:900px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:0 8px;border-radius:999px;
+  border:1px solid var(--border);color:var(--text);font-variant-numeric:tabular-nums;
+  height:24px;font-size:12px;line-height:16px;box-sizing:border-box;margin:6px 0}
+.seg{display:inline-flex;align-items:center;gap:4px}
+.num{font-weight:600}
+.lab{color:var(--muted)}
+.ir{display:inline-flex;align-items:center;gap:4px}
+.ir svg{display:block;flex:none}
+/* 方案：环下移 0.75px，仅 P1 */
+.shift .ir svg{position:relative;top:0.75px}
+.cap{font-size:11px;color:var(--weak);margin:14px 0 0;line-height:17px}
+.big{transform:scale(4);transform-origin:left top;margin:6px 0 0}
+.zoom{height:110px;overflow:hidden;margin-bottom:10px}
+</style></head><body>
+<p class="cap">① 现状：环墨迹中心 11.84 / 文字墨迹中心 12.58（差 0.74px，环偏高）</p>
+<div class="zoom"><div class="big" id="z1"></div></div>
+<p class="cap">② 方案：环下移 0.75px → 环心 12.59 ≈ 文字中心 12.58</p>
+<div class="zoom"><div class="big" id="z2"></div></div>
+<p class="cap">③ 正常尺寸对照（上：现状　下：方案）</p>
+<div id="n1"></div><div id="n2"></div>
+<script>window.__SPEC__=/*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+var SPEC=window.__SPEC__,p1=SPEC.ring.p1
+function ring(p,c){return ringSvg(p1.size,p1.stroke,p,ringStateOf(p,c))}
+function api(cls){
+  return '<span class="pill '+cls+'" data-pill><span class="num">[API]</span>'+
+   '<span class="seg"><span class="lab">\u9884\u7b97</span><span class="ir">'+ring(32.5,100)+'<b class="num" style="color:var(--ok)">32.5%</b></span></span>'+
+   '<span class="seg"><span class="lab">\u4eca\u65e5</span><b class="num">\u00a512.54</b></span></span>'
+}
+document.getElementById('z1').innerHTML=api('')
+document.getElementById('z2').innerHTML=api('shift')
+document.getElementById('n1').innerHTML=api('')
+document.getElementById('n2').innerHTML=api('shift')
+</script></body></html>

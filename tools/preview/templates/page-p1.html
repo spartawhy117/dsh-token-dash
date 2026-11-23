@@ -17,13 +17,19 @@
   .pill {
     display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
     border-radius: 999px; border: 1px solid var(--border); font-size: 12px;
+    line-height: 16px; box-sizing: border-box;
     font-variant-numeric: tabular-nums; color: var(--text); background: rgba(255, 255, 255, .04);
   }
   .pill .tag { font-weight: 600; }
   .pill .label { color: var(--muted); }
   .pill .seg { display: inline-flex; align-items: center; gap: 4px; }
   .pill .caret { color: var(--muted); font-size: 10px; }
+  /* 订阅段：窗口组之间由本容器的 gap 决定，pill 的 gap 只发生一次（单侧留白 7px） */
+  .subgroup { display: inline-flex; align-items: center; gap: 4px; }
+  .subgroup .sep { color: var(--weak); }
   .inline { display: inline-flex; align-items: center; gap: 4px; }
+  /* 环下移 0.75px：让环墨迹中心 12.75 对齐文字墨迹中心 12.58（Issue #1） */
+  .inline svg { position: relative; top: 0.75px; }
   .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .inline b.normal { color: var(--ok); }
   .inline b.warn { color: var(--warn); }
@@ -37,6 +43,7 @@
 <div class="page">
   <div class="rows" id="rows"></div>
   <p class="legend">环与数字同色：normal 低饱和绿 / warn 黄 / critical 红；empty 只留轨道 + 弱灰 —。订阅窗口 ≥90 转红，API 预算 ≥100 转红。</p>
+  <p class="legend">排版（v3.20 冻结）：pill 全部文字 12px / 16px 行高、高 24；API 段 gap 6；订阅段由 <code>.subgroup</code> 的 gap 4 + 无空格分隔符「・」构成，单侧视觉留白 7px；环整体下移 0.75px 使环心对齐文字墨迹中心。</p>
 </div>
 
 <script>
@@ -63,12 +70,15 @@
       <span class="caret">⌄</span>
     </span>`
 
+  // 分隔符用 U+30FB 且不带两侧空格：空格会把盒子撑宽，使单侧视觉留白从 7px 涨到 12px（Issue #1）
   const subPill = (windows) => `
     <span class="pill">
       <span class="tag">[订阅]</span>
-      <span class="seg"><span class="label">GLM 5h</span>${inline(windows[0], criticalSub)}</span>
-      ${windows[1] === undefined ? '' : `<span class="label">·</span><span class="seg"><span class="label">周</span>${inline(windows[1], criticalSub)}</span>`}
-      ${windows[2] === undefined ? '' : `<span class="label">·</span><span class="seg"><span class="label">月</span>${inline(windows[2], criticalSub)}</span>`}
+      <span class="subgroup">
+        <span class="seg"><span class="label">5h</span>${inline(windows[0], criticalSub)}</span>
+        ${windows[1] === undefined ? '' : `<span class="sep">・</span><span class="seg"><span class="label">周</span>${inline(windows[1], criticalSub)}</span>`}
+        ${windows[2] === undefined ? '' : `<span class="sep">・</span><span class="seg"><span class="label">月</span>${inline(windows[2], criticalSub)}</span>`}
+      </span>
       <span class="caret">⌄</span>
     </span>`
 

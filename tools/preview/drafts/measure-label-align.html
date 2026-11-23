@@ -1,0 +1,56 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>P1 点分隔 与 标签垂直对齐 测量</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; }
+  .pillrow { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; padding-bottom: 2px; }
+  .k { font-size: 11px; color: var(--muted); }
+  .sep { color: var(--weak); }
+  .subwin { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; white-space: nowrap; }
+  .row { display: inline-flex; align-items: center; gap: 4px; }
+  .dbg { font-size: 10px; color: #6fbf73; font-family: monospace; white-space: pre; line-height: 1.6; }
+  .mark { outline: 1px dashed #f0a35e; }
+</style></head><body>
+<div class="panel"><div class="pillrow" id="pill"></div></div>
+<div class="panel" style="margin-top:12px"><div id="p2"></div></div>
+<div class="dbg" id="m"></div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p1, p2, criticalSub } = window.__SPEC__.ring
+  const seg = (key, pct, size, stroke) => {
+    const st = ringStateOf(pct, criticalSub)
+    return `<span class="inline mark"><span class="k">${key}</span>${ringSvg(size, stroke, pct, st)}<b class="pct ${st}">${pct}%</b></span>`
+  }
+  document.getElementById('pill').innerHTML = seg('5h', 5, p1.size, p1.stroke) + '<span class="sep">·</span>' + seg('周', 2, p1.size, p1.stroke)
+
+  const st = ringStateOf(5, criticalSub)
+  document.getElementById('p2').innerHTML = `<span class="subwin"><span class="row mark"><span class="k">5h</span>${ringSvg(p2.size,p2.stroke,5,st)}<b class="pct ${st}">5%</b></span><span style="font-size:11px;color:var(--muted)">24 分钟后</span></span>`
+
+  requestAnimationFrame(() => {
+    const out = []
+    const sep = document.querySelector('.pillrow .sep').getBoundingClientRect()
+    const firstSeg = document.querySelector('.pillrow .inline').getBoundingClientRect()
+    out.push('【P1 点分隔】')
+    out.push(`  分隔符 top=${sep.top.toFixed(1)} h=${sep.height.toFixed(1)} 中心=${(sep.top+sep.height/2).toFixed(1)}`)
+    out.push(`  整组   top=${firstSeg.top.toFixed(1)} h=${firstSeg.height.toFixed(1)} 中心=${(firstSeg.top+firstSeg.height/2).toFixed(1)}`)
+    out.push(`  中心差 = ${((sep.top+sep.height/2)-(firstSeg.top+firstSeg.height/2)).toFixed(2)}px`)
+    out.push('')
+    out.push('【P2 标签 vs 环】')
+    const k = document.querySelector('#p2 .k').getBoundingClientRect()
+    const svg = document.querySelector('#p2 svg').getBoundingClientRect()
+    out.push(`  标签 top=${k.top.toFixed(1)} h=${k.height.toFixed(1)} 中心=${(k.top+k.height/2).toFixed(1)}`)
+    out.push(`  环   top=${svg.top.toFixed(1)} h=${svg.height.toFixed(1)} 中心=${(svg.top+svg.height/2).toFixed(1)}`)
+    out.push(`  中心差 = ${((k.top+k.height/2)-(svg.top+svg.height/2)).toFixed(2)}px`)
+    out.push('')
+    out.push('【P2 时间行 vs 第一行】')
+    const rowR = document.querySelector('#p2 .row').getBoundingClientRect()
+    const timeR = document.querySelectorAll('#p2 .subwin > span')[1].getBoundingClientRect()
+    out.push(`  第一行 中心=${(rowR.top+rowR.height/2).toFixed(1)}  时间行 中心=${(timeR.top+timeR.height/2).toFixed(1)}  行距=${(timeR.top-rowR.bottom).toFixed(1)}px`)
+    document.getElementById('m').textContent = out.join('\n')
+  })
+</script></body></html>

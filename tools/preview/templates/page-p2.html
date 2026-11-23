@@ -20,6 +20,13 @@
   .ph { display: flex; align-items: center; justify-content: space-between; }
   .ph .t { font-size: 13px; font-weight: 600; }
   .ph .acts { display: flex; gap: var(--space-1); }
+  /* 失败态：刷新位替换为带文字的「重试」——实红描边 + 浅红底，与普通图标的蓝框明确区分 */
+  .ph .acts .retry {
+    width: auto; padding: 0 7px; gap: 4px; font-size: 11px; font-weight: 600;
+    color: var(--error);
+    border: 1px solid var(--error);
+    background: color-mix(in srgb, var(--error) 14%, transparent);
+  }
   .ph .acts span {
     width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px;
     display: inline-flex; align-items: center; justify-content: center;
@@ -37,23 +44,30 @@
   .win:nth-child(1) { justify-self: start; align-items: flex-start; text-align: left; }
   .win:nth-child(2) { justify-self: center; align-items: center; text-align: center; }
   .win:nth-child(3) { justify-self: end; align-items: flex-end; text-align: right; }
+  /* 订阅窗口（v3.22，Issue #6）：标签与百分比统一 12px / 16px 行盒，
+     去掉 height:环径 + top:-0.5 的老补偿；环下移 0.75px 贴合文字墨迹中心。
+     与 P1 同款做法，单字号天然共基线。 */
   .win .top { display: inline-flex; align-items: center; gap: 4px; }
-  .win .k { font-size: 11px; color: var(--muted); }
+  .win .k { font-size: 12px; color: var(--muted); line-height: 16px; }
+  .win .top svg { position: relative; top: 0.75px; }
   .win .meta { font-size: 11px; color: var(--weak); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  /* 摘要一行三组，第四格留空，避免余额被推到最右 */
+  /* 摘要三栏：左（环）贴左 / 中（已用·预算）居中 / 右（真实余额）贴右 */
   .summary {
-    display: grid; grid-template-columns: auto minmax(120px, 1.2fr) minmax(80px, 1fr) minmax(0, 1fr);
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
     align-items: center; column-gap: var(--space-3);
   }
-  .summary .ring-cell { justify-self: start; }
+  .summary .ring-cell { justify-self: start; display: inline-flex; }
   .summary .cell { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-  .summary .balance { grid-column: 3 / 5; justify-self: end; align-items: flex-end; text-align: right; }
+  .summary .cell.center { align-items: center; text-align: center; }
+  .summary .balance { align-items: flex-end; text-align: right; }
   .summary .k { font-size: 11px; color: var(--muted); }
   .summary .v { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   .inline { display: inline-flex; align-items: center; gap: 4px; }
-  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* 百分比：P2 订阅窗口走 12px / 16px 行盒（与标签共基线，Issue #6）；
+     API 主区仍是 PercentValue 的 lh:1 + pb:2 —— 那里实测已对齐，不动。 */
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 16px; }
 
   .range { display: flex; gap: 2px; border: 1px solid var(--border); border-radius: 999px; padding: var(--space-1); width: 100%; box-sizing: border-box; }
   .range span { flex: 1; text-align: center; font-size: 12px; padding: var(--space-1) 0; border-radius: 999px; color: var(--muted); }
@@ -61,12 +75,17 @@
 
   .table { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 0 var(--space-2); font-size: 12px; width: 100%; }
   .table .c:first-of-type { max-width: 150px; }
-  .table .h { font-size: 11px; color: var(--muted); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+  /* 表头线画在整行上（跨满 4 列）：逐 cell 画会被 column-gap 切成 4 段，与数据行线不等长 */
+  .table .h { font-size: 11px; color: var(--muted); padding-bottom: var(--space-2); }
+  .table .rule { grid-column: 1 / -1; height: 1px; background: var(--border); margin-bottom: var(--space-2); }
   .table .c { padding: 4px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .table .c.num, .table .h.num { text-align: right; }
   .tokens { display: inline-flex; gap: 4px; justify-content: flex-end; white-space: nowrap; }
   .tokens .sub { color: var(--muted); font-size: 11px; }
+
+  /* 范围取数失败：表体降级为空态文案，不再展示上一次的表格 */
+  .empty { font-size: 11px; color: var(--muted); padding: 10px 0; }
 
   .foot { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); }
   .foot .btn {
@@ -89,7 +108,7 @@
 
       <div class="summary">
         <span id="used-inline" class="ring-cell"></span>
-        <span class="cell"><span class="k">已用 / 预算</span><span class="v">¥91.90 / ¥100.00</span></span>
+        <span class="cell center"><span class="k">已用 / 预算</span><span class="v">¥91.90 / ¥100.00</span></span>
         <span class="cell balance"><span class="k">真实余额</span><span class="v">¥87.66</span></span>
       </div>
 
@@ -97,6 +116,7 @@
 
       <div class="table">
         <div class="h">模型</div><div class="h num">Tokens</div><div class="h num">请求</div><div class="h num">命中</div>
+        <div class="rule"></div>
         <div class="c" title="DeepSeek-V4.1-Flash-Exp-20251101">DeepSeek-V4.1-Flash-Exp-20251101</div>
         <div class="c num"><span class="tokens"><b>128.4k</b><span class="sub">[8.0k/12.0k/1.2k]</span></span></div>
         <div class="c num">4</div><div class="c num">100%</div>
@@ -107,6 +127,43 @@
         <div class="c num"><span class="tokens"><b>52.0k</b><span class="sub">[20.0k/30.0k/2.0k]</span></span></div>
         <div class="c num">6</div><div class="c num">66.7%</div>
       </div>
+
+      <div class="foot"><span>更新于 12:30</span><button class="btn" type="button">全量看板</button></div>
+    </div>
+
+    <p class="stage-note">P2 · 范围数据加载失败 · API 模式（仅 /usage 失败：顶部状态正常，表格清空不显示旧数据，标题栏刷新位变为红框「重试」）</p>
+    <div class="panel">
+      <div class="ph">
+        <span class="t">当前模型</span>
+        <span class="acts"><span class="retry">⟳ 重试</span><span>×</span></span>
+      </div>
+
+      <div class="summary">
+        <span id="used-inline-2" class="ring-cell"></span>
+        <span class="cell center"><span class="k">已用 / 预算</span><span class="v">¥91.90 / ¥100.00</span></span>
+        <span class="cell balance"><span class="k">真实余额</span><span class="v">¥87.66</span></span>
+      </div>
+
+      <div class="range"><span>当天</span><span>近7天</span><span>近30天</span><span class="on">全部</span></div>
+
+      <div class="empty">范围内暂无消耗</div>
+
+      <div class="foot"><span>更新于 12:30</span><button class="btn" type="button">全量看板</button></div>
+    </div>
+
+    <p class="stage-note">P2 · 范围数据加载失败 · 订阅模式（订阅窗口来自 /summary 不受影响，表格清空）</p>
+    <div class="panel">
+      <div class="ph">
+        <span class="t">当前模型</span>
+        <span class="acts"><span class="retry">⟳ 重试</span><span>×</span></span>
+      </div>
+
+      <div class="sub-head"><span class="name">GLM Coding</span><span class="chip">[ 订阅 ]</span></div>
+      <div class="windows" id="sub-windows-failed"></div>
+
+      <div class="range"><span>当天</span><span>近7天</span><span>近30天</span><span class="on">全部</span></div>
+
+      <div class="empty">范围内暂无消耗</div>
 
       <div class="foot"><span>更新于 12:30</span><button class="btn" type="button">全量看板</button></div>
     </div>
@@ -125,6 +182,7 @@
 
       <div class="table">
         <div class="h">模型</div><div class="h num">Tokens</div><div class="h num">请求</div><div class="h num">命中</div>
+        <div class="rule"></div>
         <div class="c">GLM-5.3</div>
         <div class="c num"><span class="tokens"><b>52.0k</b><span class="sub">[20.0k/30.0k/2.0k]</span></span></div>
         <div class="c num">6</div><div class="c num">—</div>
@@ -147,6 +205,7 @@
 
       <div class="table">
         <div class="h">模型</div><div class="h num">Tokens</div><div class="h num">请求</div><div class="h num">命中</div>
+        <div class="rule"></div>
         <div class="c">Kimi-K2.6</div>
         <div class="c num"><span class="tokens"><b>36.0k</b><span class="sub">[12.0k/20.0k/4.0k]</span></span></div>
         <div class="c num">3</div><div class="c num">—</div>
@@ -172,19 +231,23 @@
   }
 
   document.getElementById('used-inline').innerHTML = inline(p2.size, p2.stroke, 91.9, 100)
+  document.getElementById('used-inline-2').innerHTML = inline(p2.size, p2.stroke, 91.9, 100)
 
   const windows = [
-    { key: '5h', pct: 42.5, left: '剩余 58%', rel: '3 小时后' },
-    { key: '周', pct: 18.2, left: '剩余 82%', rel: '1 天后' },
-    { key: '月', pct: 3, left: '剩余 97%', rel: '18 天后' },
+    { key: '5h', pct: 42.5, rel: '3 小时后' },
+    { key: '周', pct: 18.2, rel: '1 天后' },
+    { key: '月', pct: 3, rel: '18 天后' },
   ]
+  // 第二行只有倒计时：'剩余 x%' 与环上已用百分比互为补数，代码里已不再渲染（client.js QuotaCell 同口径）
   const windowHtml = (win) => `<span class="win">
       <span class="top"><span class="k">${win.key}</span>${inline(p2.size, p2.stroke, win.pct, criticalSub)}</span>
-      <span class="meta">${win.left} · ${win.rel}</span>
+      <span class="meta">${win.rel}</span>
     </span>`
 
   document.getElementById('sub-windows').innerHTML = windows.map(windowHtml).join('')
   document.getElementById('sub-windows-2').innerHTML = windows.slice(0, 2).map(windowHtml).join('')
+  // 失败态复用同一组订阅窗口：窗口数据来自 /summary，不受 /usage 失败影响
+  document.getElementById('sub-windows-failed').innerHTML = windows.map(windowHtml).join('')
 </script>
 </body>
 </html>

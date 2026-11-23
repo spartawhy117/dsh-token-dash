@@ -1,0 +1,102 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>Issue #7 分隔符 · Issue #8 标签对齐 四方案</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .wrap { display: flex; flex-direction: column; gap: 26px; max-width: 1180px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .note { font-size: 11px; color: var(--weak); margin: 4px 0 10px; line-height: 1.7; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+  .card { border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); padding: 14px; }
+  .card h3 { font-size: 12px; font-weight: 600; margin: 0 0 4px; color: var(--text); }
+  .card .sub { font-size: 10px; color: var(--weak); margin: 0 0 10px; line-height: 1.6; }
+  .card .body { display: flex; align-items: center; min-height: 44px; }
+  .dbg { font-size: 10px; color: #6fbf73; font-family: monospace; margin-top: 8px; white-space: pre; }
+
+  .pillrow { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; padding-bottom: 2px; }
+  .k { font-size: 11px; color: var(--muted); }
+  .sep { color: var(--weak); }
+
+  /* #8 方案容器 */
+  .row8 { display: inline-flex; align-items: center; gap: 4px; }
+  .row8 .lbl { font-size: 11px; color: var(--muted); }
+  /* B: 标签用 flex 定高（= 环径）居中 */
+  .b .lbl { display: inline-flex; align-items: center; height: 20px; line-height: 1; }
+  /* C: 汉字略放大 */
+  .c .lbl { font-size: 12px; }
+  /* D: 标签基线微调 */
+  .d .lbl { position: relative; top: -0.5px; }
+</style></head><body>
+<div class="wrap">
+
+<section>
+  <h2>Issue #7 · P1 点分隔符方案</h2>
+  <p class="note">当前用 U+00B7 中点，字体把它放在数学中线，中文体系视觉重心偏高而显得下垂。三个候选符号对比。</p>
+  <div class="grid" id="s7"></div>
+</div>
+
+<section>
+  <h2>Issue #8 · 周期标签垂直对齐四方案</h2>
+  <p class="note">几何中心已对齐（差 0.00px）。差异来自 5h（拉丁）与 周/月（汉字）的字形重心。下面四个方案配 P1 与 P2 两处实际场景。</p>
+  <div class="grid" id="s8"></div>
+</section>
+
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p1, p2, criticalSub } = window.__SPEC__.ring
+  const st = (p) => ringStateOf(p, criticalSub)
+  const seg = (label, pct, size, stroke) => `<span class="inline"><span class="k">${label}</span>${ringSvg(size, stroke, pct, st(pct))}<b class="pct ${st(pct)}">${pct}%</b></span>`
+
+  // ── #7 三种分隔符 ──
+  const seps = [
+    ['A · U+00B7 中点（当前）', '·'],
+    ['B • U+2022 圆点', '•'],
+    ['C ・ U+30FB 片假名中点', '・'],
+  ]
+  document.getElementById('s7').innerHTML = seps.map(([name, ch]) => `
+    <div class="card">
+      <h3>${name}</h3>
+      <p class="sub">P1 收起态实际渲染</p>
+      <div class="body"><div class="pillrow">${seg('5h', 5, p1.size, p1.stroke)}<span class="sep">${ch}</span>${seg('周', 2, p1.size, p1.stroke)}<span class="sep">${ch}</span>${seg('月', 99, p1.size, p1.stroke)}</div></div>
+      <div class="dbg" data-m="${name}"></div>
+    </div>`).join('')
+
+  // ── #8 四方案 × P1/P2 ──
+  const plans8 = [
+    ['A 不处理（现状）', ''],
+    ['B 标签定高 20px 居中', 'b'],
+    ['C 汉字标签放大到 12px', 'c'],
+    ['D 标签上移 0.5px', 'd'],
+  ]
+  document.getElementById('s8').innerHTML = plans8.map(([name, cls]) => `
+    <div class="card">
+      <h3>${name}</h3>
+      <p class="sub">上：P2 三窗（含时间）　下：P1 收起态</p>
+      <div class="body" style="flex-direction:column;align-items:flex-start;gap:10px">
+        <div style="display:flex;gap:18px">
+          <span class="row8 ${cls}"><span class="lbl">5h</span>${ringSvg(p2.size,p2.stroke,5,st(5))}<b class="pct ${st(5)}" style="font-size:12px;font-weight:600;line-height:1;padding-bottom:2px">5%</b></span>
+          <span class="row8 ${cls}"><span class="lbl">周</span>${ringSvg(p2.size,p2.stroke,2,st(2))}<b class="pct ${st(2)}" style="font-size:12px;font-weight:600;line-height:1;padding-bottom:2px">2%</b></span>
+          <span class="row8 ${cls}"><span class="lbl">月</span>${ringSvg(p2.size,p2.stroke,99,st(99))}<b class="pct ${st(99)}" style="font-size:12px;font-weight:600;line-height:1;padding-bottom:2px">99%</b></span>
+        </div>
+        <div class="pillrow ${cls}">${seg('5h', 5, p1.size, p1.stroke)}<span class="sep">·</span>${seg('周', 2, p1.size, p1.stroke)}<span class="sep">·</span>${seg('月', 99, p1.size, p1.stroke)}</div>
+      </div>
+    </div>`).join('')
+
+  requestAnimationFrame(() => {
+    // 量 #7 分隔符与两侧环心的垂直差
+    document.querySelectorAll('.pillrow').forEach((row, i) => {
+      if (i > 2) return
+      const sep = row.querySelector('.sep').getBoundingClientRect()
+      const svg = row.querySelector('svg').getBoundingClientRect()
+      const sepMid = sep.top + sep.height / 2
+      const ringMid = svg.top + svg.height / 2
+      const node = document.querySelectorAll('#s7 .dbg')[i]
+      if (node) node.textContent = `分隔符中心 ${sepMid.toFixed(1)} | 环心 ${ringMid.toFixed(1)} | 差 ${(sepMid - ringMid).toFixed(2)}px`
+    })
+  })
+</script></body></html>

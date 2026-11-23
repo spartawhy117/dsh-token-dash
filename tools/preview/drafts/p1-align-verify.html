@@ -1,0 +1,85 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{/*__SPEC_CSS__*/}
+/*__BASE_CSS__*/
+body{padding:22px;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;font-size:16px;max-width:980px}
+h2{font-size:13px}
+.grp{margin-bottom:22px}
+.t{font-size:12px;font-weight:600;margin:0 0 4px}
+.n{font-size:11px;color:var(--weak);margin:0 0 10px;line-height:17px}
+.pill{position:relative;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border-radius:999px;
+  border:1px solid var(--border);color:var(--text);font-variant-numeric:tabular-nums;margin:6px 0}
+.pill.now{height:26px;font-size:16px;line-height:normal}
+.pill.after{height:24px;font-size:12px;line-height:16px}
+.seg{display:inline-flex;align-items:center;gap:4px}
+.num{font-weight:600}
+.summaryLabel{color:var(--muted);font-size:11px}
+.pillLabel{color:var(--muted);font-size:12px;line-height:16px}
+.ir{display:inline-flex;align-items:center;gap:4px}
+.ir svg{display:block;flex:none}
+.irtext-old{font-weight:600;line-height:1;padding-bottom:2px}
+.irtext-new{font-weight:600;line-height:1;font-size:12px}
+.pctold{font-size:12px;font-weight:600;line-height:1;padding-bottom:2px}
+.pctnew{font-size:12px;font-weight:600;line-height:16px}
+.subwin{display:inline-flex;flex-direction:column;align-items:center;gap:3px}
+.subrow{display:inline-flex;align-items:center;gap:4px}
+.swlabel-old{color:var(--muted);font-size:11px;display:inline-flex;align-items:center;line-height:1;height:14px;position:relative;top:-.5px}
+.swlabel-new{color:var(--muted);font-size:12px;line-height:16px}
+.mark{position:absolute;width:7px;height:7px;border-radius:50%;margin-left:-3.5px;margin-top:-3.5px;z-index:5}
+.mark.ok{background:#86c79a}.mark.bad{background:#e05a5a}
+.cross{position:absolute;left:0;right:0;border-top:1px dashed rgba(110,168,255,.5);z-index:0}
+.wrap{position:relative;display:inline-block;padding:6px 10px}
+</style></head><body>
+<p class="t" style="font-size:13px">方案 A 对目标的实测验证</p>
+<p class="n">绿点=墨迹中心与环心差 ≤0.75px；红点=偏离。虚线=环心水平线。</p>
+<div class="grp"><p class="t">① API 态：现状 → 方案 A</p><div id="api"></div></div>
+<div class="grp"><p class="t">② 订阅态：现状 → 方案 A（按当前 CHG 清单）→ 方案 A+（补改 SubWindow）</p><div id="sub"></div></div>
+<script>window.__SPEC__=/*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+var SPEC=window.__SPEC__,p1=SPEC.ring.p1;
+function ring(p,c){return ringSvg(p1.size,p1.stroke,p,ringStateOf(p,c))}
+function apiNow(){return '<span class="pill now" data-pill><span class="num">[API]</span>'+
+ '<span class="seg"><span class="summaryLabel">\u9884\u7b97</span><span class="ir">'+ring(91.9,100)+'<b class="irtext-old" style="color:var(--warn)">91.9%</b></span></span>'+
+ '<span class="seg"><span class="summaryLabel">\u4eca\u65e5</span><span class="num">\u00a50.16</span></span>'+
+ '<span class="seg"><span class="summaryLabel">\u4f59\u989d</span><span class="num">\u00a587.66</span></span></span>'}
+function apiAfter(){return '<span class="pill after" data-pill><span class="num">[API]</span>'+
+ '<span class="seg"><span class="pillLabel">\u9884\u7b97</span><span class="ir">'+ring(91.9,100)+'<b class="irtext-new" style="color:var(--warn)">91.9%</b></span></span>'+
+ '<span class="seg"><span class="pillLabel">\u4eca\u65e5</span><span class="num">\u00a50.16</span></span>'+
+ '<span class="seg"><span class="pillLabel">\u4f59\u989d</span><span class="num">\u00a587.66</span></span></span>'}
+function w(l,p,lc,pc){return '<span class="seg"><span class="subwin"><span class="subrow"><span class="'+lc+'">'+l+'</span>'+
+ '<span class="ir">'+ring(p,90)+'<b class="'+pc+'" style="color:var(--ok)">'+p+'%</b></span></span></span></span>'}
+function sub(tag,cls,lc,pc){return '<span class="pill '+cls+'" data-pill><span class="num">[\u8ba2\u9605]</span>'+
+ w('5h',12,lc,pc)+'<span style="color:var(--weak)">\u30fb</span>'+w('\u5468',34,lc,pc)+'<span style="color:var(--weak)">\u30fb</span>'+w('\u6708',58,lc,pc)+'</span>'}
+document.getElementById('api').innerHTML='<div class="wrap">'+apiNow()+'</div><div class="wrap">'+apiAfter()+'</div>'
+document.getElementById('sub').innerHTML='<div class="wrap">'+sub('a','now','swlabel-old','pctold')+'</div>'+
+ '<div class="wrap">'+sub('b','after','swlabel-old','pctold')+'</div>'+
+ '<div class="wrap">'+sub('c','after','swlabel-new','pctnew')+'</div>'
+requestAnimationFrame(function(){
+  var cv=document.createElement('canvas'),cx=cv.getContext('2d')
+  var pills=document.querySelectorAll('[data-pill]')
+  for(var i=0;i<pills.length;i++){
+    var pill=pills[i],wrap=pill.parentElement,wr=wrap.getBoundingClientRect(),pr=pill.getBoundingClientRect()
+    var svg=pill.querySelector('svg').getBoundingClientRect()
+    var rc=(svg.top+svg.height/2)-pr.top
+    var cl=document.createElement('div');cl.className='cross'
+    cl.style.top=(pr.top-wr.top+rc)+'px';wrap.appendChild(cl)
+    for(const el of pill.querySelectorAll('.num,b')){
+      if(el.closest('svg')!==null||el.childElementCount>0)continue
+      var t=(el.textContent||'').trim();if(!t)continue
+      var cs=getComputedStyle(el)
+      var probe=document.createElement('span')
+      probe.style.cssText='display:inline-block;width:0;height:0;overflow:hidden;vertical-align:baseline'
+      el.appendChild(probe);var bl=probe.getBoundingClientRect().bottom-pr.top;probe.remove()
+      cx.font=cs.fontStyle+' '+cs.fontWeight+' '+cs.fontSize+' '+cs.fontFamily
+      var mm=cx.measureText(t),asc=mm.actualBoundingBoxAscent||0,desc=mm.actualBoundingBoxDescent||0
+      var ink=bl+(desc-asc)/2
+      var m=document.createElement('div')
+      m.className='mark '+(Math.abs(rc-ink)<=0.75?'ok':'bad')
+      m.style.left=(pr.left-wr.left+pr.width/2)+'px'
+      m.style.top=(pr.top-wr.top+ink)+'px'
+      wrap.appendChild(m)
+    }
+  }
+  window.__DONE__=1
+})
+</script></body></html>

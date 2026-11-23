@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>订阅窗口「剩余 %」收敛 · 改动前后对照</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: var(--space-6) var(--space-5); }
+  .page { width: 100%; max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .note { font-size: 11px; color: var(--weak); margin: 4px 0 10px; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; display: inline-block; align-self: flex-start; }
+  .tag.old { color: #f0a35e; border: 1px solid color-mix(in srgb, #f0a35e 40%, transparent); }
+  .tag.new { color: #6fbf73; border: 1px solid color-mix(in srgb, #6fbf73 40%, transparent); }
+
+  .panel { width: 380px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: var(--space-1); }
+  .ph .acts span { width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; }
+  .sub-head .chip { font-size: 11px; color: var(--muted); }
+  .windows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-bottom: 15px; }
+  .win { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .win:nth-child(1) { justify-self: start; align-items: flex-start; text-align: left; }
+  .win:nth-child(2) { justify-self: center; align-items: center; text-align: center; }
+  .win:nth-child(3) { justify-self: end; align-items: flex-end; text-align: right; }
+  .win .top { display: inline-flex; align-items: center; gap: 4px; }
+  .win .k { font-size: 11px; color: var(--muted); }
+  .win .anchor { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+  .win .meta {
+    position: absolute; top: 100%; left: 10px; transform: translateX(-50%);
+    font-size: 11px; color: var(--weak); white-space: nowrap; line-height: 13px;
+  }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* P3 大卡片 */
+  .card { width: 300px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .card .hd { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .card .hd .chip { font-size: 11px; color: var(--muted); }
+  .qgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .qcell { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .qcell .lines { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11px; color: var(--weak); white-space: nowrap; }
+  .qcell .lines .r { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <section>
+    <h2>P2 浮层 · 订阅窗口行（改动前 / 后）</h2>
+    <p class="note">环上已显示「已用 %」，其下的「剩余 %」与其互为补数，可自行推算。改动后只保留倒计时；绝对时间仍由 title 提供（hover 可见），因 380px 宽度下并列会挤压。</p>
+    <div class="row">
+      <div class="col">
+        <span class="tag old">改动前</span>
+        <div class="panel">
+          <div class="ph"><span class="t">当前模型</span><span class="acts"><span>ⓘ</span><span>↻</span><span>✕</span></span></div>
+          <div class="sub-head"><span class="name">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div>
+          <div class="windows" id="w-before"></div>
+        </div>
+      </div>
+      <div class="col">
+        <span class="tag new">改动后</span>
+        <div class="panel">
+          <div class="ph"><span class="t">当前模型</span><span class="acts"><span>↻</span><span>✕</span></span></div>
+          <div class="sub-head"><span class="name">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div>
+          <div class="windows" id="w-after"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>P3 整页 · 订阅卡片（改动前 / 后）</h2>
+    <p class="note">环下三行 → 两行，去掉「剩余」，保留倒计时与绝对时间。</p>
+    <div class="row">
+      <div class="col">
+        <span class="tag old">改动前</span>
+        <div class="card" id="c-before"></div>
+      </div>
+      <div class="col">
+        <span class="tag new">改动后</span>
+        <div class="card" id="c-after"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, p3, criticalSub } = window.__SPEC__.ring
+  const inline = (size, stroke, percent) => {
+    const state = percent === null ? 'empty' : ringStateOf(percent, criticalSub)
+    return `<span class="inline">${ringSvg(size, stroke, percent, state)}<b class="pct ${state}">${percent.toFixed(1)}%</b></span>`
+  }
+  const windows = [
+    { key: '5h', pct: 5, left: '剩余 95%', rel: '1 小时后', abs: '11-23 21:34' },
+    { key: '周', pct: 2, left: '剩余 98%', rel: '6 天后', abs: '11-30 08:00' },
+    { key: '月', pct: 99, left: '剩余 1%', rel: '5 天后', abs: '11-28 19:50' },
+  ]
+  // 与 client.js 同构：倒计时绝对定位锚在圆环中心下方，不随整组（含百分比）居中
+  const winHtml = (w, keepLeft) => `<span class="win">
+      <span class="top"><span class="k">${w.key}</span><span class="anchor">${inline(p2.size, p2.stroke, w.pct)}<span class="meta">${keepLeft ? w.left + ' · ' + w.rel : w.rel}</span></span></span>
+    </span>`
+  document.getElementById('w-before').innerHTML = windows.map(w => winHtml(w, true)).join('')
+  document.getElementById('w-after').innerHTML = windows.map(w => winHtml(w, false)).join('')
+
+  const gaugeHtml = (w, keepLeft) => `<span class="qcell">
+      <div style="position:relative;width:${p3.size}px;height:${p3.size}px">
+        ${ringSvg(p3.size, p3.stroke, w.pct, ringStateOf(w.pct, criticalSub))}
+        <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)">${w.key}</span>
+      </div>
+      <b class="pct ${ringStateOf(w.pct, criticalSub)}" style="font-size:12px;font-weight:600">${w.pct}%</b>
+      <div class="lines">
+        ${keepLeft ? `<span class="r">${w.left}</span>` : ''}
+        <span>${w.rel}</span>
+        <span>${w.abs}</span>
+      </div>
+    </span>`
+  const cardHtml = (keepLeft) => `<div class="hd"><span style="font-weight:600">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div><div class="qgrid">${windows.map(w => gaugeHtml(w, keepLeft)).join('')}</div>`
+  document.getElementById('c-before').innerHTML = cardHtml(true)
+  document.getElementById('c-after').innerHTML = cardHtml(false)
+</script>
+</body>
+</html>

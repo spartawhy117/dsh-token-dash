@@ -1,0 +1,90 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>SubWindow 公共控件 · 定稿预览</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .page { display: flex; flex-direction: column; gap: 24px; max-width: 1100px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .note { font-size: 11px; color: var(--weak); margin: 4px 0 10px; line-height: 1.7; }
+  .row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .cw { display: flex; flex-direction: column; gap: 8px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; align-self: flex-start; }
+  .tag.old { color: #f0a35e; border: 1px solid color-mix(in srgb,#f0a35e 40%,transparent); }
+  .tag.new { color: #6fbf73; border: 1px solid color-mix(in srgb,#6fbf73 40%,transparent); }
+
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: 4px; }
+  .ph .acts span { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb,var(--accent) 32%,transparent); background: color-mix(in srgb,var(--accent) 16%,transparent); }
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; } .sub-head .chip { font-size: 11px; color: var(--muted); }
+
+  /* ── 定稿：SubWindow 公共控件 ── */
+  .subwin { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; }
+  .subwin__row { display: inline-flex; align-items: center; gap: 4px; }
+  .subwin__k { font-size: 11px; color: var(--muted); }
+  .subwin__ring { display: inline-flex; align-items: center; gap: 4px; }
+  .subwin__ring b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .subwin__time { font-size: 11px; color: var(--muted); line-height: 13px; }
+
+  /* P2：三列，左/中/右摆放 */
+  .wins { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .cell { display: flex; min-width: 0; }
+  .cell.s { justify-content: flex-start; }
+  .cell.c { justify-content: center; }
+  .cell.e { justify-content: flex-end; }
+
+  /* P1：pill 内横排，无时间 */
+  .pillrow { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+  .pillrow .sep { color: var(--weak); }
+
+  .dbg { font-size: 10px; color: #f0a35e; font-family: monospace; white-space: pre; line-height: 1.55; margin-top: 8px; }
+</style></head><body>
+<div class="page">
+<section>
+  <h2>SubWindow 公共控件 · P2 三列（左/中/右）与 P1 横排</h2>
+  <p class="note">时间与「标签 + 环 + 数字」整组同心，不再依赖标签宽度；P1 用 <code>showTime=false</code> 复用同一控件。</p>
+  <div class="row" id="stage"></div>
+</section>
+<div class="dbg" id="m"></div>
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, p1, criticalSub } = window.__SPEC__.ring
+  const ws = [{key:'5h',pct:5,rel:'1 小时后'},{key:'周',pct:2,rel:'6 天后'},{key:'月',pct:99,rel:'5 天后'}]
+  const longWs = [{key:'session',pct:12,rel:'2 小时后'},{key:'周',pct:2,rel:'6 天后'},{key:'月',pct:99,rel:'5 天后'}]
+
+  const ringOf = (pct, size, stroke) => { const st = ringStateOf(pct, criticalSub); return `${ringSvg(size, stroke, pct, st)}<b class="pct ${st}">${pct.toFixed(1)}%</b>` }
+  const subWin = (w, showTime, size, stroke) => `<span class="subwin">` +
+    `<span class="subwin__row"><span class="subwin__k">${w.key}</span><span class="subwin__ring">${ringOf(w.pct, size, stroke)}</span></span>` +
+    (showTime ? `<span class="subwin__time">${w.rel}</span>` : '') +
+  `</span>`
+
+  const head = `<div class="ph"><span class="t">当前模型</span><span class="acts"><span>↻</span><span>✕</span></span></div><div class="sub-head"><span class="name">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div>`
+  const p2panel = (list, title, cls) => `<div class="cw"><span class="tag ${cls}">${title}</span><div class="panel">${head}<div class="wins">` +
+    list.map((w,i) => `<div class="cell ${['s','c','e'][i]}">${subWin(w, true, p2.size, p2.stroke)}</div>`).join('') + `</div></div></div>`
+
+  const p1pill = (list) => `<div class="cw"><span class="tag new">P1 收起态（无时间）</span><div class="panel" style="gap:8px"><div class="pillrow">` +
+    list.map((w,i) => (i? '<span class="sep">·</span>' : '') + subWin(w, false, p1.size, p1.stroke)).join('') + `</div></div></div>`
+
+  document.getElementById('stage').innerHTML =
+    p2panel(ws, 'P2 三窗（左/中/右）', 'new') + p2panel(longWs, 'P2 长标签 session', 'new') + p1pill(ws)
+
+  requestAnimationFrame(() => {
+    const out = []
+    document.querySelectorAll('.wins').forEach((g, gi) => {
+      const gr = g.getBoundingClientRect()
+      let maxR = -Infinity, minL = Infinity
+      g.querySelectorAll('.subwin').forEach(el => {
+        const r = el.getBoundingClientRect()
+        maxR = Math.max(maxR, r.right); minL = Math.min(minL, r.left)
+      })
+      const over = maxR - gr.right
+      out.push(`${gi===0?'P2 标准':'P2 长标签'} 内容 ${gr.left.toFixed(0)}~${gr.right.toFixed(0)} | 最右 ${maxR.toFixed(0)} | ${over>0.5?'溢出 '+over.toFixed(1)+'px ⚠️':'无溢出 ✅'}`)
+    })
+    document.getElementById('m').textContent = out.join('\n')
+  })
+</script></body></html>

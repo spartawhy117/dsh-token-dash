@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>P2 环 + 数字对齐：现状 vs 方案 A</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-size: 13px; }
+  .page { max-width: 960px; }
+  .panel { width: 380px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: 4px; }
+  .ph .acts span { width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; }
+  .sub-head .chip { font-size: 11px; color: var(--muted); }
+  .windows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .win { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .win:nth-child(1) { justify-self: start; align-items: flex-start; }
+  .win:nth-child(2) { justify-self: center; align-items: center; }
+  .win:nth-child(3) { justify-self: end; align-items: flex-end; }
+  .win .top { display: inline-flex; align-items: center; gap: 4px; }
+  .win .meta { font-size: 11px; color: var(--weak); white-space: nowrap; }
+  .summary { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr); align-items: center; column-gap: 12px; }
+  .summary .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .summary .cell.center { align-items: center; text-align: center; }
+  .summary .balance { align-items: flex-end; text-align: right; }
+  .summary .k { font-size: 11px; color: var(--muted); }
+  .summary .v { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .label-old { font-size: 11px; color: var(--muted); line-height: 1; display: inline-flex; align-items: center; height: 20px; position: relative; top: -0.5px; }
+  .pct-old { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; padding-bottom: 2px; }
+  .pct-new { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 16px; }
+  .label-new { font-size: 12px; color: var(--muted); line-height: 16px; }
+  .ring-shift { display: inline-flex; }
+  .ring-shift svg { position: relative; top: 0.75px; }
+  .stage { display: flex; flex-direction: column; gap: 28px; }
+  .row2 { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .cap { font-size: 11px; color: var(--weak); margin: 0 0 6px; }
+  .cap b { color: var(--muted); }
+  .grp-title { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .grp-note { font-size: 11px; color: var(--weak); margin: 0 0 14px; line-height: 17px; }
+</style>
+</head>
+<body>
+<div class="page"><div class="stage">
+  <section>
+    <p class="grp-title">① API 态（环 + 百分比，无周期标签）</p>
+    <p class="grp-note">P2Summary 的环不传 text，走 PercentValue（12px / lh:1 / paddingBottom:2）。现状环心与数字墨迹本来就同为 10.0（已对齐）；方案 A 换成 16px 行盒并让环下移 0.75px。</p>
+    <div class="row2">
+      <div><p class="cap"><b>现状</b>（PercentValue 12px / lh:1 / pb:2）</p>
+        <div class="panel"><div class="ph"><span class="t">当前模型</span><span class="acts"><span>⟳</span><span>×</span></span></div>
+          <div class="summary"><span class="inline" id="api-old"></span>
+            <span class="cell center"><span class="k">已用 / 预算</span><span class="v">¥91.90 / ¥100.00</span></span>
+            <span class="cell balance"><span class="k">真实余额</span><span class="v">¥87.66</span></span></div></div></div>
+      <div><p class="cap"><b>方案 A</b>（12px / lh:16 / 环下移 0.75px）</p>
+        <div class="panel"><div class="ph"><span class="t">当前模型</span><span class="acts"><span>⟳</span><span>×</span></span></div>
+          <div class="summary"><span class="inline ring-shift" id="api-new"></span>
+            <span class="cell center"><span class="k">已用 / 预算</span><span class="v">¥91.90 / ¥100.00</span></span>
+            <span class="cell balance"><span class="k">真实余额</span><span class="v">¥87.66</span></span></div></div></div>
+    </div>
+  </section>
+  <section>
+    <p class="grp-title">② 订阅态（周期标签 + 环 + 百分比）</p>
+    <p class="grp-note">现状走 SubWindow 旧分支：标签 11px 且 height:环径 + top:-0.5，实测比环心高 4.0px。方案 A 让标签与百分比同为 12px / 16px 行盒、去掉补偿，环下移 0.75px。</p>
+    <div class="row2">
+      <div><p class="cap"><b>现状</b>（标签 11px + height:20 + top:-0.5）</p>
+        <div class="panel"><div class="ph"><span class="t">当前模型</span><span class="acts"><span>⟳</span><span>×</span></span></div>
+          <div class="sub-head"><span class="name">GLM Coding</span><span class="chip">[ 订阅 ]</span></div>
+          <div class="windows" id="sub-old"></div></div></div>
+      <div><p class="cap"><b>方案 A</b>（标签 12px / lh:16，无 height/top）</p>
+        <div class="panel"><div class="ph"><span class="t">当前模型</span><span class="acts"><span>⟳</span><span>×</span></span></div>
+          <div class="sub-head"><span class="name">GLM Coding</span><span class="chip">[ 订阅 ]</span></div>
+          <div class="windows" id="sub-new"></div></div></div>
+    </div>
+  </section>
+</div></div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  var SPEC = window.__SPEC__;
+  var p2 = SPEC.ring.p2;
+  var ring = function (pct, crit) { return ringSvg(p2.size, p2.stroke, pct, ringStateOf(pct, crit)); };
+  document.getElementById('api-old').innerHTML = ring(91.9, 100) + '<b class="pct-old" style="color:var(--warn)">91.9%</b>';
+  document.getElementById('api-new').innerHTML = ring(91.9, 100) + '<b class="pct-new" style="color:var(--warn)">91.9%</b>';
+  var ws = [ {k:'5h',p:42.5,r:'3 小时后'}, {k:'周',p:18.2,r:'1 天后'}, {k:'月',p:3.0,r:'18 天后'} ];
+  var oldHtml = '', newHtml = '';
+  for (var i = 0; i < ws.length; i++) {
+    var w = ws[i];
+    oldHtml += '<span class="win"><span class="top"><span class="label-old">' + w.k + '</span>' + ring(w.p, 90) + '<b class="pct-old" style="color:var(--ok)">' + w.p + '%</b></span><span class="meta">' + w.r + '</span></span>';
+    newHtml += '<span class="win"><span class="top"><span class="label-new">' + w.k + '</span><span class="ring-shift">' + ring(w.p, 90) + '</span><b class="pct-new" style="color:var(--ok)">' + w.p + '%</b></span><span class="meta">' + w.r + '</span></span>';
+  }
+  document.getElementById('sub-old').innerHTML = oldHtml;
+  document.getElementById('sub-new').innerHTML = newHtml;
+</script>
+</body>
+</html>

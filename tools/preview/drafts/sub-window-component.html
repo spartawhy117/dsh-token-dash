@@ -1,0 +1,106 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>SubWindow 公共控件 · 三态对齐预览</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .page { display: flex; flex-direction: column; gap: 26px; max-width: 1040px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .note { font-size: 11px; color: var(--weak); margin: 4px 0 10px; line-height: 1.7; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .cw { display: flex; flex-direction: column; gap: 8px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; align-self: flex-start; }
+  .tag.cur { color: #f0a35e; border: 1px solid color-mix(in srgb,#f0a35e 40%,transparent); }
+  .tag.new { color: #6fbf73; border: 1px solid color-mix(in srgb,#6fbf73 40%,transparent); }
+
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: 4px; }
+  .ph .acts span { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb,var(--accent) 32%,transparent); background: color-mix(in srgb,var(--accent) 16%,transparent); }
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; } .sub-head .chip { font-size: 11px; color: var(--muted); }
+
+  /* ── 新公共控件 SubWindow ─────────────────────────── */
+  .subwin {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+    min-width: 0;
+  }
+  /* 第一行：标签 + 环 + 百分比，整体作为一个视觉单元居中 */
+  .subwin__row { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .subwin__k { font-size: 11px; color: var(--muted); }
+  .subwin__ring { display: inline-flex; align-items: center; gap: 4px; }
+  .subwin__ring b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* 第二行：时间，与「环 + 数字」这一段的中心对齐（不是整行中心） */
+  .subwin__time { font-size: 11px; color: var(--weak); white-space: nowrap; }
+
+  /* 三列容器：每列承载一个 SubWindow，列内按 start/center/end 摆放 */
+  .wins { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .wins > .cell { display: flex; min-width: 0; }
+  .wins > .cell:nth-child(1) { justify-content: flex-start; }
+  .wins > .cell:nth-child(2) { justify-content: center; }
+  .wins > .cell:nth-child(3) { justify-content: flex-end; }
+
+  /* 基线参考线，仅本预览用 */
+  .guide { position: relative; }
+  .guide::before, .guide::after { content: ''; position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb,#6fbf73 45%,transparent); }
+  .guide::before { left: 0; } .guide::after { right: 0; }
+
+  /* 旧版对照 */
+  .v-old { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .v-old .win { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+  .v-old .win:nth-child(1) { justify-self: start; align-items: flex-start; }
+  .v-old .win:nth-child(2) { justify-self: center; align-items: center; }
+  .v-old .win:nth-child(3) { justify-self: end; align-items: flex-end; }
+  .v-old .top { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .v-old .meta { font-size: 11px; color: var(--weak); white-space: nowrap; }
+
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .dbg { font-size: 10px; color: #f0a35e; font-family: monospace; white-space: pre; line-height: 1.5; margin-top: 8px; }
+</style></head><body>
+<div class="page">
+<section>
+  <h2>SubWindow 公共控件：两行结构 + 三列左/中/右对齐</h2>
+  <p class="note">每个窗口封成一个整体控件（标签·环·数字 在上，时间在下），控件内部纵向居中；三列各自 left / center / right 摆放。<br>绿色竖线 = 内容区左右边界，用于核对第三列是否真的贴边。</p>
+  <div class="row" id="stage"></div>
+</section>
+<div class="dbg" id="m"></div>
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p2, criticalSub } = window.__SPEC__.ring
+  const ws = [{key:'5h',pct:5,rel:'1 小时后'},{key:'周',pct:2,rel:'6 天后'},{key:'月',pct:99,rel:'5 天后'}]
+  const ringOf = (pct) => { const st = ringStateOf(pct, criticalSub); return `${ringSvg(p2.size,p2.stroke,pct,st)}<b class="pct ${st}">${pct.toFixed(1)}%</b>` }
+
+  const subWin = (w) => `<span class="subwin">` +
+    `<span class="subwin__row"><span class="subwin__k">${w.key}</span><span class="subwin__ring">${ringOf(w.pct)}</span></span>` +
+    `<span class="subwin__time">${w.rel}</span>` +
+  `</span>`
+
+  const head = `<div class="ph"><span class="t">当前模型</span><span class="acts"><span>↻</span><span>✕</span></span></div><div class="sub-head"><span class="name">OpenCode Go</span><span class="chip">[ 订阅 ]</span></div>`
+
+  const oldPanel = `<div class="cw"><span class="tag cur">现状</span><div class="panel">${head}<div class="v-old">${ws.map(w => `<span class="win"><span class="top"><span class="subwin__k">${w.key}</span>${ringOf(w.pct)}</span><span class="meta">${w.rel}</span></span>`).join('')}</div></div></div>`
+
+  const newPanel = `<div class="cw"><span class="tag new">SubWindow 公共控件</span><div class="panel">${head}<div class="wins guide">${ws.map(w => `<div class="cell">${subWin(w)}</div>`).join('')}</div></div></div>`
+
+  document.getElementById('stage').innerHTML = oldPanel + newPanel
+
+  requestAnimationFrame(() => {
+    const lines = []
+    const guide = document.querySelector('.wins.guide')
+    const gr = guide.getBoundingClientRect()
+    lines.push('内容区: ' + gr.left.toFixed(1) + ' ~ ' + gr.right.toFixed(1))
+    guide.querySelectorAll('.cell').forEach((c, i) => {
+      const sw = c.querySelector('.subwin').getBoundingClientRect()
+      lines.push(`第${i+1}列 控件 left=${sw.left.toFixed(1)} right=${sw.right.toFixed(1)} 宽=${sw.width.toFixed(1)}`)
+    })
+    const cells = guide.querySelectorAll('.cell')
+    const last = cells[2].querySelector('.subwin').getBoundingClientRect()
+    lines.push('')
+    lines.push(`第3列控件右缘 ${last.right.toFixed(1)} vs 内容右缘 ${gr.right.toFixed(1)} → 差 ${(gr.right-last.right).toFixed(1)}px`)
+    document.getElementById('m').textContent = lines.join('\n')
+  })
+</script></body></html>

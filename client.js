@@ -94,7 +94,7 @@ window.__ModuleLoader__.load({
       'API 用量（按供应商）': 'API usage (by provider)',
       '订阅套餐（按供应商）': 'Subscription plans (by provider)',
       '名称': 'Name', '已用': 'Used', '已用 / 预算': 'Used / budget', '计划余额': 'Planned left', '真实余额': 'Real balance',
-      '剩余 {value}': '{value} left', '本月已花': 'Spent this month',
+      '本月已花': 'Spent this month',
       '今日': 'Today', '总费用': 'Total cost', '重试': 'Retry',
       '模型用量明细': 'Model usage details', '模型': 'Model', '共 {n} 个模型': 'Total {n} models', '窗': 'windows', '数据待更新': 'Data may be stale', '探测失败，暂用上次数据': 'Probe failed; showing last data', '数据来源': 'Data source', '数据来自本机会话记录，费用与 Tokens 均在本地估算': 'Estimated locally from local session records', '范围与明细': 'Range & details', '输入': 'In', '缓存': 'Cache', '输出': 'Out', '费用': 'Cost',
       '费用（API 计价估算）': 'Cost (API estimate)',
@@ -463,7 +463,11 @@ window.__ModuleLoader__.load({
 
     const styles = {
       pill: {
+        // 字数与行高必须显式声明：pill 挂在宿主底栏，不声明会继承宿主的 16px，
+        // 导致前缀/数值/分隔符比标签大出一档，并让同一行出现多条文字基线（P1 排版对齐）。
+        // 12px / 16px 行高与 ui-design.md §2.6 的 --td-fs-pill、§3「P1 字号 12px」一致。
         display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 8px',
+        boxSizing: 'border-box', fontSize: 12, lineHeight: '16px',
         borderRadius: 999, cursor: 'pointer', maxWidth: '100%', fontVariantNumeric: 'tabular-nums',
         border: `1px solid ${T.border}`, color: T.text,
       },
@@ -487,6 +491,14 @@ window.__ModuleLoader__.load({
       header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 28 },
       headerTabs: { flex: 1, minWidth: 0 },
       headerActions: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' },
+      // 失败态「重试」：实红描边而非淡色，与蓝色关闭按钮区分（Issue #4）
+      retryChip: {
+        display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, minHeight: 22, padding: '0 7px',
+        boxSizing: 'border-box', borderRadius: 6, font: 'inherit', fontSize: 11, fontWeight: 600,
+        cursor: 'pointer', color: T.over,
+        border: `1px solid ${T.over}`,
+        background: `color-mix(in srgb, ${T.over} 14%, transparent)`,
+      },
       row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
       rowStart: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
       muted: { color: T.muted, fontSize: 11 },
@@ -540,8 +552,13 @@ window.__ModuleLoader__.load({
       card: { background: T.section, borderRadius: 10, padding: 10, marginTop: 10, display: 'grid', gap: 8 },
       link: { color: T.text, textDecoration: 'underline', cursor: 'pointer' },
       status: { minHeight: 15, fontSize: 10.5, color: T.muted, textAlign: 'right' },
-      summaryRow: { display: 'grid', gridTemplateColumns: 'auto minmax(120px,1.2fr) minmax(80px,1fr) minmax(0,1fr)', alignItems: 'center', columnGap: 12, minHeight: 24, fontSize: 12 },
+      // 三栏制（Issue #2）：左（环）贴左 / 中（已用·预算）居中 / 右（真实余额）贴右。
+      // 中栏内容最长（¥91.90 / ¥100.00），给 1.5fr 避免换行；左右两栏内容短，1fr 仍可贴边。
+      summaryRow: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr)', alignItems: 'center', columnGap: 12, minHeight: 24, fontSize: 12 },
       summaryCell: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, whiteSpace: 'nowrap' },
+      // P1 专用标签：summaryLabel 的 11px 被 P2 共用（ui-design.md §4.3 要求 P2 标签 11px），
+      // P1 需要 12px，故单独一份，避免改一处把 P2 也带过去。
+      pillLabel: { color: T.muted, fontSize: 12, lineHeight: '16px' },
       summaryLabel: { color: T.muted, fontSize: 11 },
       summaryValue: { fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
       providerLine: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0, minHeight: 24 },
@@ -604,6 +621,8 @@ window.__ModuleLoader__.load({
         display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px', borderRadius: 999,
         border: `1px solid ${T.border}`, color: T.text, textDecoration: 'none', fontSize: 12, whiteSpace: 'nowrap',
       },
+      // P1 订阅段容器：窗口组之间单侧视觉留白 = gap 4 + 分隔符盒宽/2 − 墨迹宽/2 = 7px（Issue #1）
+      pillGroup: { display: 'inline-flex', alignItems: 'center', gap: 4 },
       inlineWrap: { display: 'inline-flex', alignItems: 'center', gap: 4 },
       gaugeMeta: { color: T.muted, fontSize: 11, lineHeight: '15px', whiteSpace: 'nowrap' },
       apiCards: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12 },
@@ -969,29 +988,65 @@ window.__ModuleLoader__.load({
         }))
     }
 
-    /** 百分比文本：只负责格式化与状态色，不管排版。 */
-    function PercentValue({ percent, state = stateOf(percent), size = 12, testid }) {
+    /**
+     * 百分比文本：只负责格式化与状态色，不管排版。
+     *
+     * 垂直对齐（Issue #6）：字形盒在行盒里并非垂直居中——上半部分是 ascender 空间，
+     * 数字实际贴着基线落在偏上位置。只压 line-height 无改善（实测仍差 1.50px），
+     * 因此在底部补 2px：把字形整体顶回环心，实测残差 0.50px（三档尺寸一致）。
+     * 这是字形度量的补偿，不是视觉微调；改字号时该值需按 font-size 等比复核。
+     */
+    /**
+     * `lineHeight` 只接受带单位的字符串：React 把 lineHeight 视作无单位属性，
+     * 传数字 16 会被当作「16 倍」而算出 16 × fontSize（实测 192px），故入口统一归一化。
+     */
+    function PercentValue({ percent, state = stateOf(percent), size = 12, lineHeight, testid }) {
+      const lineHeightCss = lineHeight === undefined
+        ? undefined
+        : (typeof lineHeight === 'number' ? `${lineHeight}px` : lineHeight)
+      // P1 传 lineHeight 与 pill 的 16px 行盒统一，且此时不再补 paddingBottom：
+      // 全行同字号时补偿会把该文本整体上移 1px，反而与相邻标签错开（实测基线 17→16）。
       return h('b', {
         'data-testid': testid,
-        style: { fontSize: size, fontWeight: 600, color: stateColor(state), fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
+        style: {
+          fontSize: size, fontWeight: 600, color: stateColor(state),
+          fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+          ...(lineHeightCss === undefined ? { lineHeight: 1, paddingBottom: 2 } : { lineHeight: lineHeightCss }),
+        },
       }, percentText(percent))
     }
 
-    /** 内联组合：环 + 右侧数字，P1 14/2、P2 20/2.5。 */
-    function InlineRing({ percent, state = stateOf(percent), size = 14, stroke = 2, text, testid, percentTestid }) {
+    /**
+     * 内联组合：环 + 右侧数字，P1 14/2、P2 20/2.5。
+     *
+     * `fontSize` 是 P1 排版对齐的入参：P1 需要环内数字与 pill 其余文字同为 12px，
+     * 且**不带** PercentValue 那 2px 字形补偿——补偿会把该文本框整体上移 1px，
+     * 在「全行同字号」时反而制造基线差。不传该参数时保持原有行为，P2 / P3 不受影响。
+     */
+    function InlineRing({ percent, state = stateOf(percent), size = 14, stroke = 2, text, fontSize, percentLineHeight, ringShift, testid, percentTestid }) {
       return h('span', {
         'data-testid': testid,
         style: { display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 },
       },
-        h(ProgressRing, { percent, state, size, stroke }),
+        h('span', {
+          // P1 传 ringShift：环下移 0.75px，让环墨迹中心对齐同一行文字的墨迹中心（Issue #1）。
+          // 移的是 SVG 图形，不涉及字体度量，换字体后依然成立。
+          style: ringShift === undefined ? undefined : { display: 'inline-flex', position: 'relative', top: ringShift, flex: 'none' },
+        }, h(ProgressRing, { percent, state, size, stroke })),
         text !== undefined
-          ? h('b', { 'data-testid': percentTestid, style: { fontWeight: 600, color: stateColor(state) } }, text)
-          : h(PercentValue, { percent, state, size: 12, testid: percentTestid }))
+          ? h('b', {
+            'data-testid': percentTestid,
+            style: {
+              fontWeight: 600, color: stateColor(state), lineHeight: 1,
+              ...(fontSize === undefined ? { paddingBottom: 2 } : { fontSize }),
+            },
+          }, text)
+          : h(PercentValue, { percent, state, size: 12, lineHeight: percentLineHeight, testid: percentTestid }))
     }
 
-    /** P3 组合：环心标签 + 环下百分比 + 三行辅助。 */
-    function QuotaGauge({ label, percent, state = stateOf(percent), remaining, relative, absolute, size = 40, stroke = 4, testid, labelTestid, percentTestid, remainingTestid, relativeTestid, absoluteTestid }) {
-      const aria = [label, percentText(percent), remaining, relative].filter((part) => part !== undefined && part !== null && part !== '').join('，')
+    /** P3 组合：环心标签 + 环下百分比 + 两行辅助（倒计时 / 绝对时间）。 */
+    function QuotaGauge({ label, percent, state = stateOf(percent), relative, absolute, size = 40, stroke = 4, testid, labelTestid, percentTestid, relativeTestid, absoluteTestid }) {
+      const aria = [label, percentText(percent), relative].filter((part) => part !== undefined && part !== null && part !== '').join('，')
       return h('div', {
         'data-testid': testid, role: 'group', 'aria-label': aria,
         style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 },
@@ -1005,13 +1060,14 @@ window.__ModuleLoader__.load({
               style: {
                 position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 600, color: T.muted, letterSpacing: '.2px',
+                // 与 PercentValue 同源的字形补偿：字形在行盒内偏上，补 2px 才光学居中（Issue #6）
+                lineHeight: 1, paddingBottom: 2,
               },
             }, label)),
         h('span', {
           'data-testid': percentTestid,
           style: { fontSize: 16, fontWeight: 600, lineHeight: '20px', color: stateColor(state), fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
         }, percentText(percent)),
-        remaining === undefined ? null : h('span', { 'data-testid': remainingTestid, style: styles.gaugeMeta }, remaining),
         relative === undefined ? null : h('span', { 'data-testid': relativeTestid, style: styles.gaugeMeta }, relative),
         absolute === undefined ? null : h('span', { 'data-testid': absoluteTestid, style: styles.gaugeMeta }, absolute))
     }
@@ -1023,11 +1079,14 @@ window.__ModuleLoader__.load({
 
     function TokenTable({ rows, maxRows = 5, empty = tr('范围内暂无消耗') }) {
       if (rows.length === 0) return h('div', { style: styles.empty }, empty)
+      // 分隔线不能画在每个 cell 上：grid 的 columnGap 处没有元素，
+      // 逐 cell 画边框会把一条线切成 4 段并各留断口，数据行断口位置又不同，
+      // 表头线与数据线因此不等长（Issue #3）。改由跨列行承载。
       const headCell = (text, align = 'right') => h('span', {
         role: 'columnheader',
-        style: { color: T.weak, fontSize: 12, textAlign: align, paddingBottom: 6, borderBottom: `1px solid ${T.border}` },
+        style: { color: T.weak, fontSize: 12, textAlign: align, paddingBottom: 6 },
       }, text)
-      const cell = { padding: '5px 0', borderBottom: TABLE_BORDER, fontSize: 12, minWidth: 0 }
+      const cell = { padding: '5px 0', fontSize: 12, minWidth: 0, borderBottom: TABLE_BORDER }
       return h('div', {
         'data-testid': 'token-dash-usage-table',
         role: 'table',
@@ -1035,6 +1094,11 @@ window.__ModuleLoader__.load({
       },
         h('div', { style: { display: 'contents' } },
           headCell(tr('模型'), 'left'), headCell('Tokens'), headCell(tr('请求')), headCell(tr('命中'))),
+        // 表头分隔线：跨满全部列，不受 columnGap 影响
+        h('span', {
+          'aria-hidden': true,
+          style: { gridColumn: '1 / -1', display: 'block', height: 1, background: T.border, marginBottom: 4 },
+        }),
         ...rows.map((row) => h('div', {
           key: `${row.providerId}:${row.modelId}`,
           role: 'row',
@@ -1532,22 +1596,22 @@ window.__ModuleLoader__.load({
       return windows.slice(0, 3).map((plan) => `${windowLabel(plan.key)} ${fmtPercent(plan.usedPercent)}`).join(' · ')
     }
 
-    /** P1 订阅窗口：短标签 + 环 + 百分比，最多三窗，不显示重置。 */
+    /** P1 订阅窗口：复用 P0 的 SubWindow（横排、不显示时间），最多三窗。 */
     function subscriptionNodes(provider) {
       const windows = Array.isArray(provider.windows) ? provider.windows : []
       if (windows.length === 0) return [h('span', { key: 'fail', style: styles.muted }, tr('套餐查询失败'))]
       const nodes = []
       for (const [index, plan] of windows.slice(0, 3).entries()) {
-        if (index > 0) nodes.push(h('span', { key: `sep-${plan.key}`, style: { color: T.weak } }, ' · '))
-        const percent = Number(plan.usedPercent)
+        // 分隔符用 U+30FB（片假名中点）且**不带两侧空格**（Issue #1）：
+        // 旧写法 ' ・ ' 每侧多出一个半角空格（约 3px 盒宽），会把单侧视觉留白从 7px 撑到 12px，
+        // 三个窗口因此散成三块，看不出同属一条套餐。
+        if (index > 0) nodes.push(h('span', { key: `sep-${plan.key}`, style: { color: T.weak } }, '・'))
         nodes.push(h('span', { key: plan.key, style: styles.inlineWrap },
-          h('span', { 'data-td-label': true, style: styles.summaryLabel }, windowLabel(plan.key)),
-          h(InlineRing, {
-            percent, state: stateOf(percent, SUB_CRITICAL), size: 14, stroke: 2,
-            testid: `token-dash-pill-ring-${plan.key}`,
-          })))
+          h(SubWindow, { plan, showTime: false, ringSize: 14, ringStroke: 2, labelFontSize: 12, ringTestId: `token-dash-pill-ring-${plan.key}` })))
       }
-      return nodes
+      // 包进 gap:4 的容器：窗口组之间的间距由它决定，pill 的 gap:6 只发生一次
+      // （否则每个窗口与分隔符都各吃一份 6px，API 段又会跟着被改成 4）。
+      return [h('span', { key: 'subgroup', style: styles.pillGroup }, nodes)]
     }
 
     function LocaleRoot(props) {
@@ -1720,19 +1784,19 @@ window.__ModuleLoader__.load({
         const balance = balanceText(current, summary?.showBalance)
         bodyNodes = [
           h('span', { key: 'budget', style: styles.inlineWrap },
-            h('span', { 'data-td-label': true, style: styles.summaryLabel }, tr('预算')),
+            h('span', { 'data-td-label': true, style: styles.pillLabel }, tr('预算')),
             h(InlineRing, {
               percent: hasBudget ? percent : null,
               state: hasBudget ? stateOf(percent, API_CRITICAL) : 'empty',
-              size: 14, stroke: 2,
+              size: 14, stroke: 2, fontSize: 12, ringShift: 0.75,
               text: hasBudget ? fmtRatio(budget.percent) : tr('未设置'),
               testid: 'token-dash-pill-ring-budget',
             })),
           h('span', { key: 'today', style: styles.inlineWrap },
-            h('span', { 'data-td-label': true, style: styles.summaryLabel }, tr('今日')),
+            h('span', { 'data-td-label': true, style: styles.pillLabel }, tr('今日')),
             h('span', { style: styles.num }, fmtMoney(current.usage?.todayCost, current.currency))),
           balance === null ? null : h('span', { key: 'balance', style: styles.inlineWrap },
-            h('span', { 'data-td-label': true, style: styles.summaryLabel }, tr('余额')),
+            h('span', { 'data-td-label': true, style: styles.pillLabel }, tr('余额')),
             h('span', { style: styles.num }, balance)),
         ].filter(Boolean)
         ariaText = tr('{name}，API 用量，{budget}，今日 {today}{balance}', { name: current.name, budget: hasBudget ? tr('预算已用 {value}', { value: fmtRatio(budget.percent) }) : tr('预算未设置'), today: fmtMoney(current.usage?.todayCost, current.currency), balance: balance === null ? '' : `，${tr('余额 {value}', { value: balance })}` })
@@ -1759,17 +1823,26 @@ window.__ModuleLoader__.load({
         }) : null)
     }
 
-    function PanelHeader({ onRefresh, refreshing, onClose, stale = false }) {
+    /**
+     * P2 标题栏：仅刷新与关闭。
+     * 原有一个 ⓘ 提示「支持哪些 API Key」，文案停留在 5 家 provider 的旧表述，
+     * 且对已配置完成的用户无操作价值，故移除（Issue #3）。
+     * headerActions 不再需要 marginInlineEnd 负偏移——那是为抵消 ⓘ 的视觉留白。
+     */
+    function PanelHeader({ onRefresh, refreshing, onClose, stale = false, failed = false }) {
       return h('div', { style: styles.header },
         h('b', { style: styles.title }, tr('当前模型')),
-        h('div', { style: { ...styles.headerActions, marginInlineEnd: -5 } },
-          h(InfoTip, {
-            label: tr('查看支持的 API Key 范围'),
-            text: tr('目前支持 DeepSeek / Kimi / GLM / OpenRouter / Qwen API Key'),
-          }),
-          h(IconButton, {
-            label: tr('刷新'), testid: 'token-dash-refresh', disabled: refreshing, onClick: onRefresh, dot: stale,
-          }, h(Icon, { name: refreshing ? 'loader' : 'refresh', size: 13 })),
+        h('div', { style: styles.headerActions },
+          // 任一接口失败时，刷新位换成带文字的「重试」：全屏只保留这一个入口，
+          // 表体内不再插入错误条按钮（Issue #4）
+          failed
+            ? h('button', {
+              type: 'button', 'data-testid': 'token-dash-retry',
+              style: styles.retryChip, disabled: refreshing, onClick: onRefresh,
+            }, h(Icon, { name: refreshing ? 'loader' : 'refresh', size: 12 }), tr('重试'))
+            : h(IconButton, {
+              label: tr('刷新'), testid: 'token-dash-refresh', disabled: refreshing, onClick: onRefresh, dot: stale,
+            }, h(Icon, { name: refreshing ? 'loader' : 'refresh', size: 13 })),
           h(IconButton, { label: tr('关闭'), testid: 'token-dash-close', onClick: onClose }, h(Icon, { name: 'close', size: 13 }))))
     }
 
@@ -1792,6 +1865,8 @@ window.__ModuleLoader__.load({
         } catch {
           if (seq !== usageSeq.current) return
           setUsageError(true)
+          // 失败即清空：保留旧数据会让用户把陈旧数字当成当前值（Issue #4）
+          setUsage(null)
         } finally {
           if (seq === usageSeq.current) setUsageLoading(false)
         }
@@ -1840,12 +1915,6 @@ window.__ModuleLoader__.load({
       // 布局服务可用就显示入口；注册时序可能导致 hasMainPanel 暂时为 false，点击时再判。
       const canOpen = layoutRef !== null
 
-      const strip = error || usageError
-        ? h('div', { style: styles.errorStrip, role: 'alert' },
-          h('span', null, error ? tr('刷新失败，保留上次数据') : tr('范围数据加载失败')),
-          h('button', { type: 'button', style: styles.button, onClick: refreshAll }, tr('重试')))
-        : null
-
       let body
       if (summary === null) {
         body = h('div', { style: styles.empty }, panelError ? tr('Token 数据不可用') : tr('Token 数据加载中…'))
@@ -1863,7 +1932,6 @@ window.__ModuleLoader__.load({
             value: range, onChange: setRange, label: tr('时间范围'),
             options: RANGES.map(([value, label]) => ({ value, label: tr(label) })),
           })),
-          strip,
           usage === null && usageLoading
             ? h('div', { style: styles.empty }, tr('范围数据加载中…'))
             : h(TokenTable, { rows }),
@@ -1883,7 +1951,10 @@ window.__ModuleLoader__.load({
         'data-testid': 'token-dash-panel',
         style: { ...styles.panel, maxHeight, left },
       },
-        h(PanelHeader, { onRefresh: refreshAll, refreshing: refreshing || usageLoading, onClose, stale }),
+        h(PanelHeader, {
+          onRefresh: refreshAll, refreshing: refreshing || usageLoading, onClose, stale,
+          failed: error || usageError,
+        }),
         body)
     }
 
@@ -1920,14 +1991,14 @@ window.__ModuleLoader__.load({
             h(StaleBadge, { provider }),
             h('span', { style: styles.providerChip }, `[ ${tr('API 用量')} ]`))),
         h('div', { 'data-testid': 'token-dash-summary-row', style: styles.summaryRow },
-          h('span', { style: styles.summaryCell },
+          h('span', { style: { ...styles.summaryCell, alignItems: 'flex-start' } },
             h(InlineRing, {
               percent: hasBudget ? percent : null,
               state: hasBudget ? stateOf(percent, API_CRITICAL) : 'empty',
               size: 20, stroke: 2.5,
               testid: 'token-dash-summary-ring',
             })),
-          h('span', { 'data-testid': 'token-dash-summary-used', style: styles.summaryCell },
+          h('span', { 'data-testid': 'token-dash-summary-used', style: { ...styles.summaryCell, alignItems: 'center' } },
             h('span', { style: styles.summaryLabel }, tr('已用 / 预算')),
             h('span', { style: styles.summaryValue },
               hasBudget ? `${fmtMoney(budget.used, provider.currency)} / ${fmtMoney(budget.amount, provider.currency)}` : '—')),
@@ -1935,8 +2006,7 @@ window.__ModuleLoader__.load({
             'data-testid': 'token-dash-summary-balance',
             style: {
               ...styles.summaryCell,
-              gridColumn: '3 / 5',
-              justifySelf: 'end',
+              // 两行共用同一条右缘，与标题行 [ API 用量 ] 对齐（Issue #2）
               alignItems: 'flex-end',
               textAlign: 'right',
             },
@@ -1946,37 +2016,78 @@ window.__ModuleLoader__.load({
             h('span', { style: styles.summaryValue }, balance ?? '—'))))
     }
 
-    /** P2 订阅窗口行：两段数字 + 倒计时 + 绝对时间（无「重置」后缀）。 */
-    function WindowRow({ providerId, plan, align = 'left' }) {
+    /**
+     * P0 公共控件：单个订阅窗口。
+     *
+     * 结构：第一行「标签 + 环 + 数字」作为一个整体横向居中；第二行时间可选，与第一行同心。
+     * 为什么封装：P1 与 P2 曾各写一套，P2 用 position:absolute 把时间钉在圆环中心，
+     * 偏移量随标签字数漂移（标签越长越偏）。这里改用正常流 + align-items:center，
+     * 时间天然与「环 + 数字」这段整体居中对齐，与标签宽度、百分比宽度均无关。
+     *
+     * @param {object} props.plan      订阅窗口（key / usedPercent / resetAt）
+     * @param {boolean} props.showTime 是否显示倒计时（P1 横排不显示，P2 显示）
+     * @param {'start'|'center'|'end'} props.place 控件在所在列内的摆放位置
+     * @param {string} props.testKey   测试 id 后缀
+     * @param {number} props.labelFontSize 周期标签字号；P1 传 12 让标签与 pill 其余文字同字号，
+     *   此时不再使用「锁高 + 上移 0.5px」那套补偿（它只在 P2 的多字号场景下有意义）。不传则沿用旧行为。
+     */
+    function SubWindow({ plan, showTime = true, place = 'center', testKey, ringTestId, ringSize = 20, ringStroke = 2.5, labelFontSize }) {
       const percent = plan === undefined || plan === null ? null : Number(plan.usedPercent)
       const hasValue = Number.isFinite(percent)
       const parts = hasValue ? resetParts(plan.resetAt) : { relative: null, absolute: null }
-      const left = hasValue ? Math.max(0, Math.round(100 - percent)) : null
-      const testKey = `${providerId}-${plan?.key ?? 'none'}`
-      return h('div', {
-        'data-testid': `token-dash-sub-window-${testKey}`,
-        title: parts.absolute ?? undefined,
+      return h('span', {
+        'data-testid': testKey === undefined ? undefined : `token-dash-sub-window-${testKey}`,
+        title: showTime ? (parts.absolute ?? undefined) : undefined,
         style: {
-          display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0,
-          alignItems: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
-          textAlign: align,
-          justifySelf: align === 'right' ? 'end' : align === 'center' ? 'center' : 'start',
+          display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+          minWidth: 0, whiteSpace: 'nowrap',
+          justifySelf: place === 'end' ? 'end' : place === 'start' ? 'start' : 'center',
         },
       },
-        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } },
-          h('span', { style: styles.summaryLabel }, plan?.key ? windowLabel(plan.key) : '—'),
+        // 第一行：标签 + 环 + 数字，作为整体居中
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+          // 标签对齐（Issue #8，方案 B + D）：
+          // B — 行盒高度锁成圆环直径（按 ringSize 取值，P1 14 / P2 20），
+          //     避免行高把标签盒子撑得比环高，align-items 才对得准；
+          // D — 再整体上移 0.5px，补偿汉字字形（周 / 月）相对拉丁（5h）的视觉重心。
+          // 两者不冲突：B 定盒子、D 定位置。不可写死 20px，否则 P1 pill 行高会被撑大。
+          //
+          // P1 例外：传入 labelFontSize 时标签与百分比同为 12px、共用 16px 行高，
+          // 全行单一字号已能自然共基线，再叠加 height/top 补偿反而会造成 1px 偏差，故一并关闭。
+          h('span', {
+            style: labelFontSize === undefined
+              ? {
+                ...styles.summaryLabel,
+                display: 'inline-flex', alignItems: 'center', lineHeight: 1,
+                height: ringSize, position: 'relative', top: -0.5,
+              }
+              : { color: T.muted, fontSize: labelFontSize, lineHeight: '16px' },
+          }, plan?.key ? windowLabel(plan.key) : '—'),
           h(InlineRing, {
-            percent, state: hasValue ? stateOf(percent, SUB_CRITICAL) : 'empty', size: 20, stroke: 2.5,
+            percent, state: hasValue ? stateOf(percent, SUB_CRITICAL) : 'empty', size: ringSize, stroke: ringStroke,
+            // P1：百分比与标签同为 12px / 16px 行盒，且不带 2px 补偿，三者共基线
+            fontSize: labelFontSize === undefined ? undefined : 12,
+            percentLineHeight: labelFontSize === undefined ? undefined : 16,
+            ringShift: labelFontSize === undefined ? undefined : 0.75,
+            testid: ringTestId ?? (testKey === undefined ? undefined : `token-dash-sub-ring-${testKey}`),
           })),
-        h('span', {
-          'data-testid': `token-dash-sub-left-${testKey}`,
-          style: { fontSize: 11, color: T.muted, whiteSpace: 'nowrap' },
-        },
-          left === null ? '—' : tr('剩余 {value}', { value: `${left}%` }),
-          ' · ',
-          h('span', { 'data-testid': `token-dash-sub-rel-${testKey}` }, parts.relative ?? '—')))
+        // 第二行：时间，与第一行同心（父级 align-items:center 保证）
+        showTime
+          ? h('span', {
+            'data-testid': testKey === undefined ? undefined : `token-dash-sub-rel-${testKey}`,
+            style: { fontSize: 11, color: T.muted, lineHeight: '13px' },
+          }, parts.relative ?? '—')
+          : null)
     }
 
+    /** P2 订阅窗口行：复用 P0 的 SubWindow，按 align 决定列内摆放。 */
+    function WindowRow({ providerId, plan, align = 'left' }) {
+      const testKey = `${providerId}-${plan?.key ?? 'none'}`
+      const place = align === 'right' ? 'end' : align === 'center' ? 'center' : 'start'
+      // 传 labelFontSize 走单字号分支（Issue #6）：标签与百分比同 12px / 16px 行盒，
+      // 去掉 height:环径 + top:-0.5 的旧补偿，环下移 0.75px 贴合文字墨迹。
+      return h(SubWindow, { plan, showTime: true, place, testKey, labelFontSize: 12 })
+    }
     function P2Windows({ provider }) {
       const windows = Array.isArray(provider.windows) ? provider.windows : []
       return h(React.Fragment, null,
@@ -1987,8 +2098,9 @@ window.__ModuleLoader__.load({
             h('span', { style: styles.providerChip }, `[ ${tr('订阅')} ]`))),
         windows.length === 0
           ? h('div', { style: styles.empty }, tr('套餐查询失败'))
+          // 倒计时是绝对定位（锚在圆环下方），故用 grid 分列 + 底部内边距容纳第二行
           : h('div', {
-            style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 },
+            style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, paddingBottom: 15 },
           }, windows.map((plan, index) => h(WindowRow, {
             key: plan.key,
             providerId: provider.id,
@@ -2311,17 +2423,15 @@ window.__ModuleLoader__.load({
       const percent = plan === undefined ? null : Number(plan.usedPercent)
       const hasValue = Number.isFinite(percent)
       const parts = hasValue ? resetParts(plan.resetAt) : { relative: null, absolute: null }
-      const left = hasValue ? Math.max(0, Math.round(100 - percent)) : null
       const testKey = `${providerId}-${windowKey}`
+      // 不传 remaining：「剩余 x%」与环上已用百分比互为补数，可自行推算（与 P2 同口径）
       return h(QuotaGauge, {
         testid: `token-dash-quota-cell-${testKey}`,
         label: windowLabel(windowKey),
         percent,
         state: hasValue ? stateOf(percent, SUB_CRITICAL) : 'empty',
-        remaining: left === null ? '—' : tr('剩余 {value}', { value: `${left}%` }),
         relative: parts.relative ?? '—',
         absolute: parts.absolute ?? '—',
-        remainingTestid: `token-dash-quota-left-${testKey}`,
         relativeTestid: `token-dash-quota-rel-${testKey}`,
         absoluteTestid: `token-dash-quota-abs-${testKey}`,
       })

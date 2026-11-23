@@ -513,17 +513,13 @@ try {
   assert.equal(await panel.getByTestId('token-dash-open-board').count(), 1, 'board entry should render once main is registered')
 
   // Header icon buttons share one control size.
-  const info = panel.getByRole('button', { name: '查看支持的 API Key 范围' })
+  // 注：ⓘ「查看支持的 API Key 范围」按钮已在前序 Issue 中移除，此处只校验剩余两个按钮。
   const refreshButton = panel.getByTestId('token-dash-refresh')
   const closeButton = panel.getByTestId('token-dash-close')
-  const [infoBox, refreshBox, closeBox] = await Promise.all([info.boundingBox(), refreshButton.boundingBox(), closeButton.boundingBox()])
-  for (const [name, box] of [['info', infoBox], ['refresh', refreshBox], ['close', closeBox]]) {
+  const [refreshBox, closeBox] = await Promise.all([refreshButton.boundingBox(), closeButton.boundingBox()])
+  for (const [name, box] of [['refresh', refreshBox], ['close', closeBox]]) {
     assert.ok(box !== null && Math.abs(box.width - 22) < 0.5 && Math.abs(box.height - 22) < 0.5, `${name} header button ${box?.width}x${box?.height} should be 22x22`)
   }
-  await jsClick(info)
-  await page.waitForTimeout(100)
-  assert.match(await panel.innerText(), /目前支持 DeepSeek \/ Kimi \/ GLM \/ OpenRouter \/ Qwen API Key/)
-  await jsClick(info)
 
   // Range switch keeps previous data while loading.
   usageDelay = 600
@@ -554,18 +550,27 @@ try {
   await openPanel()
 
   // Error states and empty provider.
+  // 失败态：标题栏刷新位替换为「重试」，表体内不再插入错误条（Issue #4）
   failSummary = true
   await jsClick(panel.getByTestId('token-dash-refresh'))
-  await page.waitForTimeout(300)
-  assert.match(await panel.innerText(), /刷新失败，保留上次数据/)
+  await page.waitForTimeout(400)
+  assert.equal(await panel.getByTestId('token-dash-retry').count(), 1)
+  assert.equal(await panel.getByTestId('token-dash-refresh').count(), 0)
   failSummary = false
-  await jsClick(panel.getByTestId('token-dash-refresh'))
-  await page.waitForTimeout(300)
+  await jsClick(panel.getByTestId('token-dash-retry'))
+  await page.waitForTimeout(500)
+  assert.equal(await panel.getByTestId('token-dash-retry').count(), 0)
+  assert.equal(await panel.getByTestId('token-dash-refresh').count(), 1)
+  // /usage 失败：同样只在标题栏出现重试，且表体清空为「范围内暂无消耗」
   failUsage = true
   await jsClick(panel.getByRole('tab', { name: '近7天' }))
-  await page.waitForTimeout(300)
-  assert.match(await panel.innerText(), /范围数据加载失败/)
+  await page.waitForTimeout(500)
+  assert.equal(await panel.getByTestId('token-dash-retry').count(), 1)
+  assert.match(await panel.innerText(), /范围内暂无消耗/)
   failUsage = false
+  await jsClick(panel.getByTestId('token-dash-retry'))
+  await page.waitForTimeout(500)
+  assert.equal(await panel.getByTestId('token-dash-refresh').count(), 1)
   currentSummary = { ...currentSummary, providers: [], providersDegraded: false, updatedAt: now - 300000 }
   await jsClick(panel.getByTestId('token-dash-refresh'))
   await page.waitForTimeout(300)

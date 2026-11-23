@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8" />
+<title>P2 环与文字对齐 · 建议方案</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-size: 13px; }
+  .page { max-width: 980px; }
+  .panel { width: 380px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .ph { display: flex; align-items: center; justify-content: space-between; }
+  .ph .t { font-size: 13px; font-weight: 600; }
+  .ph .acts { display: flex; gap: 4px; }
+  .ph .acts span { width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .sub-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .sub-head .name { font-weight: 600; }
+  .sub-head .chip { font-size: 11px; color: var(--muted); }
+  .summary { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr); align-items: center; column-gap: 12px; }
+  .summary .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .summary .cell.center { align-items: center; text-align: center; }
+  .summary .balance { align-items: flex-end; text-align: right; }
+  .summary .k { font-size: 11px; color: var(--muted); }
+  .summary .v { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline svg { display: block; flex: none; }
+  /* ==== 建议方案：与 P1 同款 ==== */
+  .win { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; }
+  .win .top { display: inline-flex; align-items: center; gap: 4px; }
+  .win .k { font-size: 12px; color: var(--muted); line-height: 16px; }
+  .pct { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 16px; }
+  .ring-shift { display: inline-flex; }
+  .ring-shift svg { position: relative; top: 0.75px; }
+  .meta { font-size: 11px; color: var(--muted); line-height: 13px; }
+  .windows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .grp-title { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .grp-note { font-size: 11px; color: var(--weak); margin: 0 0 14px; line-height: 17px; }
+  .cap { font-size: 11px; color: var(--weak); margin: 0 0 6px; }
+  .row2 { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { display: flex; flex-direction: column; gap: 28px; }
+</style></head><body>
+<div class="page"><div class="stage">
+  <section>
+    <p class="grp-title">API 态</p>
+    <p class="grp-note">环 + 百分比与右侧两行块整体垂直居中；三栏左 / 中 / 右对齐。<b>与现状一致，无需改动</b>（实测环心 17.0 / 两行块中心 17.5，差 0.5px）。</p>
+    <div class="panel" id="api"></div>
+  </section>
+  <section>
+    <p class="grp-title">订阅态 · 建议方案</p>
+    <p class="grp-note">与 P1 同款：标签与百分比统一 <b>12px / 16px 行盒</b>，去掉 height:环径 + top:-0.5 的老补偿；环下移 0.75px 贴合文字墨迹。三窗各自「标签 + 环 + 百分比」为一段，时间行居中于该段。</p>
+    <div class="panel" id="sub"></div>
+  </section>
+</div></div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  var SPEC = window.__SPEC__, p2 = SPEC.ring.p2;
+  var ring = function (pct, crit) { return ringSvg(p2.size, p2.stroke, pct, ringStateOf(pct, crit)); };
+  document.getElementById('api').innerHTML =
+    '<div class="ph"><span class="t">当前模型</span><span class="acts"><span>⟳</span><span>×</span></span></div>' +
+    '<div class="summary"><span class="inline ring-shift">' + ring(91.9, 100) + '<b class="pct" style="color:var(--warn)">91.9%</b></span>' +
+    '<span class="cell center"><span class="k">已用 / 预算</span><span class="v">¥91.90 / ¥100.00</span></span>' +
+    '<span class="cell balance"><span class="k">真实余额</span><span class="v">¥87.66</span></span></div>';
+  var ws = [{k:'5h',p:42.5,r:'3 小时后'},{k:'周',p:18.2,r:'1 天后'},{k:'月',p:3.0,r:'18 天后'}];
+  var html = '';
+  for (var i = 0; i < ws.length; i++) { var w = ws[i];
+    html += '<span class="win"><span class="top"><span class="k">' + w.k + '</span><span class="ring-shift">' + ring(w.p, 90) + '</span><b class="pct" style="color:var(--ok)">' + w.p + '%</b></span><span class="meta">' + w.r + '</span></span>'; }
+  document.getElementById('sub').innerHTML =
+    '<div class="ph"><span class="t">当前模型</span><span class="acts"><span>⟳</span><span>×</span></span></div>' +
+    '<div class="sub-head"><span class="name">GLM Coding</span><span class="chip">[ 订阅 ]</span></div>' +
+    '<div class="windows">' + html + '</div>';
+</script></body></html>

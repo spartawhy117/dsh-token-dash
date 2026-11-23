@@ -1,0 +1,47 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>Issue #7 #8 落地验证</title>
+<style>
+  :root { /*__SPEC_CSS__*/ }
+  /*__BASE_CSS__*/
+  body { padding: 24px; font-family: system-ui; }
+  .wrap { display: flex; flex-direction: column; gap: 20px; max-width: 900px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+  .panel { width: 380px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px; }
+  .pillrow { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+  .inline { display: inline-flex; align-items: center; gap: 4px; }
+  .inline b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; padding-bottom: 2px; }
+  .sep { color: var(--weak); }
+  .row { display: inline-flex; align-items: center; gap: 4px; }
+  .lbl-bd { display: inline-flex; align-items: center; line-height: 1; position: relative; top: -0.5px; font-size: 11px; color: var(--muted); }
+  .dbg { font-size: 10px; color: #6fbf73; font-family: monospace; white-space: pre; line-height: 1.6; }
+</style></head><body>
+<div class="wrap">
+  <section><h2>P1 收起态（环 14 / 标签高 14）</h2><div class="panel"><div class="pillrow" id="p1"></div></div></section>
+  <section><h2>P2 三窗（环 20 / 标签高 20）</h2><div class="panel"><div id="p2" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr))"></div></div></section>
+  <div class="dbg" id="m"></div>
+</div>
+<script>window.__SPEC__ = /*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+  const { p1, p2, criticalSub } = window.__SPEC__.ring
+  const st = (p) => ringStateOf(p, criticalSub)
+  const seg = (label, pct, size, stroke) => `<span class="inline"><span class="lbl-bd" style="height:${size}px">${label}</span>${ringSvg(size,stroke,pct,st(pct))}<b class="pct ${st(pct)}">${pct}%</b></span>`
+  document.getElementById('p1').innerHTML = seg('5h',5,p1.size,p1.stroke) + '<span class="sep"> ・ </span>' + seg('周',2,p1.size,p1.stroke) + '<span class="sep"> ・ </span>' + seg('月',99,p1.size,p1.stroke)
+  const cell = (label, pct) => `<div style="display:flex;justify-content:flex-start"><span style="display:inline-flex;flex-direction:column;align-items:center;gap:3px"><span class="row"><span class="lbl-bd" style="height:${p2.size}px">${label}</span>${ringSvg(p2.size,p2.stroke,pct,st(pct))}<b class="pct ${st(pct)}" style="font-size:12px;font-weight:600;line-height:1;padding-bottom:2px">${pct}%</b></span><span style="font-size:11px;color:var(--muted)">${pct===5?'24 分钟后':pct===2?'6 天后':'5 天后'}</span></span></div>`
+  document.getElementById('p2').innerHTML = cell('5h',5) + cell('周',2) + cell('月',99)
+  requestAnimationFrame(() => {
+    const out = []
+    const p1row = document.getElementById('p1').getBoundingClientRect()
+    out.push(`P1 pill 行高 = ${p1row.height.toFixed(1)}px（环径 14，应 ≈18~20，不应 >22）`)
+    const p1svg = document.querySelector('#p1 svg').getBoundingClientRect()
+    const p1lbl = document.querySelector('#p1 .lbl-bd').getBoundingClientRect()
+    out.push(`P1 标签中心 ${(p1lbl.top+p1lbl.height/2).toFixed(1)} | 环心 ${(p1svg.top+p1svg.height/2).toFixed(1)}`)
+    const p1sep = document.querySelector('#p1 .sep').getBoundingClientRect()
+    out.push(`P1 分隔符中心 ${(p1sep.top+p1sep.height/2).toFixed(1)} | 环心 ${(p1svg.top+p1svg.height/2).toFixed(1)} | 差 ${((p1sep.top+p1sep.height/2)-(p1svg.top+p1svg.height/2)).toFixed(2)}px`)
+    out.push('')
+    const p2svg = document.querySelector('#p2 svg').getBoundingClientRect()
+    const p2lbl = document.querySelector('#p2 .lbl-bd').getBoundingClientRect()
+    out.push(`P2 标签中心 ${(p2lbl.top+p2lbl.height/2).toFixed(1)} | 环心 ${(p2svg.top+p2svg.height/2).toFixed(1)} | 差 ${((p2lbl.top+p2lbl.height/2)-(p2svg.top+p2svg.height/2)).toFixed(2)}px`)
+    document.getElementById('m').textContent = out.join('\n')
+  })
+</script></body></html>

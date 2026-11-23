@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{/*__SPEC_CSS__*/}
+/*__BASE_CSS__*/
+body{padding:20px;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;font-size:16px}
+.pill{display:inline-flex;align-items:center;padding:0 8px;border-radius:999px;
+  border:1px solid var(--border);color:var(--text);font-variant-numeric:tabular-nums;
+  height:24px;font-size:12px;line-height:16px;box-sizing:border-box;margin:8px 0}
+.pill.g6{gap:6px}.pill.g4{gap:4px}
+.unit{flex:none}
+.num{font-weight:600}
+.lab{color:var(--muted)}
+.ir{display:inline-flex;align-items:center;gap:4px}
+.ir svg{display:block;flex:none}
+.sep{color:var(--weak)}
+</style></head><body>
+<div id="host"></div>
+<script>window.__SPEC__=/*__SPEC_JSON__*/</script>
+<script>/*__RING_JS__*/</script>
+<script>
+var SPEC=window.__SPEC__,p1=SPEC.ring.p1
+function ring(p,c){return ringSvg(p1.size,p1.stroke,p,ringStateOf(p,c))}
+function win(l,p){return '<span class="unit ir"><span class="lab">'+l+'</span>'+ring(p,90)+'<b class="num" style="color:var(--ok)">'+p+'%</b></span>'}
+document.getElementById('host').innerHTML =
+ '<div><span class="pill g6" data-pill data-k="A-gap6-space"><span class="unit num">[\u8ba2\u9605]</span>'+win('5h',0)+'<span class="unit sep">  \u30fb  </span>'+win('\u5468',3)+'<span class="unit sep">  \u30fb  </span>'+win('\u6708',100)+'</span></div>'+
+ '<div><span class="pill g4" data-pill data-k="B-gap4-nospace"><span class="unit num">[\u8ba2\u9605]</span>'+win('5h',0)+'<span class="unit sep">\u30fb</span>'+win('\u5468',3)+'<span class="unit sep">\u30fb</span>'+win('\u6708',100)+'</span></div>'
+</script></body></html>
