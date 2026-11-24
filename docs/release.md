@@ -20,7 +20,16 @@
 3. **版本号**：`package.json` 改为 `X.Y.Z`；`index.js` 的 `CURRENT_VERSION` 自动生效；同步 `scripts/e2e.mjs` 两处 fixture。
 3b. **description 核对**：`package.json#description` 必须是当前版本能力的准确描述（新增能力后最容易漏改）。发版后用 `npm view dsh-token-dash description` 与本地已装包 `node_modules/dsh-token-dash/package.json` 两处对读，必须与仓库一致。
 
-3c. **市场索引 description 是另一份真源**：插件市场条目文案来自上游 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 的 `data/plugins/<owner>__<repo>.yml`，**不读 GitHub about，也不读 npm description**。发版后必须单独核对并提 PR 更新该文件的 `description.zh` / `description.en`，否则市场顶部会被长期固定在旧说法（2.3.1 曾被压在索引里）。市场语言以中文为绝对主导（抽样 6379 条：中文单句 100.0%，纯英文 1 条），`description.zh` 是主要展示面，`description.en` 仍需保持同步。
+3c. **市场索引 description 是第三份真源**：插件市场条目文案来自上游 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 的 `data/plugins/<owner>__<repo>.yml`，**既不读 GitHub about，也不读 npm description**。发版后单独提 PR 更新该文件的 `description.zh` / `description.en`，否则市场会长期停在旧说法（2.3.1 曾被压在索引里，直到 PR #16877 才动）。本地核验：
+
+   ```sh
+   gh repo clone spartawhy117/awesome-dsh-plugin   # fork 已存在
+   git fetch upstream main && git reset --hard upstream/main
+   node scripts/generate-readme.mjs                                  # 两个 README 由 YAML 生成，勿手改
+   node scripts/check-submission.mjs --base HEAD~1                   # 必须带 --base，否则会拿全量目录比对并报「adds N entries」
+   ```
+
+   语种口径：市场以中文为绝对主导（6379 条中中文单句 100.0%，纯英文仅 1 条），`description.zh` 是主要展示面；`description.en` 是上游**必填**字段，必须同步保持准确。描述不得带营销词，其中的数字与 API 名会被逐条对码核实。
 4. **CHANGELOG 预览**：输出正式块完整 `新增 / 修改` 预览，等用户确认后再继续。
 5. **测试**：`npm test`（L1）+ `npm run e2e` 全绿。
 6. **提交**：`git add -A && git commit -m "chore: release X.Y.Z" && git push`；确认无 `.tmp/`、`build/`、凭证。
