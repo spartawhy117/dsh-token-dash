@@ -10,8 +10,8 @@
 
 <p align="center">
   See today's model spend, monthly budget headroom, and subscription windows for 8 providers right next to the DSH input box.<br />
-  Paste a key and the billing mode is detected automatically; cost, Tokens and cache hits are estimated locally;<br />
-  export the current month and import it back after switching machines or reinstalling.
+  Pill for the current model, floating panel for budget and usage, full dashboard for every provider card; cache hit rate, usage trends and a dual-currency cost chart in one view.<br />
+  Paste a key and the billing mode is detected automatically; cost, Tokens and cache hits are estimated locally; export the current month and import it back after switching machines or reinstalling.
 </p>
 
 <p align="center">
